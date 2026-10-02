@@ -1,16 +1,13 @@
-# dotter global config for the MCP dotfiles repo.
+# dotter global config for the agent-config dotfiles repo.
 # Source directory: ~/.agentdots   Target: this machine.
 #
-# Only *pure-MCP* client configs are deployed here. VS Code's mcp.json is the
-# one file that is nothing but MCP, so dotter owns it outright via a symlink.
-# Every other client (Claude Code, Claude Desktop, Codex, opencode) is a shared,
-# stateful file - dotter can only symlink or template, not merge - so those are
-# handled by bin/agent-sync (run from .dotter/pre_deploy.sh before deploy).
-#
-# The generated/ files are produced by that pre-deploy hook.
+# Every client config is a shared, stateful file (Claude Code, Claude Desktop,
+# Codex, opencode), and dotter can only symlink or template, not merge - so
+# those are handled entirely by bin/agent-sync (run from .dotter/pre_deploy.sh
+# before deploy). If you ever add a *pure* config file (nothing but one kind),
+# map it here under [mac.files] / [common.files] and mark the client
+# `whole_file = true`; agent-sync renders it to generated/ and dotter symlinks it.
 
 [mac.files]
-"generated/vscode.json" = "~/Library/Application Support/Code/User/mcp.json"
 
 [common.files]
-# Nothing yet. Add cross-platform, purely-MCP config files here if they appear.

@@ -2,7 +2,7 @@ name        = "entra-mcp"
 description = "Entra ID org structure and access analysis (people, groups, reporting trees, manager lookup). Ships the `entra` CLI."
 kind        = "local"
 origin      = "custom"
-clients     = ["opencode", "claude-code", "claude-desktop", "vscode", "codex"]
+clients     = ["opencode", "claude-code", "claude-desktop", "codex"]
 
 [launch]
 command = "entra-mcp"

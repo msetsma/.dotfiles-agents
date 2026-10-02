@@ -2,7 +2,7 @@ name        = "iMCP"
 description = "macOS integrations (Calendar, Reminders, Contacts, Messages, ...) via the iMCP app."
 kind        = "local"
 origin      = "external"
-clients     = ["opencode", "claude-code", "claude-desktop", "vscode", "codex"]
+clients     = ["opencode", "claude-code", "claude-desktop", "codex"]
 
 [launch]
 command = "imcp"

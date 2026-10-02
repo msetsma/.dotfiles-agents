@@ -53,8 +53,7 @@ catalog/retired.toml  ──┘
         ├── merge   ──▶ .../Claude/claude_desktop_config.json  Claude Desktop (mcp)
         ├── merge   ──▶ ~/.config/opencode/opencode.jsonc opencode        (mcp)
         ├── symlink ──▶ ~/.claude/skills/                 Claude Code     (skills)
-        ├── symlink ──▶ ~/.config/opencode/skills/        opencode        (skills)
-        └── render  ──▶ generated/vscode.json ──dotter──▶ VS Code mcp.json (pure)
+        └── symlink ──▶ ~/.config/opencode/skills/        opencode        (skills)
 ```
 
 * A client declares one `[<client>.<kind>]` block per kind it supports; a kind
@@ -64,8 +63,9 @@ catalog/retired.toml  ──┘
   alone. Codex keeps its per-tool tables (`[mcp_servers.databricks.tools.*]`),
   and the servers Codex ships itself (`node_repl`, `computer-use`) are never
   touched.
-* **Pure files** (config that is nothing but one kind) are rendered to
-  `generated/` and symlinked into place by dotter, so the repo owns them.
+* A client can be marked `whole_file = true` when its config is nothing but one
+  kind; agent-sync then renders it to `generated/` and dotter symlinks it. No
+  client uses this today.
 * `.dotter/pre_deploy.sh` runs `bin/agent-sync`, so a single `dotter` run keeps
   every agent in sync.
 
@@ -80,7 +80,6 @@ catalog/retired.toml  ──┘
 | Claude Desktop | mcp | `~/Library/Application Support/Claude/claude_desktop_config.json` | merge |
 | Codex | mcp | `~/.codex/config.toml` → `[mcp_servers]` | merge |
 | Codex | hooks | `~/.codex/hooks.json` → `hooks` | merge |
-| VS Code | mcp | `~/Library/Application Support/Code/User/mcp.json` | dotter symlink |
 
 ## Skills
 
@@ -132,17 +131,15 @@ Full table of what this repo manages. `custom` = source lives in this repo;
 |---|---|---|---|
 | `m365-local` | custom | `uv run --directory ~/.agentdots/mcp/m365-local-mcp server.py` | opencode, Claude Code, Claude Desktop |
 | `teams-browser` | custom | `uv run --directory ~/.agentdots/mcp/teams-mcp teams-browser-mcp` | opencode, Claude Code, Claude Desktop |
-| `entra-mcp` | custom | `entra-mcp` (uv tool) | opencode, Claude Code, Claude Desktop, VS Code, Codex |
+| `entra-mcp` | custom | `entra-mcp` (uv tool) | opencode, Claude Code, Claude Desktop, Codex |
 | `obscura` | external | `~/.local/bin/obscura mcp --stealth` | opencode, Claude Code, Claude Desktop |
 | `apple-mail` | external | `apple-mail-mcp` (uv tool) | opencode |
 | `databricks` | external | `uv run --project ~/.agentdots/mcp/databricks-mcp databricks-mcp` | opencode, Claude Code, Claude Desktop, Codex |
 | `azure` | external | `npx @azure/mcp@3.0.0-beta.29 server start` | opencode, Claude Code, Claude Desktop |
 | `azure-devops` | external | `npx @azure-devops/mcp ${ADO_ORG}` | opencode, Claude Code, Claude Desktop |
 | `github` | external | remote `api.githubcopilot.com/mcp/` | opencode, Claude Code |
-| `iMCP` | external | `/Applications/iMCP.app/…/imcp-server` | opencode, Claude Code, Claude Desktop, VS Code, Codex |
+| `iMCP` | external | `/Applications/iMCP.app/…/imcp-server` | opencode, Claude Code, Claude Desktop, Codex |
 | `playwright` | external | `npx @playwright/mcp@latest` | opencode |
-| `deepwiki` | external | remote `mcp.deepwiki.com/sse` | VS Code |
-| `context7` | external | `npx @upstash/context7-mcp@latest` | VS Code |
 
 > Claude Code also has a **project-scoped** `playwright` under
 > `~/docs/Analytics.wiki` that this repo does not manage (project config, not
@@ -166,18 +163,14 @@ untracked `catalog/local.toml` — copy `catalog/local.toml.example` and fill it
 ```sh
 cargo make agent-check   # dry-run: show what would change
 cargo make agent-sync    # merge the catalog into every agent (no dotter)
-cargo make sync        # full sync: dotter (runs agent-sync) + deploy pure files
+cargo make sync          # full sync: dotter runs agent-sync, then deploys
 ```
 
-Or drive dotter directly:
+Or drive dotter directly (it runs the pre-deploy sync, then deploys):
 
 ```sh
-dotter -v                # runs the pre-deploy sync, then deploys
-dotter -v --force        # first run only: replace the real VS Code mcp.json
+dotter -v
 ```
-
-The very first deploy needs `--force` because VS Code's `mcp.json` already
-exists as a real file; dotter will refuse to replace it otherwise.
 
 ## Keeping up to date
 

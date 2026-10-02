@@ -18,7 +18,8 @@ Each client declares one block per *kind* it supports. Three strategies:
                 other key alone (MCP maps; hook event maps).
 * ``symlink``   link each catalog item into a client directory (skills).
 * ``whole_file`` pure config rendered to ``generated/<client>.<ext>`` for dotter
-                to symlink, so the repo owns the target outright (VS Code).
+                to symlink, so the repo owns the target outright (unused by any
+                client today; kept for a future pure config).
 
 Codex keeps its per-tool tables (``[mcp_servers.databricks.tools.*]``); only the
 managed keys change.
@@ -264,18 +265,6 @@ def r_claude_desktop(srv: dict, cli: dict) -> dict:
     return out
 
 
-def r_vscode(srv: dict, cli: dict) -> dict:
-    if srv['kind'] == 'local':
-        out = {'type': 'stdio', 'command': srv['command'], 'args': srv['args']}
-        if srv['env']:
-            out['env'] = srv['env']
-        return out
-    out = {'type': 'http', 'url': srv['url']}
-    if srv['headers']:
-        out['headers'] = srv['headers']
-    return out
-
-
 def r_codex(srv: dict, cli: dict) -> dict:
     if srv['kind'] == 'local':
         return {'command': srv['command'], 'args': srv['args'], 'env': dict(srv['env'])}
@@ -286,7 +275,6 @@ RENDERERS = {
     'opencode': r_opencode,
     'claude-code': r_claude_code,
     'claude-desktop': r_claude_desktop,
-    'vscode': r_vscode,
     'codex': r_codex,
 }
 

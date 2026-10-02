@@ -49,13 +49,6 @@ container   = ["mcpServers"]
 style       = "claude-desktop"
 inject_path = "/Users/msetsma/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
-[vscode.mcp]
-path       = "~/Library/Application Support/Code/User/mcp.json"
-format     = "json"
-container  = ["servers"]
-style      = "vscode"
-whole_file = true
-
 [codex.mcp]
 path      = "~/.codex/config.toml"
 format    = "toml"

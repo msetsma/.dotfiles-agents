@@ -73,7 +73,7 @@ client supports; a kind with no block is skipped for that client.
 > the catalog.
 
 Installed on this machine: **opencode**, **Claude Code**, **Claude Desktop**,
-**VS Code**, **Codex**. (No Cursor.)
+**Codex**. (No Cursor.)
 
 Always use an **absolute path to `uv`** (`/opt/homebrew/bin/uv`) in GUI apps —
 they don't inherit your shell `PATH`. Replace the command/args with the new
@@ -141,23 +141,6 @@ Include `env.PATH` — the app launches without your shell environment.
     "command": "/opt/homebrew/bin/uv",
     "args": ["run", "--directory", "/Users/msetsma/.agentdots/mcp/m365-local-mcp", "server.py"],
     "env": { "PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" }
-  }
-}
-```
-
-### VS Code
-
-Config: `~/Library/Application Support/Code/User/mcp.json` (note `servers`, and
-`"type": "stdio"`).
-
-```json
-{
-  "servers": {
-    "m365-local": {
-      "type": "stdio",
-      "command": "/opt/homebrew/bin/uv",
-      "args": ["run", "--directory", "/Users/msetsma/.agentdots/mcp/m365-local-mcp", "server.py"]
-    }
   }
 }
 ```
