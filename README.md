@@ -16,7 +16,7 @@ runs tasks, per-host packages live in `.dotter/`.
 ```
 .agentdots/
 ├── catalog/                 # single source of truth
-│   ├── servers/*.toml       #   one file per MCP server
+│   ├── mcp/*.toml           #   one file per MCP server
 │   ├── skills/<name>.toml   #   one file per skill (content in <name>/)
 │   ├── hooks/<name>.toml    #   one file per event hook
 │   ├── clients.toml         #   where each agent keeps each kind
@@ -39,7 +39,7 @@ runs tasks, per-host packages live in `.dotter/`.
 ## How it works
 
 ```
-catalog/servers/*.toml ─┐
+catalog/mcp/*.toml ─┐
 catalog/skills/       ──┤
 catalog/hooks/*.toml  ──┤  bin/agent-sync
 catalog/clients.toml  ──┤
@@ -231,7 +231,7 @@ m365-local     source   local source (always current)
 
 ## Adding or changing a resource
 
-1. **Server**: add/edit `catalog/servers/<name>.toml` (set `clients = [...]`).
+1. **Server**: add/edit `catalog/mcp/<name>.toml` (set `clients = [...]`).
 2. **Skill**: add `catalog/skills/<name>.toml` + `catalog/skills/<name>/SKILL.md`.
 3. **Hook**: add `catalog/hooks/<name>.toml`.
 4. **Retire**: add the name (or, for hooks, the command) to `catalog/retired.toml`.

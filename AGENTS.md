@@ -68,7 +68,7 @@ client supports; a kind with no block is skipped for that client.
 ## Registering a server with the local agents
 
 > **Config is catalog-driven now.** Registration below is handled by
-> `catalog/servers/*.toml` + `bin/agent-sync`; the manual snippets are kept as a
+> `catalog/mcp/*.toml` + `bin/agent-sync`; the manual snippets are kept as a
 > reference / fallback for a machine that doesn't have this repo. Prefer editing
 > the catalog.
 

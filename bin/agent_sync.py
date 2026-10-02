@@ -3,7 +3,7 @@
 
 Single source of truth
 ----------------------
-  catalog/servers/*.toml   one file per MCP server (custom + third-party)
+  catalog/mcp/*.toml   one file per MCP server (custom + third-party)
   catalog/skills/*.toml    one file per skill (content in catalog/skills/<name>/)
   catalog/hooks/*.toml     one file per event hook
   catalog/clients.toml     where each agent keeps each kind, and how it spells it
@@ -151,9 +151,9 @@ def build_context() -> dict:
     return ctx
 
 
-def load_servers(ctx: dict) -> dict:
-    servers: dict[str, dict] = {}
-    for path in sorted((CATALOG / 'servers').glob('*.toml')):
+def load_mcp(ctx: dict) -> dict:
+    mcp: dict[str, dict] = {}
+    for path in sorted((CATALOG / 'mcp').glob('*.toml')):
         raw = load_toml(path)
         name = raw['name']
         kind = raw.get('kind', 'local')
@@ -183,8 +183,8 @@ def load_servers(ctx: dict) -> dict:
             srv['headers'] = {k: expand(v, ctx) for k, v in remote.get('headers', {}).items()}
         else:
             die(f'{path.name}: unknown kind {kind!r}')
-        servers[name] = srv
-    return servers
+        mcp[name] = srv
+    return mcp
 
 
 def load_skills(ctx: dict) -> dict:
@@ -570,9 +570,9 @@ def sync_client(client: str, kinds: dict, catalogs: dict, retired: dict) -> bool
     dirty = False
     if 'mcp' in kinds:
         cli = kinds['mcp']
-        servers = catalogs['servers']
-        desired = {n: render(s, cli, client) for n, s in servers.items() if client in s['clients']}
-        dirty |= MCP_SYNCERS[mcp_client_kind(cli)](client, cli, desired, retired['servers'])
+        mcp = catalogs['mcp']
+        desired = {n: render(s, cli, client) for n, s in mcp.items() if client in s['clients']}
+        dirty |= MCP_SYNCERS[mcp_client_kind(cli)](client, cli, desired, retired['mcp'])
     if 'skills' in kinds:
         dirty |= sync_skills(client, kinds['skills'], catalogs['skills'], retired['skills'])
     if 'hooks' in kinds:
@@ -589,11 +589,11 @@ def main() -> int:
     DRY_RUN = args.dry_run
 
     ctx = build_context()
-    catalogs = {'servers': load_servers(ctx), 'skills': load_skills(ctx), 'hooks': load_hooks(ctx)}
+    catalogs = {'mcp': load_mcp(ctx), 'skills': load_skills(ctx), 'hooks': load_hooks(ctx)}
     clients = load_toml(CATALOG / 'clients.toml')
     raw_retired = load_toml(CATALOG / 'retired.toml')
     retired = {
-        'servers': raw_retired.get('servers', []),
+        'mcp': raw_retired.get('mcp', []),
         'skills': raw_retired.get('skills', []),
         'hook_commands': raw_retired.get('hook_commands', []),
     }

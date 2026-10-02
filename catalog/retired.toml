@@ -4,11 +4,11 @@
 # even after the local files are clean, so a stale config on another machine
 # gets scrubbed on its next sync too.
 #
-#   servers       MCP server names
+#   mcp           MCP server names
 #   skills        skill names (symlinks are removed)
 #   hook_commands exact shell commands of retired hooks (scrubbed from the
 #                 managed event maps)
 
-servers       = ["notion"]
+mcp           = ["notion"]
 skills        = []
 hook_commands = []

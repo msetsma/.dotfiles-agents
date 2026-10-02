@@ -1,7 +1,7 @@
 # Machine-specific bits of the catalog.
 #
 # Server definitions reference these logical command names and ${VARS} instead
-# of absolute paths, so `catalog/servers/*.toml` stays portable between
+# of absolute paths, so `catalog/mcp/*.toml` stays portable between
 # machines. Only this file (and catalog/clients.toml paths) should need editing
 # on a new box.
 

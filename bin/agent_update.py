@@ -137,7 +137,7 @@ def main() -> int:
 
     ctx = ms.build_context()
     servers: dict[str, tuple[Path, dict]] = {}
-    for path in sorted((CATALOG / 'servers').glob('*.toml')):
+    for path in sorted((CATALOG / 'mcp').glob('*.toml')):
         raw = ms.load_toml(path)
         if raw.get('package'):
             servers[raw['name']] = (path, raw['package'])
