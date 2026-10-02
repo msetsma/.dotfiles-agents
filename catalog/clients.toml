@@ -18,6 +18,9 @@
 #       format      = json
 #       container   = key path to the event -> hook-list map
 #       style       = hook renderer (claude-code / codex)
+#
+#   [<client>.instructions]  global instruction file (managed markdown block)
+#       path        = the client's global instruction file (AGENTS.md / CLAUDE.md)
 
 [opencode.mcp]
 path      = "~/.config/opencode/opencode.jsonc"
@@ -33,6 +36,12 @@ style     = "opencode"
 # files), so agent-sync only has to symlink them in.
 [opencode.plugins]
 path = "~/.config/opencode/plugins"
+
+# opencode V2 loads only AGENTS.md for global instructions (its `instructions`
+# config array is inert). agent-sync owns a marked block inside it and leaves
+# anything written outside the markers alone.
+[opencode.instructions]
+path = "~/.config/opencode/AGENTS.md"
 
 [claude-code.mcp]
 path      = "~/.claude.json"

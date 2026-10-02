@@ -9,8 +9,8 @@ is registered with the local agent software.
 **When you create or change a resource, update its catalog entry and the
 Inventory table in [`README.md`](README.md).** The catalog is the single source of
 truth for everything this machine's agents load — MCP servers (custom *and*
-third-party), skills, and hooks; the README table is the human index. No catalog
-entry, no resource.
+third-party), skills, plugins, hooks, and instructions; the README table is the
+human index. No catalog entry, no resource.
 
 Then run `cargo make sync` to push the catalog into every
 agent — see [README.md](README.md) for the merge-vs-symlink model and
@@ -51,9 +51,9 @@ README is the detail.
 
 Tool-level detail lives in each directory's `README.md`. Don't duplicate it here.
 
-## Skills, plugins & hooks
+## Skills, plugins, hooks & instructions
 
-Alongside servers, the catalog owns three more kinds:
+Alongside servers, the catalog owns four more kinds:
 
 - **Skills** — `catalog/skills/<name>.toml` (definition) plus
   `catalog/skills/<name>/SKILL.md` (content), symlinked into each listed client's
@@ -65,6 +65,12 @@ Alongside servers, the catalog owns three more kinds:
 - **Hooks** — `catalog/hooks/<name>.toml`, merged additively into each listed
   client's hook map (Claude Code, Codex). See
   [`catalog/hooks/example-hook.toml`](catalog/hooks/) for the shape.
+- **Instructions** — `catalog/instructions/<name>.toml` (definition) plus
+  `<name>.md` (content), merged into a marked block in each listed client's
+  global instruction file (`~/.config/opencode/AGENTS.md`, `~/.claude/CLAUDE.md`,
+  `~/.codex/AGENTS.md`). Only the marked block is rewritten; notes you write
+  outside it survive. Instructions are deliberately per-client — each tool's
+  vocabulary and agent names differ.
 
 The `python-clean` gate is the worked example: it deploys as a Claude Code hook
 (`catalog/hooks/python-clean.toml`) and an opencode plugin

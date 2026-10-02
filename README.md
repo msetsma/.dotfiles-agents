@@ -1,10 +1,10 @@
-# Agent configs: MCP servers, skills, plugins & hooks
+# Agent configs: MCP servers, skills, plugins, hooks & instructions
 
 One repo for everything this machine's coding agents load — MCP servers (the
 **custom** ones that live here, and **third-party** ones pulled in from `npx`,
-uv tools, and desktop apps), **skills**, and **hooks**. Every resource is
-declared once in [`catalog/`](catalog/) and pushed into each agent by one
-command.
+uv tools, and desktop apps), **skills**, **plugins**, **hooks**, and per-tool
+**instructions**. Every resource is declared once in [`catalog/`](catalog/) and
+pushed into each agent by one command.
 
 Modeled on [`~/.dotfiles`](../.dotfiles): **cargo-make** runs the sync and update
 tasks; the catalog is the source of truth.
@@ -20,6 +20,7 @@ tasks; the catalog is the source of truth.
 │   ├── skills/<name>.toml   #   one file per skill (content in <name>/)
 │   ├── plugins/<name>.toml  #   one file per plugin (content in <name>.ts)
 │   ├── hooks/<name>.toml    #   one file per event hook
+│   ├── instructions/*.toml  #   one per instruction overlay (content in <name>.md)
 │   ├── clients.toml         #   where each agent keeps each kind
 │   ├── paths.toml           #   machine-specific command paths + ${VARS}
 │   └── retired.toml         #   resources to scrub from every client
@@ -43,6 +44,7 @@ catalog/mcp/*.toml ─┐
 catalog/skills/       ──┤
 catalog/plugins/      ──┤
 catalog/hooks/*.toml  ──┤  bin/agent-sync
+catalog/instructions/ ──┤
 catalog/clients.toml  ──┤
 catalog/paths.toml    ──┤
 catalog/retired.toml  ──┘
@@ -54,7 +56,8 @@ catalog/retired.toml  ──┘
         ├── merge   ──▶ .../Claude/claude_desktop_config.json  Claude Desktop (mcp)
         ├── merge   ──▶ ~/.config/opencode/opencode.jsonc opencode        (mcp)
         ├── symlink ──▶ ~/.claude/skills/                 Claude Code     (skills)
-        └── symlink ──▶ ~/.config/opencode/plugins/       opencode        (plugins)
+        ├── symlink ──▶ ~/.config/opencode/plugins/       opencode        (plugins)
+        └── block   ──▶ ~/.config/opencode/AGENTS.md      opencode        (instructions)
 ```
 
 * A client declares one `[<client>.<kind>]` block per kind it supports; a kind
@@ -64,9 +67,10 @@ catalog/retired.toml  ──┘
   alone. Codex keeps its per-tool tables (`[mcp_servers.databricks.tools.*]`),
   and the servers Codex ships itself (`node_repl`, `computer-use`) are never
   touched.
-* **Skills** and **plugins** are symlinked per item; **hooks** merge additively.
-  All three are done by `bin/agent-sync` directly - there is no second
-  deployment tool.
+* **Skills** and **plugins** are symlinked per item; **hooks** merge additively;
+  **instructions** rewrite a marked block inside the client's global file. All
+  four are done by `bin/agent-sync` directly - there is no second deployment
+  tool.
 * The `python-clean` hook (Claude Code) and plugin (opencode) both call
   `bin/clean-python`, so agent-written Python is auto-fixed and formatted, and
   anything auto-fix cannot resolve is handed back to the model and then
@@ -80,6 +84,7 @@ catalog/retired.toml  ──┘
 |---|---|---|---|
 | opencode | mcp | `~/.config/opencode/opencode.jsonc` | merge |
 | opencode | plugins | `~/.config/opencode/plugins/` | symlink |
+| opencode | instructions | `~/.config/opencode/AGENTS.md` | managed block |
 | Claude Code | mcp | `~/.claude.json` → `mcpServers` | merge |
 | Claude Code | skills | `~/.claude/skills/` | symlink |
 | Claude Code | hooks | `~/.claude/settings.json` → `hooks` | merge |
@@ -156,6 +161,37 @@ fix) and records any still-broken file under `$TMPDIR/clean-python/`.
 residue remains, so the turn cannot end on broken Python. A file is released
 once it is clean, or after three refused stops, so an unfixable finding cannot
 trap the session.
+
+## Instructions
+
+Per-tool guidance lives here, never hand-written into a client's global file:
+
+```
+catalog/instructions/<name>.toml   # clients = [...]
+catalog/instructions/<name>.md     # content
+```
+
+opencode V2 loads a single global `AGENTS.md` (its `instructions` config array is
+inert), Claude Code loads `~/.claude/CLAUDE.md`, and Codex loads
+`~/.codex/AGENTS.md`. So `agent-sync` merges each client's instructions into one
+delimited block in that file:
+
+```md
+<!-- agentdots:begin (managed by agent-sync; edit catalog/instructions/ instead) -->
+<!-- instructions: <names> -->
+...content...
+<!-- agentdots:end -->
+```
+
+Everything outside the markers is left untouched, so your own notes survive. A
+file that is already an exact unmanaged copy of the block is wrapped in place
+rather than duplicated, and a client with no instructions gets its block removed.
+Content is per-client on purpose — opencode's tool vocabulary and subagent names
+differ from Claude Code's and Codex's, so they don't share a prompt.
+
+`catalog/instructions/opencode-delegation.md` is the worked example: opencode's
+"fan out by default" guidance, delivered only to opencode via
+`[opencode.instructions]` in `catalog/clients.toml`.
 
 ## Inventory
 

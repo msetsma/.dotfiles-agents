@@ -1,0 +1,11 @@
+# opencode-only global instruction, migrated out of the hand-written
+# ~/.config/opencode/AGENTS.md so the catalog owns it. agent-sync keeps it in a
+# managed block and leaves anything written outside the markers alone.
+#
+# Scope is deliberate: opencode's tool vocabulary, subagent names
+# (explore/general) and delegation model differ from Claude Code and Codex, so
+# they get their own instruction files rather than sharing this one.
+
+name        = "opencode-delegation"
+description = "Fan out to subagents by default (opencode only)."
+clients     = ["opencode"]

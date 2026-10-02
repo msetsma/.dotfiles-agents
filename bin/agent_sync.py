@@ -7,17 +7,20 @@ Single source of truth
   catalog/skills/*.toml    one file per skill (content in catalog/skills/<name>/)
   catalog/plugins/*.toml   one file per plugin (content in catalog/plugins/<name>.ts)
   catalog/hooks/*.toml     one file per event hook
+  catalog/instructions/*.toml  one file per instruction overlay (content in <name>.md)
   catalog/clients.toml     where each agent keeps each kind, and how it spells it
   catalog/paths.toml       machine-specific command paths + variables
   catalog/retired.toml     resources to scrub from every client
 
 Behaviour
 ---------
-Each client declares one block per *kind* it supports. Two strategies:
+Each client declares one block per *kind* it supports. Three strategies:
 
 * ``merge``     rewrite a subtree of a shared config in place, leaving every
                 other key alone (MCP maps; hook event maps).
-* ``symlink``   link each catalog item into a client directory (skills).
+* ``symlink``   link each catalog item into a client directory (skills, plugins).
+* ``block``     swap a marked region inside a shared markdown file, leaving the
+                rest of the file alone (instructions).
 
 Codex keeps its per-tool tables (``[mcp_servers.databricks.tools.*]``); only the
 managed keys change.
@@ -37,12 +40,13 @@ import os
 import re
 import sys
 from pathlib import Path
+from typing import NoReturn
 
 
 try:
     import tomllib
 except ModuleNotFoundError:  # pragma: no cover - py<3.11
-    import tomli as tomllib  # type: ignore
+    import tomli as tomllib  # type: ignore[import-not-found]
 
 REPO = Path(__file__).resolve().parent.parent
 CATALOG = REPO / 'catalog'
@@ -51,10 +55,17 @@ ENV_REF = re.compile(r'\$\{([A-Za-z0-9_]+)\}')
 OPCODE_ENV_REF = re.compile(r'\{env:([A-Za-z0-9_]+)\}')
 
 
+class _Config:
+    dry_run = False
+
+
+CONFIG = _Config()
+
+
 # --------------------------------------------------------------------------- #
 # helpers
 # --------------------------------------------------------------------------- #
-def die(msg: str) -> None:
+def die(msg: str) -> NoReturn:
     print(f'agent-sync: error: {msg}', file=sys.stderr)
     raise SystemExit(1)
 
@@ -62,6 +73,35 @@ def die(msg: str) -> None:
 def load_toml(path: Path) -> dict:
     with open(path, 'rb') as fh:
         return tomllib.load(fh)
+
+
+def _consume_string(text: str, start: int) -> tuple[str, int]:
+    """Return the quoted literal at ``start`` and the index just past it."""
+    i = start + 1
+    n = len(text)
+    while i < n:
+        ch = text[i]
+        if ch == '\\':
+            i += 2
+            continue
+        if ch == '"':
+            return text[start : i + 1], i + 1
+        i += 1
+    return text[start:n], n
+
+
+def _skip_comment(text: str, start: int) -> int:
+    """Skip a ``//`` or ``/* */`` comment and return the index just past it."""
+    n = len(text)
+    if text[start + 1] == '/':
+        i = start
+        while i < n and text[i] not in '\r\n':
+            i += 1
+        return i
+    i = start + 2
+    while i + 1 < n and not (text[i] == '*' and text[i + 1] == '/'):
+        i += 1
+    return i + 2
 
 
 def strip_jsonc(text: str) -> str:
@@ -72,34 +112,14 @@ def strip_jsonc(text: str) -> str:
     """
     out: list[str] = []
     i, n = 0, len(text)
-    in_str = False
-    esc = False
     while i < n:
         ch = text[i]
-        if in_str:
-            out.append(ch)
-            if esc:
-                esc = False
-            elif ch == '\\':
-                esc = True
-            elif ch == '"':
-                in_str = False
-            i += 1
-            continue
         if ch == '"':
-            in_str = True
-            out.append(ch)
-            i += 1
+            literal, i = _consume_string(text, i)
+            out.append(literal)
             continue
-        if ch == '/' and i + 1 < n and text[i + 1] == '/':
-            while i < n and text[i] not in '\r\n':
-                i += 1
-            continue
-        if ch == '/' and i + 1 < n and text[i + 1] == '*':
-            i += 2
-            while i + 1 < n and not (text[i] == '*' and text[i + 1] == '/'):
-                i += 1
-            i += 2
+        if ch == '/' and i + 1 < n and text[i + 1] in '/*':
+            i = _skip_comment(text, i)
             continue
         out.append(ch)
         i += 1
@@ -109,7 +129,8 @@ def strip_jsonc(text: str) -> str:
 def expand(value, ctx: dict):
     """Expand ``~`` and ``${VAR}`` recursively through strings/lists/dicts."""
     if isinstance(value, str):
-        value = os.path.expanduser(value)
+        if value.startswith('~'):
+            value = str(Path(value).expanduser())
 
         def repl(match: re.Match) -> str:
             name = match.group(1)
@@ -128,7 +149,7 @@ def expand(value, ctx: dict):
 
 def opcodeify(value: str) -> str:
     """Opencode spells env references ``{env:VAR}`` instead of ``${VAR}``."""
-    return ENV_REF.sub(lambda m: '{env:%s}' % m.group(1), value)
+    return ENV_REF.sub(lambda match: f'{{env:{match.group(1)}}}', value)
 
 
 # --------------------------------------------------------------------------- #
@@ -136,7 +157,7 @@ def opcodeify(value: str) -> str:
 # --------------------------------------------------------------------------- #
 def build_context() -> dict:
     paths = load_toml(CATALOG / 'paths.toml')
-    ctx = {'HOME': os.path.expanduser('~')}
+    ctx = {'HOME': str(Path.home())}
     ctx.update(expand(paths.get('vars', {}), ctx))
     ctx['commands'] = expand(paths.get('commands', {}), ctx)
     # Machine-local overrides (untracked). Keeps org-specific values out of the
@@ -240,6 +261,24 @@ def load_hooks(ctx: dict) -> dict:
     return hooks
 
 
+def load_instructions(ctx: dict) -> dict:
+    """Each ``catalog/instructions/<name>.toml`` points at ``<name>.md``."""
+    instructions: dict[str, dict] = {}
+    for path in sorted((CATALOG / 'instructions').glob('*.toml')):
+        raw = load_toml(path)
+        name = raw['name']
+        source = CATALOG / 'instructions' / f'{name}.md'
+        if not source.is_file():
+            die(f'{path.name}: missing {source.relative_to(REPO)}')
+        instructions[name] = {
+            'name': name,
+            'description': raw.get('description', ''),
+            'clients': list(raw.get('clients', [])),
+            'text': source.read_text(),
+        }
+    return instructions
+
+
 # --------------------------------------------------------------------------- #
 # per-client mcp renderers
 # --------------------------------------------------------------------------- #
@@ -329,7 +368,7 @@ def semantic_diff(existing: dict, desired: dict, retired: list[str]):
 
 def report(client: str, path: Path, added, changed, removed, kind: str = 'mcp') -> bool:
     dirty = bool(added or changed or removed)
-    label = 'apply' if not DRY_RUN else 'dry-run'
+    label = 'apply' if not CONFIG.dry_run else 'dry-run'
     print(f'[{client}] {kind}: {path}  ({label})')
     if not dirty:
         print('  no changes')
@@ -356,15 +395,12 @@ def deep_get(doc: dict, keys: list[str]) -> dict:
 
 
 def sync_json_mcp(client: str, cli: dict, desired: dict, retired: list) -> bool:
-    target = Path(os.path.expanduser(cli['path']))
-    if target.exists():
-        doc = json.loads(strip_jsonc(target.read_text()))
-    else:
-        doc = {}
+    target = Path(cli['path']).expanduser()
+    doc = json.loads(strip_jsonc(target.read_text())) if target.exists() else {}
     container = deep_get(doc, cli['container'])
     added, changed, removed = semantic_diff(container, desired, retired)
     dirty = report(client, target, added, changed, removed)
-    if DRY_RUN or not dirty:
+    if CONFIG.dry_run or not dirty:
         return dirty
     for name in retired:
         container.pop(name, None)
@@ -373,8 +409,39 @@ def sync_json_mcp(client: str, cli: dict, desired: dict, retired: list) -> bool:
     return dirty
 
 
+def _read_codex_servers(table) -> dict:
+    return {
+        name: {
+            'command': table[name].get('command'),
+            'args': list(table[name].get('args', [])),
+            'env': dict(table[name].get('env', {})),
+        }
+        for name in table
+    }
+
+
+def _write_codex_servers(tomlkit, table, desired: dict, retired: list) -> None:
+    for name in retired:
+        if name in table:
+            del table[name]
+    for name, srv in desired.items():
+        if 'command' not in srv:
+            continue  # remote servers are not managed in Codex here
+        entry = table[name] if name in table else tomlkit.table()
+        table[name] = entry
+        entry['command'] = srv['command']
+        entry['args'] = srv['args']
+        if srv['env']:
+            env = tomlkit.table()
+            for k, v in srv['env'].items():
+                env[k] = v
+            entry['env'] = env
+        elif 'env' in entry:
+            del entry['env']
+
+
 def sync_codex_mcp(client: str, cli: dict, desired: dict, retired: list) -> bool:
-    target = Path(os.path.expanduser(cli['path']))
+    target = Path(cli['path']).expanduser()
     try:
         import tomlkit
     except ModuleNotFoundError:
@@ -385,39 +452,13 @@ def sync_codex_mcp(client: str, cli: dict, desired: dict, retired: list) -> bool
         table = tomlkit.table()
         doc['mcp_servers'] = table
 
-    existing = {}
-    for name in table:
-        entry = table[name]
-        existing[name] = {
-            'command': entry.get('command'),
-            'args': list(entry.get('args', [])),
-            'env': dict(entry.get('env', {})),
-        }
+    existing = _read_codex_servers(table)
     added, changed, removed = semantic_diff(existing, desired, retired)
     dirty = report(client, target, added, changed, removed)
-    if DRY_RUN or not dirty:
+    if CONFIG.dry_run or not dirty:
         return dirty
 
-    for name in retired:
-        if name in table:
-            del table[name]
-    for name, srv in desired.items():
-        if 'command' not in srv:
-            continue  # remote servers are not managed in Codex here
-        if name in table:
-            entry = table[name]
-        else:
-            entry = tomlkit.table()
-            table[name] = entry
-        entry['command'] = srv['command']
-        entry['args'] = srv['args']
-        if srv['env']:
-            env = tomlkit.table()
-            for k, v in srv['env'].items():
-                env[k] = v
-            entry['env'] = env
-        elif 'env' in entry:
-            del entry['env']
+    _write_codex_servers(tomlkit, table, desired, retired)
     target.write_text(tomlkit.dumps(doc))
     return dirty
 
@@ -437,7 +478,7 @@ def mcp_client_kind(cli: dict) -> str:
 # skills (symlink strategy)
 # --------------------------------------------------------------------------- #
 def sync_skills(client: str, cli: dict, skills: dict, retired: list) -> bool:
-    base = Path(os.path.expanduser(cli['path']))
+    base = Path(cli['path']).expanduser()
     manage_root = (CATALOG / 'skills').resolve()
     desired = {n: s for n, s in skills.items() if client in s['clients'] and n not in retired}
 
@@ -454,7 +495,7 @@ def sync_skills(client: str, cli: dict, skills: dict, retired: list) -> bool:
     changed = sorted(n for n in desired if n in existing and existing[n] != str(desired[n]['dir'].resolve()))
     removed = sorted(n for n in existing if n not in desired)
     dirty = report(client, base, added, changed, removed, kind='skills')
-    if DRY_RUN or not dirty:
+    if CONFIG.dry_run or not dirty:
         return dirty
 
     base.mkdir(parents=True, exist_ok=True)
@@ -466,7 +507,7 @@ def sync_skills(client: str, cli: dict, skills: dict, retired: list) -> bool:
 
 
 def sync_plugins(client: str, cli: dict, plugins: dict, retired: list) -> bool:
-    base = Path(os.path.expanduser(cli['path']))
+    base = Path(cli['path']).expanduser()
     manage_root = (CATALOG / 'plugins').resolve()
     desired = {f'{n}.ts': p for n, p in plugins.items() if client in p['clients'] and n not in retired}
 
@@ -483,7 +524,7 @@ def sync_plugins(client: str, cli: dict, plugins: dict, retired: list) -> bool:
     changed = sorted(n for n in desired if n in existing and existing[n] != str(desired[n]['source'].resolve()))
     removed = sorted(n for n in existing if n not in desired)
     dirty = report(client, base, added, changed, removed, kind='plugins')
-    if DRY_RUN or not dirty:
+    if CONFIG.dry_run or not dirty:
         return dirty
 
     base.mkdir(parents=True, exist_ok=True)
@@ -501,13 +542,7 @@ def _canon(obj) -> str:
     return json.dumps(obj, sort_keys=True)
 
 
-def sync_hooks(client: str, cli: dict, hooks: dict, retired_commands: list) -> bool:
-    if cli['style'] not in HOOK_RENDERERS:
-        print(f'[{client}] hooks: style {cli["style"]!r} not supported yet; skipping')
-        return False
-    renderer = HOOK_RENDERERS[cli['style']]
-
-    target = Path(os.path.expanduser(cli['path']))
+def _collect_hook_groups(client: str, hooks: dict, renderer) -> tuple[dict, dict[str, str], set[str]]:
     desired: dict[str, list] = {}
     label: dict[str, str] = {}
     managed_keys: set[str] = set()
@@ -519,44 +554,75 @@ def sync_hooks(client: str, cli: dict, hooks: dict, retired_commands: list) -> b
         desired.setdefault(hook['event'], []).append(group)
         managed_keys.add(key)
         label[key] = f'{hook["name"]} @ {hook["event"]}'
+    return desired, label, managed_keys
 
-    if target.exists():
-        doc = json.loads(strip_jsonc(target.read_text()))
-    else:
-        doc = {}
-    container = deep_get(doc, cli['container'])
 
-    # Existing events, minus any group the catalog owns (so re-sync and
-    # retirement are idempotent) and minus explicitly retired commands.
+def _keep_hook_group(
+    group: dict,
+    event: str,
+    managed_keys: set,
+    retired_commands: list,
+    label: dict,
+    removed_labels: list,
+    scrubbed_retired: set,
+) -> bool:
+    key = _canon(group)
+    if key in managed_keys:
+        return False
+    for entry in group.get('hooks', []):
+        if entry.get('command', '') in retired_commands:
+            removed_labels.append(label.get(key, f'retired @ {event}'))
+            scrubbed_retired.add((event, key))
+            return False
+    return True
+
+
+def _scrub_hooks(container: dict, managed_keys: set, retired_commands: list, label: dict):
     scrubbed: dict[str, list] = {}
     removed_labels: list[str] = []
     scrubbed_retired: set = set()
     for event, groups in container.items():
-        kept = []
-        for group in groups:
-            key = _canon(group)
-            cmds = [h.get('command', '') for h in group.get('hooks', [])]
-            if key in managed_keys:
-                continue
-            if any(cmd in retired_commands for cmd in cmds):
-                removed_labels.append(label.get(key, f'retired @ {event}'))
-                scrubbed_retired.add((event, key))
-                continue
-            kept.append(group)
+        kept = [
+            group
+            for group in groups
+            if _keep_hook_group(group, event, managed_keys, retired_commands, label, removed_labels, scrubbed_retired)
+        ]
         if kept:
             scrubbed[event] = kept
+    return scrubbed, removed_labels, scrubbed_retired
+
+
+def _hook_diff(container: dict, merged: dict, scrubbed_retired: set, removed_labels: list, label: dict):
+    old_keys = {(event, _canon(group)) for event, groups in container.items() for group in groups}
+    new_keys = {(event, _canon(group)) for event, groups in merged.items() for group in groups}
+    added = sorted(label.get(key[1], key[0]) for key in new_keys - old_keys)
+    dropped = (old_keys - new_keys) - scrubbed_retired
+    removed = sorted(removed_labels + [label.get(key[1], key[0]) for key in dropped])
+    return added, removed
+
+
+def sync_hooks(client: str, cli: dict, hooks: dict, retired_commands: list) -> bool:
+    if cli['style'] not in HOOK_RENDERERS:
+        print(f'[{client}] hooks: style {cli["style"]!r} not supported yet; skipping')
+        return False
+    renderer = HOOK_RENDERERS[cli['style']]
+    target = Path(cli['path']).expanduser()
+    desired, label, managed_keys = _collect_hook_groups(client, hooks, renderer)
+
+    doc = json.loads(strip_jsonc(target.read_text())) if target.exists() else {}
+    container = deep_get(doc, cli['container'])
+
+    # Existing events, minus any group the catalog owns (so re-sync and
+    # retirement are idempotent) and minus explicitly retired commands.
+    scrubbed, removed_labels, scrubbed_retired = _scrub_hooks(container, managed_keys, retired_commands, label)
 
     merged = {event: list(groups) for event, groups in scrubbed.items()}
     for event, groups in desired.items():
         merged.setdefault(event, []).extend(groups)
 
-    old_keys = {(e, _canon(g)) for e, gs in container.items() for g in gs}
-    new_keys = {(e, _canon(g)) for e, gs in merged.items() for g in gs}
-    added_names = sorted(label.get(k[1], k[0]) for k in new_keys - old_keys)
-    removed_names = sorted(removed_labels + [label.get(k[1], k[0]) for k in (old_keys - new_keys) - scrubbed_retired])
-    changed = []
-    dirty = report(client, target, added_names, changed, removed_names, kind='hooks')
-    if DRY_RUN or not dirty:
+    added_names, removed_names = _hook_diff(container, merged, scrubbed_retired, removed_labels, label)
+    dirty = report(client, target, added_names, [], removed_names, kind='hooks')
+    if CONFIG.dry_run or not dirty:
         return dirty
 
     container.clear()
@@ -566,11 +632,101 @@ def sync_hooks(client: str, cli: dict, hooks: dict, retired_commands: list) -> b
 
 
 # --------------------------------------------------------------------------- #
+# instructions (managed markdown block in a shared file)
+# --------------------------------------------------------------------------- #
+# Clients read a single global instruction file (opencode: AGENTS.md, Claude
+# Code: CLAUDE.md, Codex: AGENTS.md). There is no subtree to key into, so the
+# catalog owns one delimited region and everything outside it is left alone.
+INSTR_BEGIN = '<!-- agentdots:begin (managed by agent-sync; edit catalog/instructions/ instead) -->'
+INSTR_END = '<!-- agentdots:end -->'
+INSTR_REGION = re.compile(re.escape(INSTR_BEGIN) + r'.*?' + re.escape(INSTR_END), re.DOTALL)
+INSTR_NAMES = re.compile(r'<!-- instructions: (.*?) -->', re.DOTALL)
+
+
+def render_instruction_block(items: dict[str, str]) -> str:
+    names = sorted(items)
+    if not names:
+        return ''
+    body = '\n\n'.join(items[name].strip() for name in names)
+    return f'{INSTR_BEGIN}\n<!-- instructions: {", ".join(names)} -->\n{body}\n{INSTR_END}'
+
+
+def block_names(region: str) -> list[str]:
+    match = INSTR_NAMES.search(region)
+    if not match:
+        return []
+    return [name.strip() for name in match.group(1).split(',') if name.strip()]
+
+
+def block_body(region: str) -> str:
+    match = re.search(r'<!-- instructions: .*? -->\n(.*?)\n?' + re.escape(INSTR_END), region, re.DOTALL)
+    return match.group(1) if match else ''
+
+
+def _final_newline(text: str) -> str:
+    """Trim trailing blank lines and end with exactly one newline (or ``''``)."""
+    stripped = text.rstrip('\n')
+    return f'{stripped}\n' if stripped else ''
+
+
+def apply_instruction_block(document: str, block: str) -> str:
+    """Swap the managed region for ``block``, preserving everything else.
+
+    A file that is an exact unmanaged copy of the block content (the state just
+    before the catalog first adopts it) is wrapped in markers instead of gaining
+    a second copy.
+    """
+    match = INSTR_REGION.search(document)
+    if match:
+        head = document[: match.start()].rstrip('\n')
+        tail = document[match.end() :].lstrip('\n')
+        parts = [part for part in (head, block, tail) if part]
+        return _final_newline('\n\n'.join(parts))
+    if not block:
+        return document
+    if document.strip() and document.strip() == block_body(block).strip():
+        return _final_newline(block)
+    body = document.rstrip('\n')
+    return _final_newline(f'{body}\n\n{block}') if body else _final_newline(block)
+
+
+def _load_instruction_block(target: Path) -> tuple[str, str | None, list[str], str]:
+    existing = target.read_text() if target.exists() else ''
+    match = INSTR_REGION.search(existing)
+    region = match.group(0) if match else None
+    return existing, region, block_names(region) if region else [], block_body(region) if region else ''
+
+
+def sync_instructions(client: str, cli: dict, instructions: dict, retired: list) -> bool:
+    target = Path(cli['path']).expanduser()
+    desired = {
+        name: item['text'] for name, item in instructions.items() if client in item['clients'] and name not in retired
+    }
+    existing, region, old_names, old_body = _load_instruction_block(target)
+    new_block = render_instruction_block(desired)
+    new_body = '\n\n'.join(desired[name].strip() for name in sorted(desired))
+
+    added = sorted(set(desired) - set(old_names))
+    removed = sorted(set(old_names) - set(desired))
+    common = sorted(set(desired) & set(old_names))
+    changed = common if old_body != new_body else []
+    dirty = bool(added or removed or changed) or bool(new_block) != bool(region)
+    report(client, target, added, changed, removed, kind='instructions')
+    if not dirty or CONFIG.dry_run:
+        return dirty
+
+    updated = apply_instruction_block(existing, new_block)
+    if updated:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(updated)
+    elif target.exists():
+        target.unlink()
+    return dirty
+
+
+# --------------------------------------------------------------------------- #
 # main
 # --------------------------------------------------------------------------- #
-DRY_RUN = False
-
-
 def sync_client(client: str, kinds: dict, catalogs: dict, retired: dict) -> bool:
     dirty = False
     if 'mcp' in kinds:
@@ -584,16 +740,17 @@ def sync_client(client: str, kinds: dict, catalogs: dict, retired: dict) -> bool
         dirty |= sync_plugins(client, kinds['plugins'], catalogs['plugins'], retired['plugins'])
     if 'hooks' in kinds:
         dirty |= sync_hooks(client, kinds['hooks'], catalogs['hooks'], retired['hook_commands'])
+    if 'instructions' in kinds:
+        dirty |= sync_instructions(client, kinds['instructions'], catalogs['instructions'], retired['instructions'])
     return dirty
 
 
 def main() -> int:
-    global DRY_RUN
     ap = argparse.ArgumentParser(description='Sync the agent catalog into client configs.')
     ap.add_argument('--dry-run', action='store_true', help='show changes, write nothing')
     ap.add_argument('--client', action='append', help='limit to a client (repeatable)')
     args = ap.parse_args()
-    DRY_RUN = args.dry_run
+    CONFIG.dry_run = args.dry_run
 
     ctx = build_context()
     catalogs = {
@@ -601,6 +758,7 @@ def main() -> int:
         'skills': load_skills(ctx),
         'plugins': load_plugins(ctx),
         'hooks': load_hooks(ctx),
+        'instructions': load_instructions(ctx),
     }
     clients = load_toml(CATALOG / 'clients.toml')
     raw_retired = load_toml(CATALOG / 'retired.toml')
@@ -609,6 +767,7 @@ def main() -> int:
         'skills': raw_retired.get('skills', []),
         'plugins': raw_retired.get('plugins', []),
         'hook_commands': raw_retired.get('hook_commands', []),
+        'instructions': raw_retired.get('instructions', []),
     }
 
     selected = args.client or list(clients)
@@ -620,7 +779,7 @@ def main() -> int:
     for client in selected:
         dirty_any |= sync_client(client, clients[client], catalogs, retired)
     print()
-    if DRY_RUN:
+    if CONFIG.dry_run:
         print('dry-run complete - nothing written')
     else:
         print('done' if dirty_any else 'already in sync')
