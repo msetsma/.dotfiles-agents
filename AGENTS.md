@@ -45,9 +45,9 @@ README is the detail.
 
 | Server | Directory | Purpose | Entry point |
 |---|---|---|---|
-| `m365-local` | `m365-local-mcp/` | Local Outlook meetings, Mail.app search, synced SharePoint files. AppleScript + disk, no Graph, no Full Disk Access. | `server.py` |
-| `teams-browser` | `teams-mcp/` | Teams meetings, transcripts, ad-hoc/1:1 calls, chats, channel messages, shared files via browser session tokens + local SQLite archive. | `teams-browser-mcp` (console script) |
-| `entra-mcp` | `entra-mcp/` | Entra ID org structure + access analysis: people search, group membership, reporting trees, manager lookup, membership comparison. Azure CLI delegated session, no app registration. Also ships the `entra` CLI. | `entra-mcp` (console script, uv tool) |
+| `m365-local` | `mcp/m365-local-mcp/` | Local Outlook meetings, Mail.app search, synced SharePoint files. AppleScript + disk, no Graph, no Full Disk Access. | `server.py` |
+| `teams-browser` | `mcp/teams-mcp/` | Teams meetings, transcripts, ad-hoc/1:1 calls, chats, channel messages, shared files via browser session tokens + local SQLite archive. | `teams-browser-mcp` (console script) |
+| `entra-mcp` | `mcp/entra-mcp/` | Entra ID org structure + access analysis: people search, group membership, reporting trees, manager lookup, membership comparison. Azure CLI delegated session, no app registration. Also ships the `entra` CLI. | `entra-mcp` (console script, uv tool) |
 
 Tool-level detail lives in each directory's `README.md`. Don't duplicate it here.
 
@@ -83,20 +83,20 @@ Launch commands:
 
 ```sh
 # m365-local
-/opt/homebrew/bin/uv run --directory /Users/msetsma/.agentdots/m365-local-mcp server.py
+/opt/homebrew/bin/uv run --directory /Users/msetsma/.agentdots/mcp/m365-local-mcp server.py
 
 # teams-browser
-/opt/homebrew/bin/uv run --directory /Users/msetsma/.agentdots/teams-mcp --extra mcp teams-browser-mcp
+/opt/homebrew/bin/uv run --directory /Users/msetsma/.agentdots/mcp/teams-mcp --extra mcp teams-browser-mcp
 
 # entra-mcp
-/opt/homebrew/bin/uv run --directory /Users/msetsma/.agentdots/entra-mcp --extra mcp entra-mcp
+/opt/homebrew/bin/uv run --directory /Users/msetsma/.agentdots/mcp/entra-mcp --extra mcp entra-mcp
 ```
 
 `entra-mcp` is the one exception to "no global install is needed" above: it also
 ships a daily-use `entra` CLI, so both commands come from a uv tool install.
 
 ```sh
-uv tool install --editable ~/.agentdots/entra-mcp --with fastmcp   # provides `entra` and `entra-mcp`
+uv tool install --editable ~/.agentdots/mcp/entra-mcp --with fastmcp   # provides `entra` and `entra-mcp`
 ```
 
 Registered clients point straight at `/Users/msetsma/.local/bin/entra-mcp`. It
@@ -109,14 +109,14 @@ put server names directly under `mcp`). Use `disabled: true`, not `enabled`.
 
 ```sh
 opencode mcp add m365-local --global -- \
-  /opt/homebrew/bin/uv run --directory /Users/msetsma/.agentdots/m365-local-mcp server.py
+  /opt/homebrew/bin/uv run --directory /Users/msetsma/.agentdots/mcp/m365-local-mcp server.py
 opencode mcp list
 ```
 
 ```jsonc
 "m365-local": {
   "type": "local",
-  "command": ["/opt/homebrew/bin/uv", "run", "--directory", "/Users/msetsma/.agentdots/m365-local-mcp", "server.py"]
+  "command": ["/opt/homebrew/bin/uv", "run", "--directory", "/Users/msetsma/.agentdots/mcp/m365-local-mcp", "server.py"]
 }
 ```
 
@@ -126,7 +126,7 @@ User-scope servers land in `~/.claude.json`.
 
 ```sh
 claude mcp add --scope user m365-local -- \
-  /opt/homebrew/bin/uv run --directory /Users/msetsma/.agentdots/m365-local-mcp server.py
+  /opt/homebrew/bin/uv run --directory /Users/msetsma/.agentdots/mcp/m365-local-mcp server.py
 claude mcp list
 ```
 
@@ -139,7 +139,7 @@ Include `env.PATH` — the app launches without your shell environment.
 "mcpServers": {
   "m365-local": {
     "command": "/opt/homebrew/bin/uv",
-    "args": ["run", "--directory", "/Users/msetsma/.agentdots/m365-local-mcp", "server.py"],
+    "args": ["run", "--directory", "/Users/msetsma/.agentdots/mcp/m365-local-mcp", "server.py"],
     "env": { "PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" }
   }
 }
@@ -156,7 +156,7 @@ Config: `~/Library/Application Support/Code/User/mcp.json` (note `servers`, and
     "m365-local": {
       "type": "stdio",
       "command": "/opt/homebrew/bin/uv",
-      "args": ["run", "--directory", "/Users/msetsma/.agentdots/m365-local-mcp", "server.py"]
+      "args": ["run", "--directory", "/Users/msetsma/.agentdots/mcp/m365-local-mcp", "server.py"]
     }
   }
 }
@@ -169,14 +169,14 @@ Config: `~/.codex/config.toml`.
 ```toml
 [mcp_servers.m365-local]
 command = "/opt/homebrew/bin/uv"
-args = ["run", "--directory", "/Users/msetsma/.agentdots/m365-local-mcp", "server.py"]
+args = ["run", "--directory", "/Users/msetsma/.agentdots/mcp/m365-local-mcp", "server.py"]
 ```
 
 ### teams-browser has its own installer
 
 ```sh
-uv run --directory ~/.agentdots/teams-mcp --extra mcp teams-browser mcp clients
-uv run --directory ~/.agentdots/teams-mcp --extra mcp teams-browser mcp install claude-desktop
+uv run --directory ~/.agentdots/mcp/teams-mcp --extra mcp teams-browser mcp clients
+uv run --directory ~/.agentdots/mcp/teams-mcp --extra mcp teams-browser mcp install claude-desktop
 ```
 
 It supports `claude-desktop`, `claude-code`, `cursor`, `vscode`, `opencode`.
@@ -186,8 +186,8 @@ snippets above.
 
 ## Adding a new server — checklist
 
-1. Create `~/.agentdots/<name>/` with `pyproject.toml`, `README.md`, entry point, tests.
-2. Make it run with `uv run --directory ~/.agentdots/<name> <entrypoint>`.
+1. Create `~/.agentdots/mcp/<name>/` with `pyproject.toml`, `README.md`, entry point, tests.
+2. Make it run with `uv run --directory ~/.agentdots/mcp/<name> <entrypoint>`.
 3. Prove it offline (tests pass).
 4. Add a row to the table in `README.md`.
 5. Register it with the agents you want (snippets above), then confirm it

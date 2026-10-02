@@ -165,7 +165,7 @@ without bound (`ENTRA_REPORTS_MAX_WORKERS` controls the fetch concurrency).
 ## Install
 
 ```sh
-uv tool install --editable ~/.agentdots/entra-mcp --with fastmcp
+uv tool install --editable ~/.agentdots/mcp/entra-mcp --with fastmcp
 ```
 
 This provides `entra` and `entra-mcp` in `~/.local/bin`. The CLI itself has no
@@ -174,7 +174,7 @@ runtime dependencies; only the MCP server needs `fastmcp`.
 To run the MCP without installing:
 
 ```sh
-uv run --directory ~/.agentdots/entra-mcp --extra mcp entra-mcp
+uv run --directory ~/.agentdots/mcp/entra-mcp --extra mcp entra-mcp
 ```
 
 ## Tests
@@ -182,7 +182,7 @@ uv run --directory ~/.agentdots/entra-mcp --extra mcp entra-mcp
 Offline, no network and no Entra tenant needed — Graph is mocked:
 
 ```sh
-uv run --directory ~/.agentdots/entra-mcp pytest
+uv run --directory ~/.agentdots/mcp/entra-mcp pytest
 # or
 python3 -m unittest discover -s tests
 ```

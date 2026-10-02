@@ -6,8 +6,8 @@ clients     = ["opencode", "claude-code", "claude-desktop"]
 
 [launch]
 command = "uv"
-args    = ["run", "--directory", "${AGENT_HOME}/teams-mcp", "--extra", "mcp", "teams-browser-mcp"]
+args    = ["run", "--directory", "${AGENT_HOME}/mcp/teams-mcp", "--extra", "mcp", "teams-browser-mcp"]
 
 [package]
 manager = "source"
-path    = "${AGENT_HOME}/teams-mcp"
+path    = "${AGENT_HOME}/mcp/teams-mcp"

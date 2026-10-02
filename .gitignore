@@ -25,8 +25,8 @@ dist/
 build/
 
 # teams-mcp/.ori working dir, but keep the chat-history backup
-/teams-mcp/.ori/*
-!/teams-mcp/.ori/state.sqlite
+/mcp/teams-mcp/.ori/*
+!/mcp/teams-mcp/.ori/state.sqlite
 
 # macOS
 .DS_Store

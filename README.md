@@ -29,10 +29,11 @@ runs tasks, per-host packages live in `.dotter/`.
 │   └── agent_update.py
 ├── generated/               # rendered pure-config files (gitignored)
 ├── .dotter/                 # dotter packages + pre-deploy hook
-├── m365-local-mcp/          # custom servers (own projects)
-├── teams-mcp/
-├── databricks-mcp/          # uv project that pulls ai-dev-kit's MCP from git
-└── entra-mcp/               # (its own git repo)
+└── mcp/                     # MCP server projects
+    ├── m365-local-mcp/      #   custom (own project)
+    ├── teams-mcp/           #   custom (own project)
+    ├── databricks-mcp/      #   uv project pinning ai-dev-kit's MCP from git
+    └── entra-mcp/           #   custom (own project; also ships the `entra` CLI)
 ```
 
 ## How it works
@@ -129,12 +130,12 @@ Full table of what this repo manages. `custom` = source lives in this repo;
 
 | Server | Origin | Launch | Clients |
 |---|---|---|---|
-| `m365-local` | custom | `uv run --directory ~/.agentdots/m365-local-mcp server.py` | opencode, Claude Code, Claude Desktop |
-| `teams-browser` | custom | `uv run --directory ~/.agentdots/teams-mcp teams-browser-mcp` | opencode, Claude Code, Claude Desktop |
+| `m365-local` | custom | `uv run --directory ~/.agentdots/mcp/m365-local-mcp server.py` | opencode, Claude Code, Claude Desktop |
+| `teams-browser` | custom | `uv run --directory ~/.agentdots/mcp/teams-mcp teams-browser-mcp` | opencode, Claude Code, Claude Desktop |
 | `entra-mcp` | custom | `entra-mcp` (uv tool) | opencode, Claude Code, Claude Desktop, VS Code, Codex |
 | `obscura` | external | `~/.local/bin/obscura mcp --stealth` | opencode, Claude Code, Claude Desktop |
 | `apple-mail` | external | `apple-mail-mcp` (uv tool) | opencode |
-| `databricks` | external | `uv run --project ~/.agentdots/databricks-mcp databricks-mcp` | opencode, Claude Code, Claude Desktop, Codex |
+| `databricks` | external | `uv run --project ~/.agentdots/mcp/databricks-mcp databricks-mcp` | opencode, Claude Code, Claude Desktop, Codex |
 | `azure` | external | `npx @azure/mcp@3.0.0-beta.29 server start` | opencode, Claude Code, Claude Desktop |
 | `azure-devops` | external | `npx @azure-devops/mcp ${ADO_ORG}` | opencode, Claude Code, Claude Desktop |
 | `github` | external | remote `api.githubcopilot.com/mcp/` | opencode, Claude Code |
@@ -208,7 +209,7 @@ cargo make agent-update     # apply available updates, then re-sync if a pin cha
 |---|---|---|
 | `npm` | `npm view <pkg> dist-tags.<ref>` | bump the `ref` if pinned; floats left alone |
 | `uv-tool` | `uv tool list --outdated` | `uv tool upgrade <tool>` |
-| `uv-project` | latest git tag of the project's repo | rewrite the pinned tag in `databricks-mcp/pyproject.toml` + re-lock |
+| `uv-project` | latest git tag of the project's repo | rewrite the pinned tag in `mcp/databricks-mcp/pyproject.toml` + re-lock |
 | `git` | behind-count vs upstream, or latest tag | `git pull --ff-only`; tag-pinned / no-upstream are reported as manual |
 | `source` | runs from a working tree | nothing — always current |
 | `manual` / `remote` | – | a binary/app or a hosted endpoint |
@@ -225,7 +226,7 @@ m365-local     source   local source (always current)
 
 > `databricks` is a special case: Databricks' ai-dev-kit MCP isn't published to
 > PyPI (`databricks-tools-core` has no release), so it's run from git via the
-> local [`databricks-mcp/`](databricks-mcp/) uv project. Bumping its tag never
+> local [`databricks-mcp/`](mcp/databricks-mcp/) uv project. Bumping its tag never
 > rewrites an agent config. `~/.ai-dev-kit` may still exist for its *skills*.
 
 ## Adding or changing a resource

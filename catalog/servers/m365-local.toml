@@ -6,8 +6,8 @@ clients     = ["opencode", "claude-code", "claude-desktop"]
 
 [launch]
 command = "uv"
-args    = ["run", "--directory", "${AGENT_HOME}/m365-local-mcp", "server.py"]
+args    = ["run", "--directory", "${AGENT_HOME}/mcp/m365-local-mcp", "server.py"]
 
 [package]
 manager = "source"
-path    = "${AGENT_HOME}/m365-local-mcp"
+path    = "${AGENT_HOME}/mcp/m365-local-mcp"

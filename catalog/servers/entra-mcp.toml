@@ -10,4 +10,4 @@ args    = []
 
 [package]
 manager = "git"
-path    = "${AGENT_HOME}/entra-mcp"
+path    = "${AGENT_HOME}/mcp/entra-mcp"

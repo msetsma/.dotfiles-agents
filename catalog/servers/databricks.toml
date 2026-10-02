@@ -6,7 +6,7 @@ clients     = ["opencode", "claude-code", "claude-desktop", "codex"]
 
 [launch]
 command = "uv"
-args    = ["run", "--quiet", "--project", "${AGENT_HOME}/databricks-mcp", "databricks-mcp"]
+args    = ["run", "--quiet", "--project", "${AGENT_HOME}/mcp/databricks-mcp", "databricks-mcp"]
 
 [env]
 DATABRICKS_CONFIG_PROFILE = "DEFAULT"
@@ -22,4 +22,4 @@ defer_loading = true
 manager = "uv-project"
 repo    = "databricks-solutions/ai-dev-kit"
 ref     = "v0.2.0"
-path    = "${AGENT_HOME}/databricks-mcp"
+path    = "${AGENT_HOME}/mcp/databricks-mcp"
