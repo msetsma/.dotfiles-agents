@@ -101,6 +101,9 @@ Only Claude Code has a `[claude-code.skills]` block: opencode reads
 the same skills without a second copy. Add `[opencode.skills]` only if you want
 skills in opencode's own directory.
 
+> Removing a client's `[<client>.skills]` block stops managing that directory, so
+> links already placed there are left behind — delete them by hand.
+
 ## Hooks
 
 ```
