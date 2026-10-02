@@ -2,7 +2,7 @@
 name = "m365-local-mcp"
 version = "0.1.0"
 description = "Read-only local MCP server for Outlook meetings, mail search, and synced SharePoint files (via Mail.app/Calendar.app AppleScript + OneDrive sync)"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 # 2.0+ required: code uses MCPServer (renamed from FastMCP) and
 # snake_case ToolAnnotations fields, neither of which exist in 1.x.
 dependencies = ["mcp>=2.0,<3"]

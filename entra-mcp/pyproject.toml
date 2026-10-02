@@ -3,7 +3,7 @@ name = "entra-mcp"
 version = "0.1.0"
 description = "Read-only Entra ID org-structure and access analysis (people, groups, reports, membership comparison) via a delegated Azure CLI session, exposed as a CLI and an MCP server."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 license = { text = "MIT" }
 
 # The CLI is pure standard library: no runtime dependencies. Auth is delegated

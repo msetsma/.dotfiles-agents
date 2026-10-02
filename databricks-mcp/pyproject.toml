@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "mcp-databricks"
 version = "0.0.0"
 description = "Launcher that runs Databricks' ai-dev-kit MCP server straight from its git source."
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 dependencies = [
     # ai-dev-kit ships its MCP server as two in-repo packages (no PyPI release
     # for databricks-tools-core), so both are pulled from the same pinned tag.
