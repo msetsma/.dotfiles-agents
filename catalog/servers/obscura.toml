@@ -1,0 +1,13 @@
+name        = "obscura"
+description = "Stealth browser automation (Obscura)."
+kind        = "local"
+origin      = "external"
+clients     = ["opencode", "claude-code", "claude-desktop"]
+
+[launch]
+command = "obscura"
+args    = ["mcp", "--stealth"]
+
+[package]
+manager = "manual"
+name    = "obscura (binary in ~/.local/bin)"

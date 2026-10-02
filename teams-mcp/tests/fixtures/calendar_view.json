@@ -1,0 +1,38 @@
+{
+  "_comment": "Scrubbed sample of GET /api/mt/part/{region-partition}/v2.1/me/calendars/calendarView -> value[].",
+  "value": [
+    {
+      "objectId": "00000000-0000-0000-0000-00000000000a",
+      "subject": "Design Review",
+      "startTime": "2026-09-15T20:30:00Z",
+      "endTime": "2026-09-15T21:30:00Z",
+      "organizerName": "Roe, Rick",
+      "organizerAddress": "RROE@example.com",
+      "location": "Teams Meeting",
+      "isOnlineMeeting": true,
+      "isOrganizer": false,
+      "isCancelled": false,
+      "isAllDayEvent": false,
+      "isAppointment": false,
+      "myResponseType": "Accepted",
+      "showAs": "Busy",
+      "eventType": "Single",
+      "skypeTeamsMeetingUrl": "https://teams.microsoft.com/l/meetup-join/19%3ameeting_YWJjZGVm%40thread.v2/0",
+      "skypeTeamsData": "{\"cid\": \"19:meeting_YWJjZGVm@thread.v2\"}"
+    },
+    {
+      "objectId": "00000000-0000-0000-0000-00000000000b",
+      "subject": "Optional Sync",
+      "startTime": "2026-09-16T15:00:00Z",
+      "endTime": "2026-09-16T15:30:00Z",
+      "organizerName": "Doe, Jane",
+      "organizerAddress": "JDOE@example.com",
+      "isOnlineMeeting": true,
+      "isOrganizer": false,
+      "myResponseType": "Declined",
+      "showAs": "Free",
+      "eventType": "Single",
+      "skypeTeamsData": "{\"cid\": \"19:meeting_b3B0@thread.v2\"}"
+    }
+  ]
+}

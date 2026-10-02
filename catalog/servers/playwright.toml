@@ -1,0 +1,14 @@
+name        = "playwright"
+description = "Microsoft Playwright browser automation. (Claude Code still has a project-scoped copy under docs/Analytics.wiki that this repo does not manage.)"
+kind        = "local"
+origin      = "external"
+clients     = ["opencode"]
+
+[launch]
+command = "npx"
+args    = ["-y", "{{package}}"]
+
+[package]
+manager = "npm"
+name    = "@playwright/mcp"
+ref     = "latest"

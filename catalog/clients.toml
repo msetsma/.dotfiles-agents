@@ -1,0 +1,39 @@
+# Where each agent keeps its MCP servers, and how it spells them.
+#
+#   format      = how the file is parsed/written
+#   container   = key path to the MCP server map
+#   style       = renderer that speaks this agent's dialect
+#   whole_file  = pure-MCP config (rendered to generated/ and dotter-symlinked)
+#   inject_path = PATH to add to every server's env (GUI apps need it)
+
+[opencode]
+path      = "~/.config/opencode/opencode.jsonc"
+format    = "jsonc"
+container = ["mcp", "servers"]
+style     = "opencode"
+
+[claude-code]
+path      = "~/.claude.json"
+format    = "json"
+container = ["mcpServers"]
+style     = "claude-code"
+
+[claude-desktop]
+path        = "~/Library/Application Support/Claude/claude_desktop_config.json"
+format      = "json"
+container   = ["mcpServers"]
+style       = "claude-desktop"
+inject_path = "/Users/msetsma/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
+[vscode]
+path       = "~/Library/Application Support/Code/User/mcp.json"
+format     = "json"
+container  = ["servers"]
+style      = "vscode"
+whole_file = true
+
+[codex]
+path      = "~/.codex/config.toml"
+format    = "toml"
+container = ["mcp_servers"]
+style     = "codex"

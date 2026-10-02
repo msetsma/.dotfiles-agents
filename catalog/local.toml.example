@@ -1,0 +1,9 @@
+# Machine-local catalog values - UNTRACKED.
+#
+# Copy this file to `catalog/local.toml` and fill in your own values. Anything
+# here overrides catalog/paths.toml, so org-specific settings never land in the
+# published repo.
+
+[vars]
+# Azure DevOps organization slug used by the azure-devops server.
+ADO_ORG = "your-ado-org"

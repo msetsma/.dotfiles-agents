@@ -1,0 +1,14 @@
+name        = "context7"
+description = "Context7 up-to-date library documentation lookup."
+kind        = "local"
+origin      = "external"
+clients     = ["vscode"]
+
+[launch]
+command = "npx"
+args    = ["-y", "{{package}}"]
+
+[package]
+manager = "npm"
+name    = "@upstash/context7-mcp"
+ref     = "latest"

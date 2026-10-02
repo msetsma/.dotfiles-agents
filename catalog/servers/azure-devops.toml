@@ -1,0 +1,15 @@
+name        = "azure-devops"
+description = "Azure DevOps (work items, repos, pipelines) for your Azure DevOps org."
+kind        = "local"
+origin      = "external"
+clients     = ["opencode", "claude-code", "claude-desktop"]
+
+[launch]
+command = "npx"
+# ADO_ORG is set in the untracked catalog/local.toml (see local.toml.example).
+args    = ["-y", "{{package}}", "${ADO_ORG}"]
+
+[package]
+manager = "npm"
+name    = "@azure-devops/mcp"
+ref     = "latest"

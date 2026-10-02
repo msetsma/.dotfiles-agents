@@ -1,0 +1,53 @@
+{
+  "_comment": "Scrubbed sample of GET substrate/api/beta/me/WorkingSetFiles/ with the $select used by api/files.py.",
+  "value": [
+    {
+      "Id": "SPO@tenant,doc-xlsx",
+      "FileName": "Plan.xlsx",
+      "FileExtension": "xlsx",
+      "FileCreatedTime": "2026-09-15T20:00:00Z",
+      "LastModifiedDateTime": "2026-09-15T21:00:00Z",
+      "FileSize": null,
+      "Visualization": {
+        "Type": "Excel",
+        "Title": "Plan",
+        "AccessUrl": "https://example.sharepoint.com/plan.xlsx",
+        "PreviewImageUrl": "https://example.sharepoint.com/plan.png"
+      },
+      "ItemProperties": {"Default": {}}
+    },
+    {
+      "Id": "SPO@tenant,rec-mp4",
+      "FileName": "Design Review-20260915-Meeting Recording.mp4",
+      "FileExtension": "mp4",
+      "FileCreatedTime": "2026-09-15T20:30:00Z",
+      "LastModifiedDateTime": "2026-09-15T22:00:00Z",
+      "Visualization": {"Type": "Video", "Title": "Design Review"},
+      "ItemProperties": {
+        "Default": {
+          "MeetingThreadId": "19:meeting_YWJjZGVm@thread.v2",
+          "RecordingStartDateTime": "2026-09-15T20:30:00Z"
+        }
+      }
+    },
+    {
+      "Id": "SPO@tenant,deck-pptx",
+      "FileName": "Deck.pptx",
+      "FileExtension": "pptx",
+      "FileCreatedTime": "2026-09-14T10:00:00Z",
+      "LastModifiedDateTime": "2026-09-14T10:00:00Z",
+      "Visualization": {"Type": "PowerPoint", "Title": "Deck"},
+      "ItemProperties": {
+        "Default": {"MeetingThreadId": "19:meeting_YWJjZGVm@thread.v2"}
+      }
+    },
+    {
+      "Id": "SPO@tenant,link-web",
+      "FileName": "Roadmap Board",
+      "FileExtension": "",
+      "FileCreatedTime": "2026-09-13T10:00:00Z",
+      "Visualization": {"Type": "WebLink", "Title": "Roadmap Board", "AccessUrl": "https://example.com/board"},
+      "ItemProperties": {"Default": {}}
+    }
+  ]
+}

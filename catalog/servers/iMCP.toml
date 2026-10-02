@@ -1,0 +1,13 @@
+name        = "iMCP"
+description = "macOS integrations (Calendar, Reminders, Contacts, Messages, ...) via the iMCP app."
+kind        = "local"
+origin      = "external"
+clients     = ["opencode", "claude-code", "claude-desktop", "vscode", "codex"]
+
+[launch]
+command = "imcp"
+args    = []
+
+[package]
+manager = "manual"
+name    = "iMCP.app"

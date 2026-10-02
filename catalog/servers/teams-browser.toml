@@ -1,0 +1,13 @@
+name        = "teams-browser"
+description = "Read-only Teams meetings, transcripts, chats, channel messages and shared files via browser session tokens + a local SQLite archive."
+kind        = "local"
+origin      = "custom"
+clients     = ["opencode", "claude-code", "claude-desktop"]
+
+[launch]
+command = "uv"
+args    = ["run", "--directory", "${MCP_HOME}/teams-mcp", "--extra", "mcp", "teams-browser-mcp"]
+
+[package]
+manager = "source"
+path    = "${MCP_HOME}/teams-mcp"

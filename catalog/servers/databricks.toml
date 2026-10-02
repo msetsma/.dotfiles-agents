@@ -1,0 +1,25 @@
+name        = "databricks"
+description = "Databricks workspace/SQL/Genie tools, run from Databricks ai-dev-kit's git source via the local databricks-mcp/ uv project."
+kind        = "local"
+origin      = "external"
+clients     = ["opencode", "claude-code", "claude-desktop", "codex"]
+
+[launch]
+command = "uv"
+args    = ["run", "--quiet", "--project", "${MCP_HOME}/databricks-mcp", "databricks-mcp"]
+
+[env]
+DATABRICKS_CONFIG_PROFILE = "DEFAULT"
+
+# Claude Code lazy-loads this server's tools behind a search step.
+[extra.claude-code]
+defer_loading = true
+
+# The pinned ai-dev-kit tag lives in databricks-mcp/pyproject.toml, not in the
+# agent configs - so bumping it never rewrites a config. mcp-update keeps them
+# in lockstep.
+[package]
+manager = "uv-project"
+repo    = "databricks-solutions/ai-dev-kit"
+ref     = "v0.2.0"
+path    = "${MCP_HOME}/databricks-mcp"

@@ -1,0 +1,55 @@
+{
+  "_comment": "Scrubbed sample of GET chatsvc/{region}/v1/users/ME/conversations/48:calllogs/messages?view=msnp24Equivalent (newest first). Call-log Text entries and Media_CallLog* events are joined on CallId.",
+  "messages": [
+    {
+      "id": "1790000000003",
+      "conversationid": "48:calllogs",
+      "type": "Message",
+      "messagetype": "RichText/Media_CallLogRecording",
+      "contenttype": "RichText/Media_CallLogRecording",
+      "imdisplayname": "",
+      "composetime": "2026-09-25T13:33:55.7620000Z",
+      "content": "{\"CallId\":\"call-0001\",\"UserParticipantId\":\"user-0001\",\"ThreadId\":\"19:aaaaaaaa-1111-2222-3333-444444444444_bbbbbbbb-5555-6666-7777-888888888888@unq.gbl.spaces\",\"MessageId\":\"1790000000001\",\"ContentTypes\":\"Transcript\"}",
+      "properties": {"s2spartnername": "recorder"}
+    },
+    {
+      "id": "1790000000002",
+      "conversationid": "48:calllogs",
+      "type": "Message",
+      "messagetype": "Text",
+      "contenttype": "text",
+      "imdisplayname": "",
+      "composetime": "2026-09-25T13:33:26.8160000Z",
+      "content": "Call Logs for Call call-0001",
+      "properties": {
+        "call-log": "{\"startTime\":\"2026-09-25T13:16:29.3469012Z\",\"connectTime\":\"2026-09-25T13:16:32.1846013Z\",\"endTime\":\"2026-09-25T13:33:26.7327232Z\",\"callDirection\":\"incoming\",\"callType\":\"multiParty\",\"callState\":\"accepted\",\"userParticipantId\":\"user-0001\",\"originator\":\"8:orgid:aaaaaaaa-1111-2222-3333-444444444444\",\"target\":\"8:orgid:bbbbbbbb-5555-6666-7777-888888888888\",\"originatorParticipant\":{\"id\":\"8:orgid:aaaaaaaa-1111-2222-3333-444444444444\",\"tenantId\":\"tenant-0001\",\"type\":\"default\",\"displayName\":\"Doe, Jane\",\"applicationType\":null,\"alternateId\":null},\"targetParticipant\":{\"id\":\"8:orgid:bbbbbbbb-5555-6666-7777-888888888888\",\"tenantId\":\"tenant-0001\",\"type\":\"default\",\"displayName\":null,\"applicationType\":null,\"alternateId\":null},\"callId\":\"call-0001\",\"callAttributes\":null,\"forwardingInfo\":null,\"transferInfo\":null,\"participants\":[\"8:orgid:aaaaaaaa-1111-2222-3333-444444444444\",\"8:orgid:bbbbbbbb-5555-6666-7777-888888888888\"],\"participantList\":[{\"id\":\"8:orgid:aaaaaaaa-1111-2222-3333-444444444444\",\"tenantId\":\"tenant-0001\",\"type\":\"default\",\"displayName\":null,\"applicationType\":null,\"alternateId\":null},{\"id\":\"8:orgid:bbbbbbbb-5555-6666-7777-888888888888\",\"tenantId\":\"tenant-0001\",\"type\":\"default\",\"displayName\":null,\"applicationType\":null,\"alternateId\":null}],\"threadId\":null,\"sessionType\":\"default\",\"sharedCorrelationId\":\"corr-0001\",\"messageId\":null}",
+        "s2spartnername": "concore_gvc"
+      }
+    },
+    {
+      "id": "1790000000001",
+      "conversationid": "48:calllogs",
+      "type": "Message",
+      "messagetype": "RichText/Media_CallLogTranscript",
+      "contenttype": "RichText/Media_CallLogTranscript",
+      "imdisplayname": "",
+      "composetime": "2026-09-25T13:19:33.5590000Z",
+      "content": "{\"CallId\":\"call-0001\",\"UserParticipantId\":\"user-0001\",\"ThreadId\":\"19:aaaaaaaa-1111-2222-3333-444444444444_bbbbbbbb-5555-6666-7777-888888888888@unq.gbl.spaces\",\"MessageId\":\"1790000000000\",\"ContentTypes\":\"Transcript\"}",
+      "properties": {"s2spartnername": "recorder"}
+    },
+    {
+      "id": "1790000000000",
+      "conversationid": "48:calllogs",
+      "type": "Message",
+      "messagetype": "Text",
+      "contenttype": "text",
+      "imdisplayname": "",
+      "composetime": "2026-07-14T13:50:49.3740000Z",
+      "content": "Call Logs for Call call-0002",
+      "properties": {
+        "call-log": "{\"startTime\":\"2026-07-14T13:40:00.4792039Z\",\"connectTime\":\"2026-07-14T13:40:05.190585Z\",\"endTime\":\"2026-07-14T13:50:49.2941452Z\",\"callDirection\":\"outgoing\",\"callType\":\"twoParty\",\"callState\":\"accepted\",\"userParticipantId\":\"user-0001\",\"originator\":\"8:orgid:bbbbbbbb-5555-6666-7777-888888888888\",\"target\":\"8:orgid:cccccccc-9999-0000-1111-222222222222\",\"originatorParticipant\":{\"id\":\"8:orgid:bbbbbbbb-5555-6666-7777-888888888888\",\"tenantId\":\"tenant-0001\",\"type\":\"default\",\"displayName\":\"Roe, Rick\",\"applicationType\":null,\"alternateId\":null},\"targetParticipant\":{\"id\":\"8:orgid:cccccccc-9999-0000-1111-222222222222\",\"tenantId\":\"tenant-0001\",\"type\":\"default\",\"displayName\":null,\"applicationType\":null,\"alternateId\":null},\"callId\":\"call-0002\",\"callAttributes\":null,\"forwardingInfo\":null,\"transferInfo\":null,\"participants\":null,\"participantList\":null,\"threadId\":null,\"sessionType\":\"default\",\"sharedCorrelationId\":\"corr-0002\",\"messageId\":null}",
+        "s2spartnername": "concore_gvc"
+      }
+    }
+  ]
+}

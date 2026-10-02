@@ -1,0 +1,2 @@
+# Which dotter packages this host uses. Mirror of ~/.dotfiles/.dotter/<host>.toml.
+packages = ["mac"]

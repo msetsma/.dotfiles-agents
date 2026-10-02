@@ -1,0 +1,18 @@
+# Machine-specific bits of the catalog.
+#
+# Server definitions reference these logical command names and ${VARS} instead
+# of absolute paths, so `catalog/servers/*.toml` stays portable between
+# machines. Only this file (and catalog/clients.toml paths) should need editing
+# on a new box.
+
+[commands]
+npx            = "/opt/homebrew/bin/npx"
+uv             = "/opt/homebrew/bin/uv"
+python         = "/Users/msetsma/.ai-dev-kit/.venv/bin/python"
+obscura        = "/Users/msetsma/.local/bin/obscura"
+apple-mail-mcp = "/Users/msetsma/.local/bin/apple-mail-mcp"
+entra-mcp      = "/Users/msetsma/.local/bin/entra-mcp"
+imcp           = "/Applications/iMCP.app/Contents/MacOS/imcp-server"
+
+[vars]
+MCP_HOME = "~/.mcp"

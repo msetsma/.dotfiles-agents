@@ -1,0 +1,16 @@
+name        = "azure"
+description = "Azure Resource Manager operations (pricing, quotas, resource health, diagnostics)."
+kind        = "local"
+origin      = "external"
+clients     = ["opencode", "claude-code", "claude-desktop"]
+
+[launch]
+command = "npx"
+args    = ["-y", "{{package}}", "server", "start"]
+
+# Floats at the npm `latest` dist-tag - no version to bump by hand.
+# `cargo make mcp-outdated` reports what upstream is today.
+[package]
+manager = "npm"
+name    = "@azure/mcp"
+ref     = "latest"

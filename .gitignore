@@ -1,0 +1,32 @@
+# =============================================================================
+# .mcp - single .gitignore for the whole repo (all sub-projects included)
+# =============================================================================
+
+# dotter runtime state
+.dotter/cache.toml
+.dotter/cache/
+.dotter/local.toml
+
+# rendered by bin/mcp-sync; dotter symlinks them to the real targets
+generated/
+
+# machine-local catalog values (copy catalog/local.toml.example)
+catalog/local.toml
+
+# Python environments, caches, build artifacts
+.venv/
+*.egg-info/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.uv/
+dist/
+build/
+
+# teams-mcp/.ori working dir, but keep the chat-history backup
+/teams-mcp/.ori/*
+!/teams-mcp/.ori/state.sqlite
+
+# macOS
+.DS_Store

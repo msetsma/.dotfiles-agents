@@ -1,0 +1,18 @@
+name        = "github"
+description = "GitHub remote MCP (Copilot endpoint). Auth via GITHUB_TOKEN, which you supply outside this repo."
+kind        = "remote"
+origin      = "external"
+clients     = ["opencode", "claude-code"]
+
+[remote]
+url = "https://api.githubcopilot.com/mcp/"
+
+[remote.headers]
+Authorization = "Bearer ${GITHUB_TOKEN}"
+
+# opencode defaults oauth to on; this endpoint is token-based.
+[extra.opencode]
+oauth = false
+
+[package]
+manager = "remote"

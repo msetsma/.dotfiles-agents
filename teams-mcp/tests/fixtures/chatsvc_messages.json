@@ -1,0 +1,41 @@
+{
+  "_comment": "Scrubbed sample of GET chatsvc/{region}/v1/users/ME/conversations/{id}/messages?view=msnp24Equivalent (newest first).",
+  "messages": [
+    {
+      "id": "1789565768438",
+      "conversationid": "19:TAisU9BqoSnpA-AsvhcDb1DGWv0syP-nuENMheHZyFQ1@thread.tacv2",
+      "type": "Message",
+      "messagetype": "RichText/Html",
+      "contenttype": "text",
+      "from": "8:orgid:00000000-0000-0000-0000-0000000000aa",
+      "imdisplayname": "Doe, Jane",
+      "composetime": "2026-09-16T13:36:08.4380000Z",
+      "content": "<p>Thanks <at id=\"0\">Roe, Rick</at> - see the <a href=\"https://example.com\">plan</a></p><blockquote><p>quoted history</p></blockquote><img alt=\"chart.png\" src=\"../hostedContents/1/$value\"/>",
+      "properties": {
+        "files": "[{\"title\": \"plan.xlsx\", \"fileUrl\": \"https://example.sharepoint.com/plan.xlsx\", \"fileType\": \"xlsx\"}]",
+        "emotions": [
+          {"key": "like", "users": [{"mri": "8:orgid:1"}, {"mri": "8:orgid:2"}]}
+        ]
+      }
+    },
+    {
+      "id": "1789000000000",
+      "conversationid": "19:TAisU9BqoSnpA-AsvhcDb1DGWv0syP-nuENMheHZyFQ1@thread.tacv2",
+      "type": "Message",
+      "messagetype": "RichText/Html",
+      "contenttype": "text",
+      "imdisplayname": "Roe, Rick",
+      "composetime": "2026-09-15T09:00:00.0000000Z",
+      "content": "<p>Blue&nbsp;works</p>"
+    },
+    {
+      "id": "1788000000000",
+      "conversationid": "19:TAisU9BqoSnpA-AsvhcDb1DGWv0syP-nuENMheHZyFQ1@thread.tacv2",
+      "type": "Message",
+      "messagetype": "ThreadActivity/AddMember",
+      "imdisplayname": null,
+      "composetime": "2026-09-14T08:00:00.0000000Z",
+      "content": "<p>Doe, Jane added Roe, Rick</p>"
+    }
+  ]
+}

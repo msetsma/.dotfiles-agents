@@ -1,0 +1,16 @@
+name        = "apple-mail"
+description = "Apple Mail search/read via the apple-mailbox-mcp uv tool (read-only)."
+kind        = "local"
+origin      = "external"
+clients     = ["opencode"]
+
+[launch]
+command = "apple-mail-mcp"
+args    = []
+
+[env]
+EMAIL_MCP_READ_ONLY = "1"
+
+[package]
+manager = "uv-tool"
+name    = "apple-mailbox-mcp"

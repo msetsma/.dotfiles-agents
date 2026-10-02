@@ -1,0 +1,53 @@
+{
+  "_comment": "Scrubbed sample of GET chatsvc/{region}/v1/users/ME/conversations?view=msnp24Equivalent. Values are fake; the shape mirrors the real response and is what the parsers depend on.",
+  "conversations": [
+    {
+      "id": "19:TAisU9BqoSnpA-AsvhcDb1DGWv0syP-nuENMheHZyFQ1@thread.tacv2",
+      "type": "Conversation",
+      "properties": {
+        "favorite": "true",
+        "lastimreceivedtime": "2026-09-16T13:36:08.438Z"
+      },
+      "threadProperties": {
+        "spaceThreadTopic": "Data Platform",
+        "spaceType": "standard",
+        "threadType": "space",
+        "productThreadType": "TeamsTeam",
+        "groupId": "00000000-0000-0000-0000-000000000001",
+        "sharepointSiteUrl": "https://example.sharepoint.com/sites/DataPlatform",
+        "lastSequenceId": "542"
+      },
+      "lastMessage": {
+        "id": "1789565768438",
+        "imdisplayname": "Doe, Jane",
+        "composetime": "2026-09-16T13:36:08.4380000Z",
+        "content": "<p>Standup moved to 9:30</p>"
+      }
+    },
+    {
+      "id": "19:meeting_YWJjZGVm@thread.v2",
+      "type": "Conversation",
+      "threadProperties": {
+        "topic": "Design Review",
+        "threadType": "chat"
+      },
+      "lastMessage": {
+        "id": "1789000000000",
+        "imdisplayname": "Roe, Rick",
+        "composetime": "2026-09-15T09:00:00.0000000Z",
+        "content": "<div>Shared the deck</div>"
+      }
+    },
+    {
+      "id": "19:abc_def@unq.gbl.spaces",
+      "type": "Conversation",
+      "threadProperties": {},
+      "lastMessage": {
+        "id": "1788000000000",
+        "imdisplayname": "Roe, Rick",
+        "composetime": "2026-09-14T08:00:00.0000000Z",
+        "content": "morning"
+      }
+    }
+  ]
+}
