@@ -4,8 +4,8 @@
 # one step - merge first, then deploy the pure-MCP symlinks.
 #
 # NOTE: dotter executes hooks from a copy under .dotter/cache/, so BASH_SOURCE
-# does not point back into the repo. Resolve the repo from MCP_HOME (default
-# ~/.mcp) instead of from this file's location.
+# does not point back into the repo. Resolve the repo from AGENT_HOME (default
+# ~/.agentdots) instead of from this file's location.
 set -euo pipefail
 
-exec "${MCP_HOME:-$HOME/.mcp}/bin/mcp-sync"
+exec "${AGENT_HOME:-$HOME/.agentdots}/bin/agent-sync"

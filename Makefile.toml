@@ -2,29 +2,29 @@
 # Makefile.toml - MCP config management (cargo-make), mirroring ~/.dotfiles
 # ==============================================================================
 #   cargo make sync        # render + merge catalog, then dotter deploy
-#   cargo make mcp-check   # dry-run: show what would change
+#   cargo make agent-check   # dry-run: show what would change
 #   cargo make dotfiles    # deploy dotter-managed files only
 # ==============================================================================
 
 [tasks.sync]
-description = "Full sync: dotter runs bin/mcp-sync (pre-deploy) then deploys pure-MCP files"
+description = "Full sync: dotter runs bin/agent-sync (pre-deploy) then deploys pure-MCP files"
 dependencies = ["dotfiles"]
 
-[tasks.mcp-sync]
+[tasks.agent-sync]
 description = "Render + merge the catalog into every agent config (no dotter)"
-script = ["bin/mcp-sync"]
+script = ["bin/agent-sync"]
 
-[tasks.mcp-check]
-description = "Dry-run: show what mcp-sync would change (writes nothing)"
-script = ["bin/mcp-sync --dry-run"]
+[tasks.agent-check]
+description = "Dry-run: show what agent-sync would change (writes nothing)"
+script = ["bin/agent-sync --dry-run"]
 
-[tasks.mcp-outdated]
+[tasks.agent-outdated]
 description = "Check npm / uv tools / git checkouts for newer versions"
-script = ["bin/mcp-update"]
+script = ["bin/agent-update"]
 
-[tasks.mcp-update]
+[tasks.agent-update]
 description = "Apply available MCP + runtime updates, then re-sync configs"
-script = ["bin/mcp-update --apply"]
+script = ["bin/agent-update --apply"]
 
 [tasks.dotfiles]
 description = "Deploy dotter-managed (pure-MCP) configs"

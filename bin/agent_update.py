@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""mcp-update - check (and apply) updates for everything in the catalog.
+"""agent-update - check (and apply) updates for everything in the catalog.
 
 The ``[package]`` block on each server says how it's kept current:
 
@@ -16,8 +16,8 @@ The ``[package]`` block on each server says how it's kept current:
 
 Usage
 -----
-  mcp-update            report only
-  mcp-update --apply    apply uv upgrades + git pulls + catalog pin bumps, then sync
+  agent-update            report only
+  agent-update --apply    apply uv upgrades + git pulls + catalog pin bumps, then sync
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ UV = os.environ.get('UV', '/opt/homebrew/bin/uv')
 FLOATING_TAGS = {'latest', 'beta', 'next', 'canary', 'rc', 'alpha', 'dev'}
 
 sys.path.insert(0, str(REPO / 'bin'))
-import mcp_sync as ms
+import agent_sync as ms
 
 
 def sh(cmd: list[str], cwd: str | None = None) -> subprocess.CompletedProcess:
@@ -220,7 +220,7 @@ def main() -> int:
     if not args.apply:
         print()
         if catalog_bumps or uv_upgrades or git_pulls or git_manual:
-            print('run `cargo make mcp-update` (or mcp-update --apply) to apply')
+            print('run `cargo make agent-update` (or agent-update --apply) to apply')
         else:
             print('everything is current')
         return 0
@@ -249,7 +249,7 @@ def main() -> int:
 
     if changed_catalog:
         print('\nre-syncing configs...')
-        subprocess.run([str(REPO / 'bin' / 'mcp-sync')])
+        subprocess.run([str(REPO / 'bin' / 'agent-sync')])
     elif uv_project_bumps:
         print('\nagent configs unchanged (tag lives in the project); lock refreshed')
     else:

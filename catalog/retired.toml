@@ -1,6 +1,6 @@
 # Servers that are no longer wanted.
 #
-# mcp-sync deletes these keys from every client it manages. Names are kept here
+# agent-sync deletes these keys from every client it manages. Names are kept here
 # even after the local files are clean, so a stale config on another machine
 # gets scrubbed on its next sync too.
 

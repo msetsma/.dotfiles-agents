@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Instructions for anyone (human or agent) working in `~/.mcp`. This directory is
+Instructions for anyone (human or agent) working in `~/.agentdots`. This directory is
 the base for custom MCP servers: each server lives in its own subdirectory and
 is registered with the local agent software.
 
@@ -14,12 +14,12 @@ human index. No catalog entry, no server.
 
 Then run `cargo make sync` (or just `dotter`) to push the catalog into every
 agent — see [README.md](README.md) for the merge-vs-symlink model and
-[`bin/mcp_sync.py`](bin/mcp_sync.py) for the engine. Don't hand-edit the agent
+[`bin/agent_sync.py`](bin/agent_sync.py) for the engine. Don't hand-edit the agent
 config files (`~/.claude.json`, `~/.config/opencode/opencode.jsonc`,
 `~/.codex/config.toml`, the Claude Desktop config); edit the catalog instead.
 
-External servers carry a `[package]` block; run `cargo make mcp-outdated` to see
-newer npm/uv/git versions and `cargo make mcp-update` to apply them. Prefer
+External servers carry a `[package]` block; run `cargo make agent-outdated` to see
+newer npm/uv/git versions and `cargo make agent-update` to apply them. Prefer
 `ref = "latest"` (float) unless you need a specific version.
 
 Also keep the server's own `README.md` (the deep docs) and `pyproject.toml`
@@ -54,7 +54,7 @@ Tool-level detail lives in each directory's `README.md`. Don't duplicate it here
 ## Registering a server with the local agents
 
 > **Config is catalog-driven now.** Registration below is handled by
-> `catalog/servers/*.toml` + `bin/mcp-sync`; the manual snippets are kept as a
+> `catalog/servers/*.toml` + `bin/agent-sync`; the manual snippets are kept as a
 > reference / fallback for a machine that doesn't have this repo. Prefer editing
 > the catalog.
 
@@ -69,20 +69,20 @@ Launch commands:
 
 ```sh
 # m365-local
-/opt/homebrew/bin/uv run --directory /Users/msetsma/.mcp/m365-local-mcp server.py
+/opt/homebrew/bin/uv run --directory /Users/msetsma/.agentdots/m365-local-mcp server.py
 
 # teams-browser
-/opt/homebrew/bin/uv run --directory /Users/msetsma/.mcp/teams-mcp --extra mcp teams-browser-mcp
+/opt/homebrew/bin/uv run --directory /Users/msetsma/.agentdots/teams-mcp --extra mcp teams-browser-mcp
 
 # entra-mcp
-/opt/homebrew/bin/uv run --directory /Users/msetsma/.mcp/entra-mcp --extra mcp entra-mcp
+/opt/homebrew/bin/uv run --directory /Users/msetsma/.agentdots/entra-mcp --extra mcp entra-mcp
 ```
 
 `entra-mcp` is the one exception to "no global install is needed" above: it also
 ships a daily-use `entra` CLI, so both commands come from a uv tool install.
 
 ```sh
-uv tool install --editable ~/.mcp/entra-mcp --with fastmcp   # provides `entra` and `entra-mcp`
+uv tool install --editable ~/.agentdots/entra-mcp --with fastmcp   # provides `entra` and `entra-mcp`
 ```
 
 Registered clients point straight at `/Users/msetsma/.local/bin/entra-mcp`. It
@@ -95,14 +95,14 @@ put server names directly under `mcp`). Use `disabled: true`, not `enabled`.
 
 ```sh
 opencode mcp add m365-local --global -- \
-  /opt/homebrew/bin/uv run --directory /Users/msetsma/.mcp/m365-local-mcp server.py
+  /opt/homebrew/bin/uv run --directory /Users/msetsma/.agentdots/m365-local-mcp server.py
 opencode mcp list
 ```
 
 ```jsonc
 "m365-local": {
   "type": "local",
-  "command": ["/opt/homebrew/bin/uv", "run", "--directory", "/Users/msetsma/.mcp/m365-local-mcp", "server.py"]
+  "command": ["/opt/homebrew/bin/uv", "run", "--directory", "/Users/msetsma/.agentdots/m365-local-mcp", "server.py"]
 }
 ```
 
@@ -112,7 +112,7 @@ User-scope servers land in `~/.claude.json`.
 
 ```sh
 claude mcp add --scope user m365-local -- \
-  /opt/homebrew/bin/uv run --directory /Users/msetsma/.mcp/m365-local-mcp server.py
+  /opt/homebrew/bin/uv run --directory /Users/msetsma/.agentdots/m365-local-mcp server.py
 claude mcp list
 ```
 
@@ -125,7 +125,7 @@ Include `env.PATH` — the app launches without your shell environment.
 "mcpServers": {
   "m365-local": {
     "command": "/opt/homebrew/bin/uv",
-    "args": ["run", "--directory", "/Users/msetsma/.mcp/m365-local-mcp", "server.py"],
+    "args": ["run", "--directory", "/Users/msetsma/.agentdots/m365-local-mcp", "server.py"],
     "env": { "PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" }
   }
 }
@@ -142,7 +142,7 @@ Config: `~/Library/Application Support/Code/User/mcp.json` (note `servers`, and
     "m365-local": {
       "type": "stdio",
       "command": "/opt/homebrew/bin/uv",
-      "args": ["run", "--directory", "/Users/msetsma/.mcp/m365-local-mcp", "server.py"]
+      "args": ["run", "--directory", "/Users/msetsma/.agentdots/m365-local-mcp", "server.py"]
     }
   }
 }
@@ -155,14 +155,14 @@ Config: `~/.codex/config.toml`.
 ```toml
 [mcp_servers.m365-local]
 command = "/opt/homebrew/bin/uv"
-args = ["run", "--directory", "/Users/msetsma/.mcp/m365-local-mcp", "server.py"]
+args = ["run", "--directory", "/Users/msetsma/.agentdots/m365-local-mcp", "server.py"]
 ```
 
 ### teams-browser has its own installer
 
 ```sh
-uv run --directory ~/.mcp/teams-mcp --extra mcp teams-browser mcp clients
-uv run --directory ~/.mcp/teams-mcp --extra mcp teams-browser mcp install claude-desktop
+uv run --directory ~/.agentdots/teams-mcp --extra mcp teams-browser mcp clients
+uv run --directory ~/.agentdots/teams-mcp --extra mcp teams-browser mcp install claude-desktop
 ```
 
 It supports `claude-desktop`, `claude-code`, `cursor`, `vscode`, `opencode`.
@@ -172,8 +172,8 @@ snippets above.
 
 ## Adding a new server — checklist
 
-1. Create `~/.mcp/<name>/` with `pyproject.toml`, `README.md`, entry point, tests.
-2. Make it run with `uv run --directory ~/.mcp/<name> <entrypoint>`.
+1. Create `~/.agentdots/<name>/` with `pyproject.toml`, `README.md`, entry point, tests.
+2. Make it run with `uv run --directory ~/.agentdots/<name> <entrypoint>`.
 3. Prove it offline (tests pass).
 4. Add a row to the table in `README.md`.
 5. Register it with the agents you want (snippets above), then confirm it
@@ -183,8 +183,8 @@ snippets above.
 
 ## Path convention
 
-Everything points at `~/.mcp/...`. The Claude Desktop config and Claude Code
+Everything points at `~/.agentdots/...`. The Claude Desktop config and Claude Code
 were migrated off the old `~/dev/...` paths (`~/dev/m365-local-mcp`,
 `~/dev/mcp-teams`) — those directories no longer exist. When you copy a snippet
 from a sub-project README or an old client config, check for `~/dev/` and
-rewrite it to `~/.mcp/`.
+rewrite it to `~/.agentdots/`.

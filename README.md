@@ -13,17 +13,17 @@ runs tasks, per-host packages live in `.dotter/`.
 ## Layout
 
 ```
-.mcp/
+.agentdots/
 ├── catalog/                 # single source of truth
 │   ├── servers/*.toml       #   one file per MCP server
 │   ├── clients.toml         #   where each agent keeps its MCP config
 │   ├── paths.toml           #   machine-specific command paths + ${VARS}
 │   └── retired.toml         #   servers to scrub from every client
 ├── bin/
-│   ├── mcp-sync             #   wrapper (uv + tomlkit)
-│   ├── mcp_sync.py          #   the sync engine
-│   ├── mcp-update           #   update checker/applier
-│   └── mcp_update.py
+│   ├── agent-sync             #   wrapper (uv + tomlkit)
+│   ├── agent_sync.py          #   the sync engine
+│   ├── agent-update           #   update checker/applier
+│   └── agent_update.py
 ├── generated/               # rendered pure-MCP configs (gitignored)
 ├── .dotter/                 # dotter packages + pre-deploy hook
 ├── m365-local-mcp/          # custom servers (own projects)
@@ -36,7 +36,7 @@ runs tasks, per-host packages live in `.dotter/`.
 
 ```
 catalog/servers/*.toml ─┐
-catalog/clients.toml  ──┤  bin/mcp-sync
+catalog/clients.toml  ──┤  bin/agent-sync
 catalog/paths.toml    ──┤
 catalog/retired.toml  ──┘
         │
@@ -53,7 +53,7 @@ catalog/retired.toml  ──┘
   Codex ships itself (`node_repl`, `computer-use`) are never touched.
 * **Pure files** (config that is nothing but MCP) are rendered to `generated/`
   and symlinked into place by dotter, so the repo owns them outright.
-* `.dotter/pre_deploy.sh` runs `bin/mcp-sync`, so a single `dotter` run keeps
+* `.dotter/pre_deploy.sh` runs `bin/agent-sync`, so a single `dotter` run keeps
   every agent in sync.
 
 ## Clients
@@ -73,12 +73,12 @@ Full table of what this repo manages. `custom` = source lives in this repo;
 
 | Server | Origin | Launch | Clients |
 |---|---|---|---|
-| `m365-local` | custom | `uv run --directory ~/.mcp/m365-local-mcp server.py` | opencode, Claude Code, Claude Desktop |
-| `teams-browser` | custom | `uv run --directory ~/.mcp/teams-mcp teams-browser-mcp` | opencode, Claude Code, Claude Desktop |
+| `m365-local` | custom | `uv run --directory ~/.agentdots/m365-local-mcp server.py` | opencode, Claude Code, Claude Desktop |
+| `teams-browser` | custom | `uv run --directory ~/.agentdots/teams-mcp teams-browser-mcp` | opencode, Claude Code, Claude Desktop |
 | `entra-mcp` | custom | `entra-mcp` (uv tool) | opencode, Claude Code, Claude Desktop, VS Code, Codex |
 | `obscura` | external | `~/.local/bin/obscura mcp --stealth` | opencode, Claude Code, Claude Desktop |
 | `apple-mail` | external | `apple-mail-mcp` (uv tool) | opencode |
-| `databricks` | external | `uv run --project ~/.mcp/databricks-mcp databricks-mcp` | opencode, Claude Code, Claude Desktop, Codex |
+| `databricks` | external | `uv run --project ~/.agentdots/databricks-mcp databricks-mcp` | opencode, Claude Code, Claude Desktop, Codex |
 | `azure` | external | `npx @azure/mcp@3.0.0-beta.29 server start` | opencode, Claude Code, Claude Desktop |
 | `azure-devops` | external | `npx @azure-devops/mcp ${ADO_ORG}` | opencode, Claude Code, Claude Desktop |
 | `github` | external | remote `api.githubcopilot.com/mcp/` | opencode, Claude Code |
@@ -107,9 +107,9 @@ untracked `catalog/local.toml` — copy `catalog/local.toml.example` and fill it
 ## Usage
 
 ```sh
-cargo make mcp-check   # dry-run: show what would change
-cargo make mcp-sync    # merge the catalog into every agent (no dotter)
-cargo make sync        # full sync: dotter (runs mcp-sync) + deploy pure files
+cargo make agent-check   # dry-run: show what would change
+cargo make agent-sync    # merge the catalog into every agent (no dotter)
+cargo make sync        # full sync: dotter (runs agent-sync) + deploy pure files
 ```
 
 Or drive dotter directly:
@@ -144,8 +144,8 @@ Third-party npm servers float at `@latest`, so they need no maintenance at all �
 everything else:
 
 ```sh
-cargo make mcp-outdated   # report only
-cargo make mcp-update     # apply available updates, then re-sync if a pin changed
+cargo make agent-outdated   # report only
+cargo make agent-update     # apply available updates, then re-sync if a pin changed
 ```
 
 | manager | check | apply |
@@ -176,5 +176,5 @@ m365-local     source   local source (always current)
 
 1. Add/edit `catalog/servers/<name>.toml` (set `clients = [...]`).
 2. To retire one, add its name to `catalog/retired.toml`.
-3. `cargo make mcp-check`, then `cargo make sync`.
+3. `cargo make agent-check`, then `cargo make sync`.
 4. Add a row to the Inventory table above. **That's the rule.**

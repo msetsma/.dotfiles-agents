@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Thin wrapper for the update checker. Usage: bin/agent-update [--apply]
+set -euo pipefail
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+UV="${UV:-/opt/homebrew/bin/uv}"
+
+exec "$UV" run --quiet python3 "$DIR/bin/agent_update.py" "$@"

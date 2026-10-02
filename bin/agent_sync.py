@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""mcp-sync - materialise the MCP catalog into every agent's config.
+"""agent-sync - materialise the MCP catalog into every agent's config.
 
 Single source of truth
 ----------------------
@@ -19,9 +19,9 @@ Behaviour
 
 Usage
 -----
-  mcp-sync                apply changes
-  mcp-sync --dry-run      semantic diff, write nothing
-  mcp-sync --client codex limit to one client
+  agent-sync                apply changes
+  agent-sync --dry-run      semantic diff, write nothing
+  agent-sync --client codex limit to one client
 """
 
 from __future__ import annotations
@@ -51,7 +51,7 @@ OPCODE_ENV_REF = re.compile(r'\{env:([A-Za-z0-9_]+)\}')
 # helpers
 # --------------------------------------------------------------------------- #
 def die(msg: str) -> None:
-    print(f'mcp-sync: error: {msg}', file=sys.stderr)
+    print(f'agent-sync: error: {msg}', file=sys.stderr)
     raise SystemExit(1)
 
 
@@ -109,7 +109,7 @@ def expand(value, ctx: dict):
 
         def repl(match: re.Match) -> str:
             name = match.group(1)
-            # Known catalog vars (HOME, MCP_HOME, ...) are expanded here.
+            # Known catalog vars (HOME, AGENT_HOME, ...) are expanded here.
             # Anything else is left intact as an environment reference for the
             # agent to resolve at launch (e.g. ${GITHUB_TOKEN}).
             return ctx.get(name, match.group(0))
@@ -336,7 +336,7 @@ def sync_codex(client: str, cli: dict, desired: dict, retired: list) -> bool:
     try:
         import tomlkit
     except ModuleNotFoundError:
-        die('codex client needs tomlkit; run via bin/mcp-sync (uv provides it)')
+        die('codex client needs tomlkit; run via bin/agent-sync (uv provides it)')
     doc = tomlkit.parse(target.read_text()) if target.exists() else tomlkit.document()
     table = doc.get('mcp_servers')
     if table is None:

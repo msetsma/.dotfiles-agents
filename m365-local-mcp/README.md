@@ -28,10 +28,10 @@ are ordinary files on disk. This server wraps those three routes.
 ## Install
 
 ```bash
-cd ~/.mcp/m365-local-mcp
+cd ~/.agentdots/m365-local-mcp
 uv run test_server.py          # offline self-check, no Mail/Calendar needed
 claude mcp add --scope user m365-local -- \
-    uv run --directory ~/.mcp/m365-local-mcp server.py
+    uv run --directory ~/.agentdots/m365-local-mcp server.py
 ```
 
 Requires an Exchange account in Mail.app and at least one synced SharePoint

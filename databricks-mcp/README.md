@@ -27,14 +27,14 @@ dependencies = [
 ## Run
 
 ```sh
-uv run --project ~/.mcp/databricks-mcp databricks-mcp
+uv run --project ~/.agentdots/databricks-mcp databricks-mcp
 ```
 
 ## Update
 
 ```sh
-cargo make mcp-outdated   # shows: databricks  uv-project  v0.2.0 -> v0.2.x
-cargo make mcp-update     # rewrites the tag above, re-locks, re-syncs
+cargo make agent-outdated   # shows: databricks  uv-project  v0.2.0 -> v0.2.x
+cargo make agent-update     # rewrites the tag above, re-locks, re-syncs
 ```
 
 Because the catalog launches via `--project` (the tag lives here, not in the

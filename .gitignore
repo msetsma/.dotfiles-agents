@@ -1,5 +1,5 @@
 # =============================================================================
-# .mcp - single .gitignore for the whole repo (all sub-projects included)
+# .agentdots - single .gitignore for the whole repo (all sub-projects included)
 # =============================================================================
 
 # dotter runtime state
@@ -7,7 +7,7 @@
 .dotter/cache/
 .dotter/local.toml
 
-# rendered by bin/mcp-sync; dotter symlinks them to the real targets
+# rendered by bin/agent-sync; dotter symlinks them to the real targets
 generated/
 
 # machine-local catalog values (copy catalog/local.toml.example)

@@ -10,7 +10,7 @@ requires-python = ">=3.14"
 dependencies = [
     # ai-dev-kit ships its MCP server as two in-repo packages (no PyPI release
     # for databricks-tools-core), so both are pulled from the same pinned tag.
-    # `cargo make mcp-update` bumps this tag.
+    # `cargo make agent-update` bumps this tag.
     "databricks-mcp-server @ git+https://github.com/databricks-solutions/ai-dev-kit.git@v0.2.0#subdirectory=databricks-mcp-server",
     "databricks-tools-core @ git+https://github.com/databricks-solutions/ai-dev-kit.git@v0.2.0#subdirectory=databricks-tools-core",
 ]

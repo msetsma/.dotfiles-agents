@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Thin wrapper so the sync engine always has tomllib (stdlib) + tomlkit (uv).
-# Usage: bin/mcp-sync [--dry-run] [--client NAME]
+# Usage: bin/agent-sync [--dry-run] [--client NAME]
 set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 UV="${UV:-/opt/homebrew/bin/uv}"
 
-exec "$UV" run --quiet --with tomlkit python3 "$DIR/bin/mcp_sync.py" "$@"
+exec "$UV" run --quiet --with tomlkit python3 "$DIR/bin/agent_sync.py" "$@"
