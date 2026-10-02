@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 
+
 _FRACTION = re.compile(r'(\.\d{6})\d+')
 
 

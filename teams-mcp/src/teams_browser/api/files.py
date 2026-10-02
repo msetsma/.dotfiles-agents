@@ -20,6 +20,7 @@ from ..models import SharedFile, TokenSet
 from .http import HttpClient, substrate_headers
 from .util import parse_dt
 
+
 _SELECT = ','.join(
     [
         'Visualization',

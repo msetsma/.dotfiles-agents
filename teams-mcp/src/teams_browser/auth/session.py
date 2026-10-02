@@ -17,6 +17,7 @@ from cryptography.fernet import Fernet, InvalidToken
 from ..config import APP_NAME, TEAMS_ORIGINS, Paths
 from ..errors import AuthRequired
 
+
 _KEYRING_SERVICE = APP_NAME
 _KEYRING_USER = 'session-key'
 

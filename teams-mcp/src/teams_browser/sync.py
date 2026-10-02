@@ -11,12 +11,14 @@ Failures are tolerated per-item - one dead transcript must not abort a sync.
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Callable, NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 
 from .errors import ResourceNotFound, TeamsBrowserError, TranscriptUnavailable
 from .models import Meeting, SyncReport
 from .store import Store
+
 
 if TYPE_CHECKING:  # pragma: no cover
     from .client import TeamsClient
@@ -32,7 +34,7 @@ class _TranscriptJob(NamedTuple):
 
 
 def sync(
-    client: 'TeamsClient',
+    client: TeamsClient,
     store: Store,
     *,
     days_back: int = 7,
@@ -70,7 +72,7 @@ def sync(
 
 
 def _sync_meetings(
-    client: 'TeamsClient',
+    client: TeamsClient,
     store: Store,
     report: SyncReport,
     started: datetime,
@@ -100,7 +102,7 @@ def _meeting_transcript_targets(meetings: list[Meeting]) -> list[_TranscriptJob]
 
 
 def _call_transcript_targets(
-    client: 'TeamsClient', report: SyncReport, emit: Callable[[str], None]
+    client: TeamsClient, report: SyncReport, emit: Callable[[str], None]
 ) -> list[_TranscriptJob]:
     try:
         calls = client.list_calls(limit=100)
@@ -117,7 +119,7 @@ def _call_transcript_targets(
 
 
 def _store_transcripts(
-    client: 'TeamsClient',
+    client: TeamsClient,
     store: Store,
     report: SyncReport,
     targets: list[_TranscriptJob],
@@ -137,7 +139,7 @@ def _store_transcripts(
         except (TranscriptUnavailable, ResourceNotFound):
             report.skipped += 1
             continue
-        except Exception as exc:  # noqa: BLE001 - one bad item must not abort the sync
+        except Exception as exc:
             _record(report, emit, f'{job.label} {job.subject!r}', exc)
             continue
         store.upsert_transcript(transcript)
@@ -147,9 +149,7 @@ def _store_transcripts(
         _nap(pause)
 
 
-def _sync_files(
-    client: 'TeamsClient', store: Store, report: SyncReport, limit: int, emit: Callable[[str], None]
-) -> None:
+def _sync_files(client: TeamsClient, store: Store, report: SyncReport, limit: int, emit: Callable[[str], None]) -> None:
     try:
         report.files = store.upsert_files(client.list_files(top=limit))
         emit(f'files: {report.files}')
@@ -158,7 +158,7 @@ def _sync_files(
 
 
 def _sync_chats(
-    client: 'TeamsClient',
+    client: TeamsClient,
     store: Store,
     report: SyncReport,
     conversation_limit: int,
@@ -176,7 +176,7 @@ def _sync_chats(
     for conversation in conversations:
         try:
             messages = client.list_messages(conversation.id, page_size=messages_per_conversation)
-        except Exception as exc:  # noqa: BLE001 - one bad conversation must not abort
+        except Exception as exc:
             _record(report, emit, f'messages {conversation.id}', exc)
             continue
         report.messages += store.upsert_messages(messages)

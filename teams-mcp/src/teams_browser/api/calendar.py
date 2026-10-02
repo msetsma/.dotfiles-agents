@@ -19,6 +19,7 @@ from ..models import Meeting, RegionConfig, TokenSet
 from .http import HttpClient
 from .util import iso_utc, parse_dt
 
+
 _SELECT_FIELDS = [
     'endTime',
     'eventTimeZone',

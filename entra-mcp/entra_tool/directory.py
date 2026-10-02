@@ -1,5 +1,6 @@
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from entra_tool.cache_freshness import cache_is_fresh
 from entra_tool.cache_paths import (

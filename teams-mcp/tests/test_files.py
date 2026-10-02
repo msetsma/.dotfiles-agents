@@ -8,6 +8,7 @@ from teams_browser.models import TokenInfo, TokenSet
 
 from .helpers import make_jwt
 
+
 FIXTURES = Path(__file__).parent / 'fixtures'
 
 

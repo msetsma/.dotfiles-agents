@@ -3,7 +3,6 @@
 import json
 
 import pytest
-
 from teams_browser.api.chats import (
     conversation_kind,
     find_conversation,
@@ -17,6 +16,7 @@ from teams_browser.errors import ResourceNotFound
 from teams_browser.models import RegionConfig, TokenSet
 
 from .helpers import make_jwt
+
 
 FIXTURES = __import__('pathlib').Path(__file__).parent / 'fixtures'
 

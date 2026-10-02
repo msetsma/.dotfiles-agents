@@ -21,6 +21,7 @@ import httpx
 from ..config import request_timeout
 from .session import Paths, SessionState, get_teams_origin, save_session
 
+
 _TOKEN_ENDPOINT = 'https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token'
 _AUTHSVC_ENDPOINT = 'https://authsvc.teams.microsoft.com/v1.0/authz'
 

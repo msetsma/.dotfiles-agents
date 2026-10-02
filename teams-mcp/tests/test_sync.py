@@ -3,12 +3,12 @@
 from datetime import datetime, timedelta, timezone
 
 import pytest
-
 from teams_browser.client import TeamsClient
 from teams_browser.errors import TranscriptUnavailable
 from teams_browser.models import Call, ChatMessage, Conversation, Meeting, SharedFile, Transcript, TranscriptEntry
 from teams_browser.store import Store
 from teams_browser.sync import sync
+
 
 PAST = datetime.now(tz=timezone.utc) - timedelta(days=1)
 FUTURE = datetime.now(tz=timezone.utc) + timedelta(days=1)
@@ -56,7 +56,7 @@ class FakeClient:
         return [ChatMessage(id='msg1', conversation_id=conversation_id, sender='Ada', text='budget approved')]
 
 
-@pytest.fixture()
+@pytest.fixture
 def store(tmp_path):
     with Store(tmp_path / 'archive.db') as s:
         yield s

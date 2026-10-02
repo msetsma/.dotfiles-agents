@@ -16,7 +16,9 @@ each takes a list of node ids and returns ``{node_id: [group, ...]}``, where a
 group is any dict with an ``id`` and optional ``displayName``.
 """
 
-from typing import Any, Callable, Sequence
+from collections.abc import Callable, Sequence
+from typing import Any
+
 
 ParentsFetcher = Callable[[Sequence[str]], dict[str, list[dict[str, Any]]]]
 ChildrenFetcher = Callable[[Sequence[str]], dict[str, list[dict[str, Any]]]]

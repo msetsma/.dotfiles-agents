@@ -2,6 +2,7 @@ import json
 
 from teams_browser.api.calendar import parse_meeting
 
+
 SAMPLE = {
     'objectId': 'abc-123',
     'subject': 'Design Review',

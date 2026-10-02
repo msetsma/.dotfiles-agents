@@ -3,14 +3,14 @@
 from datetime import datetime, timedelta, timezone
 
 import pytest
-
 from teams_browser.models import ChatMessage, Conversation, Meeting, SharedFile, Transcript, TranscriptEntry
 from teams_browser.store import Store
+
 
 NOW = datetime(2026, 9, 15, 12, 0, tzinfo=timezone.utc)
 
 
-@pytest.fixture()
+@pytest.fixture
 def store(tmp_path):
     with Store(tmp_path / 'archive.db') as s:
         yield s

@@ -29,6 +29,7 @@ from typing import Any
 from mcp.server import MCPServer
 from mcp.types import ToolAnnotations
 
+
 mcp = MCPServer(
     name='m365-local',
     version='0.1.0',

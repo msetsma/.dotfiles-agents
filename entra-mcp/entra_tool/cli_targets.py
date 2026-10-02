@@ -83,9 +83,11 @@ def parse_target(args: list[str]) -> Options:
     elif target_type in ('dept', 'department', 'departments'):
         target_type = 'dept'
         initial_query = read_initial_query(args)
-    elif target_type in ('search-users', 'user-search', 'users-search'):
-        initial_query = read_initial_query(args)
-    elif target_type in ('search-groups', 'group-search', 'groups-search'):
+    elif target_type in ('search-users', 'user-search', 'users-search') or target_type in (
+        'search-groups',
+        'group-search',
+        'groups-search',
+    ):
         initial_query = read_initial_query(args)
     elif target_type in ('user', 'group'):
         if not args:

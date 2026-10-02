@@ -1,9 +1,7 @@
 """Refresh behaviour: the MCP server must never block on a browser."""
 
 import pytest
-
-from teams_browser.auth import login as login_module
-from teams_browser.auth import refresh as refresh_module
+from teams_browser.auth import login as login_module, refresh as refresh_module
 from teams_browser.auth.session import save_session
 from teams_browser.client import TeamsClient
 from teams_browser.config import Paths

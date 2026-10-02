@@ -240,7 +240,7 @@ def test_sp_find_bad_subdir_returns_error():
 
 
 def test_sp_find_returns_newest_when_truncated():
-    """limit must yield the newest matches, not a walk-order slice."""
+    """Limit must yield the newest matches, not a walk-order slice."""
     with fake_root() as root:
         for i in range(6):
             f = root / f'f{i}.txt'

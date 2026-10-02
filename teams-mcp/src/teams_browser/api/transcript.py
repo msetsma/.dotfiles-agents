@@ -24,6 +24,7 @@ from ..models import TokenSet, Transcript, TranscriptEntry
 from .http import HttpClient, substrate_headers
 from .util import iso_utc, parse_dt
 
+
 _SELECT = ','.join(
     [
         'SharePointItem',
@@ -129,4 +130,4 @@ def _normalise_offset(value: Any) -> str:
         return ''
     if ':' in value:
         return value
-    return value[:-4] if value.endswith('0000') else value
+    return value.removesuffix('0000')

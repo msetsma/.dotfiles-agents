@@ -1,10 +1,10 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
-from entra_tool.report_cache_store import load_report_direct_reports_cache, save_report_direct_reports_cache
 from entra_tool.directory import fetch_direct_report_users
 from entra_tool.errors import AppError, GraphError
 from entra_tool.report_cache import cache_direct_report_users, cached_direct_report_users, report_max_workers
+from entra_tool.report_cache_store import load_report_direct_reports_cache, save_report_direct_reports_cache
 from entra_tool.report_rows import build_visible_report_rows, report_queue_item
 
 

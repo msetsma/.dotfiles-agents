@@ -12,6 +12,7 @@ from .analytics import analyse, window_label
 from .models import Meeting, Transcript, TranscriptAnalytics
 from .store import Store
 
+
 DigestSections = list[tuple[Meeting, Transcript | None, TranscriptAnalytics | None]]
 
 

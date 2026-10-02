@@ -12,12 +12,14 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from ..config import DEFAULT_TEAMS_LOGIN_URL, Paths, login_timeout
 from ..errors import AuthRequired
 from .session import SessionState, save_session
 from .tokens import decode_jwt_payload, extract_region_config, extract_tokens, find_token, is_jwt
+
 
 # Marker substrings used to decide "we have enough tokens to proceed".
 _READY_MARKERS = ('substratesearch', 'substrate.office.com', 'api.spaces.skype.com')

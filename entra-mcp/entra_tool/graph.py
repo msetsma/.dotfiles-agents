@@ -7,6 +7,7 @@ from urllib.parse import quote
 
 from entra_tool.errors import GraphError
 
+
 AZ_FALLBACK_PATHS = ('/opt/homebrew/bin/az', '/usr/local/bin/az', '/usr/bin/az')
 
 

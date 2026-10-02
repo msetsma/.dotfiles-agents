@@ -13,13 +13,15 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Iterator
+from typing import Any
 
 from .api.util import iso_utc, parse_dt
 from .models import ChatMessage, Conversation, Meeting, SearchHit, SharedFile, Transcript
+
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS meetings (
@@ -146,7 +148,7 @@ class Store:
         self._conn.commit()
 
     @classmethod
-    def default(cls) -> 'Store':
+    def default(cls) -> Store:
         from .config import Paths
 
         return cls(Paths.default().db_file)
@@ -156,7 +158,7 @@ class Store:
     def close(self) -> None:
         self._conn.close()
 
-    def __enter__(self) -> 'Store':
+    def __enter__(self) -> Store:
         return self
 
     def __exit__(self, *exc: object) -> None:

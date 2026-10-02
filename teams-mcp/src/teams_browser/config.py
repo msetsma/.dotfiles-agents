@@ -10,6 +10,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+
 APP_NAME = 'teams-browser'
 
 DEFAULT_TEAMS_BASE_URL = 'https://teams.microsoft.com'
@@ -42,7 +43,7 @@ class Paths:
     db_file: Path
 
     @classmethod
-    def default(cls) -> 'Paths':
+    def default(cls) -> Paths:
         root = _home()
         return cls(
             root=root,

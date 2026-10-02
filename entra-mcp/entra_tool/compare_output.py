@@ -1,4 +1,5 @@
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from entra_tool.compare import compare_subject_label
 from entra_tool.detail_formatters import print_group_legend, print_kv, print_mode, print_user_legend

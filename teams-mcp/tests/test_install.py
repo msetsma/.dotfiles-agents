@@ -1,7 +1,6 @@
 import json
 
 import pytest
-
 from teams_browser.mcp import install
 
 

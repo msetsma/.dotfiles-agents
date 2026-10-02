@@ -25,6 +25,7 @@ from ..models import ChatMessage, Conversation, MessageAttachment, RegionConfig,
 from .http import HttpClient
 from .util import parse_dt
 
+
 _VIEW = 'msnp24Equivalent'
 
 # Message types that are Teams bookkeeping rather than conversation

@@ -1,4 +1,4 @@
-from typing import Callable
+from collections.abc import Callable
 
 from entra_tool.cache_freshness import cache_state_label
 from entra_tool.compare import rows_excluding_object_id

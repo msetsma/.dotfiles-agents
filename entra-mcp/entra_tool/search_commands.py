@@ -1,23 +1,23 @@
 from entra_tool.cache_freshness import cache_state_label
 from entra_tool.directory import (
     fetch_group_rows_for_user_id,
-    fetch_user_rows_for_group_id,
     fetch_user_detail,
+    fetch_user_rows_for_group_id,
     group_search_cache_is_fresh,
     load_group_search_rows,
     load_user_search_rows,
     user_search_cache_is_fresh,
 )
 from entra_tool.errors import GraphError, die
-from entra_tool.object_detail_formatters import print_group_details, print_user_details
-from entra_tool.terminal_colors import COLORS
 from entra_tool.group_detail import fetch_group_detail
 from entra_tool.group_owners import print_group_owners
 from entra_tool.managers import add_manager_details_to_user_rows, fetch_user_manager_details
 from entra_tool.membership_output import print_group_rows_for_user, print_user_rows_for_group
 from entra_tool.models import Options, State
+from entra_tool.object_detail_formatters import print_group_details, print_user_details
 from entra_tool.picker import run_fzf, selected_hidden_value
 from entra_tool.picker_formatters import format_picker_rows
+from entra_tool.terminal_colors import COLORS
 
 
 def show_selected_user_report(selected_user_id: str, mode: str, state: State, opts: Options) -> None:

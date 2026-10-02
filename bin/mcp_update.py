@@ -29,6 +29,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+
 REPO = Path(__file__).resolve().parent.parent
 CATALOG = REPO / 'catalog'
 UV = os.environ.get('UV', '/opt/homebrew/bin/uv')

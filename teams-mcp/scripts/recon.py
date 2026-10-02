@@ -19,12 +19,14 @@ import sys
 from pathlib import Path
 from typing import Any
 
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 
-from teams_browser.api.http import HttpClient  # noqa: E402
-from teams_browser.auth.session import Paths, load_session  # noqa: E402
-from teams_browser.auth.tokens import extract_region_config, extract_tokens  # noqa: E402
-from teams_browser.config import substrate_base_url  # noqa: E402
+from teams_browser.api.http import HttpClient
+from teams_browser.auth.session import Paths, load_session
+from teams_browser.auth.tokens import extract_region_config, extract_tokens
+from teams_browser.config import substrate_base_url
+
 
 TARGETS = ('calendar', 'chats', 'messages', 'calllogs', 'files', 'transcript')
 

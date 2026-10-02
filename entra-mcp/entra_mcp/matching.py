@@ -28,6 +28,7 @@ import difflib
 from collections.abc import Sequence
 from typing import Any
 
+
 PREFIX_SCORE = 1.0
 WORD_START_SCORE = 0.96
 SUBSTRING_SCORE = 0.90

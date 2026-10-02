@@ -10,9 +10,9 @@ import os
 from datetime import datetime, timedelta, timezone
 
 import pytest
-
 from teams_browser.analytics import analyse
 from teams_browser.client import TeamsClient
+
 
 pytestmark = pytest.mark.live
 
@@ -76,7 +76,7 @@ def test_live_transcript_analytics():
                 transcript = client.get_transcript(
                     meeting.thread_id, subject=meeting.subject, meeting_date=meeting.start_time
                 )
-            except Exception:  # noqa: BLE001 - live smoke test: try the next meeting
+            except Exception:
                 continue
             analytics = analyse(transcript)
             assert analytics.entry_count == len(transcript.entries)

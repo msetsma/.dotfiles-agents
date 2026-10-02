@@ -1,12 +1,12 @@
 import json
 
 import pytest
-
 from teams_browser.api.transcript import _normalise_offset, get_transcript
 from teams_browser.errors import TranscriptUnavailable
 from teams_browser.models import TokenInfo, TokenSet
 
 from .helpers import make_jwt
+
 
 ENTRIES = [
     {'startOffset': '00000', 'endOffset': '58400000', 'speakerDisplayName': 'Ada', 'text': 'Hi'},

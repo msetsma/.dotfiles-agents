@@ -6,7 +6,9 @@ no title, nested groups, and whether anyone owns the thing. Pure — the Graph
 I/O happens before this, so it is trivial to test.
 """
 
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
+
 
 SAMPLE_LIMIT = 25
 

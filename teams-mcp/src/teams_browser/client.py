@@ -9,14 +9,15 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta, timezone
 
-from .api import calendar as calendar_api
-from .api import calls as calls_api
-from .api import chats as chats_api
-from .api import files as files_api
-from .api import transcript as transcript_api
+from .api import (
+    calendar as calendar_api,
+    calls as calls_api,
+    chats as chats_api,
+    files as files_api,
+    transcript as transcript_api,
+)
 from .api.http import HttpClient
-from .auth import login as login_module
-from .auth import refresh as refresh_module
+from .auth import login as login_module, refresh as refresh_module
 from .auth.session import Paths, SessionState, load_session
 from .auth.tokens import extract_region_config, extract_tokens, get_identity, require_region
 from .config import region_override
@@ -306,7 +307,7 @@ class TeamsClient:
             self._store = None
         self._client.close()
 
-    def __enter__(self) -> 'TeamsClient':
+    def __enter__(self) -> TeamsClient:
         return self
 
     def __exit__(self, *exc: object) -> None:

@@ -12,6 +12,7 @@ from datetime import datetime
 
 from .models import Meeting, SpeakerStat, Transcript, TranscriptAnalytics, TranscriptEntry
 
+
 _TIMECODE = re.compile(r'^(?:(\d+):)?(\d{1,2}):(\d{1,2})(?:\.(\d+))?$')
 _WORD = re.compile(r"[A-Za-z0-9']+")
 

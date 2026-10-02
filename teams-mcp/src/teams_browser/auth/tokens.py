@@ -17,8 +17,9 @@ from __future__ import annotations
 import base64
 import json
 import re
+from collections.abc import Iterable
 from datetime import datetime, timezone
-from typing import Any, Iterable
+from typing import Any
 from urllib.parse import unquote, urlparse
 
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -27,6 +28,7 @@ from ..config import teams_base_url
 from ..errors import ConfigError
 from ..models import RegionConfig, TokenInfo, TokenSet, UserDetails
 from .session import SessionState, b64url_decode, cookies, local_storage
+
 
 # Resource identifiers we recognise, longest/most-specific first.
 _SUBSTRATE_MARKERS = ('substratesearch', 'substrate.office.com')
@@ -229,8 +231,7 @@ def extract_message_cookies(state: SessionState) -> tuple[str | None, str | None
     auth = None
     if raw_auth:
         auth = unquote(raw_auth)
-        if auth.startswith('Bearer='):
-            auth = auth[len('Bearer=') :]
+        auth = auth.removeprefix('Bearer=')
     return skype, auth
 
 

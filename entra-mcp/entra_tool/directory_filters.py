@@ -6,7 +6,8 @@ state. Both read the same local cache, so a filter costs no Graph calls.
 """
 
 import re
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 
 def _normalize(value: Any) -> str:

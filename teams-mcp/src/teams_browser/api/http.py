@@ -17,6 +17,7 @@ from ..config import MAX_RETRIES, request_timeout
 from ..errors import ApiError, RateLimited, TokenExpired
 from ..models import TokenSet
 
+
 _RETRYABLE_STATUS = {429, 500, 502, 503, 504}
 
 # Required to select the flexible schema that embeds transcript/file properties.
@@ -45,7 +46,7 @@ class HttpClient:
     def close(self) -> None:
         self._client.close()
 
-    def __enter__(self) -> 'HttpClient':
+    def __enter__(self) -> HttpClient:
         return self
 
     def __exit__(self, *exc: object) -> None:

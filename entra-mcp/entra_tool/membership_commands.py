@@ -2,12 +2,12 @@ from typing import Any
 
 from entra_tool.directory import fetch_group_rows_for_user_id, fetch_user_rows_for_group_id
 from entra_tool.errors import die
-from entra_tool.terminal_colors import COLORS
 from entra_tool.managers import add_manager_details_to_user_rows
 from entra_tool.membership_output import print_group_rows_for_user, print_user_rows_for_group
 from entra_tool.models import Options, State
 from entra_tool.picker import run_fzf, selected_hidden_value
 from entra_tool.picker_formatters import format_picker_rows
+from entra_tool.terminal_colors import COLORS
 from entra_tool.tsv_outputs import write_group_membership_tsv, write_user_membership_tsv
 
 

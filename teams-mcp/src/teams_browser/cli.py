@@ -25,6 +25,7 @@ from .errors import TeamsBrowserError
 from .mcp import install as mcp_install
 from .transcript_text import to_markdown, to_vtt
 
+
 app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
@@ -424,7 +425,7 @@ def doctor(json_out: bool = typer.Option(False, '--json')) -> None:
         try:
             detail = fn()
             checks.append({'check': name, 'ok': True, 'detail': detail})
-        except Exception as exc:  # noqa: BLE001 - doctor reports everything
+        except Exception as exc:
             checks.append({'check': name, 'ok': False, 'detail': f'{type(exc).__name__}: {exc}'})
 
     state = load_session(Paths.default())

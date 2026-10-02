@@ -49,6 +49,7 @@ from entra_tool.text import is_guid, is_short_hex_id_prefix, looks_like_bad_guid
 
 from entra_mcp.matching import search_records
 
+
 GRAPH = 'https://graph.microsoft.com/v1.0'
 
 # Must stay in sync with the row builders in entra_tool/rows.py; the tests
@@ -204,7 +205,8 @@ def _resolve_group(identifier: str) -> dict[str, Any]:
 
 def _coerce_bool(value: Any) -> Any:
     """The search cache is TSV, so booleans come back as the strings
-    "true"/"false". Restore real booleans so the JSON is honest."""
+    "true"/"false". Restore real booleans so the JSON is honest.
+    """
     if isinstance(value, bool):
         return value
     if isinstance(value, str):
@@ -776,7 +778,7 @@ def _split_by_id(
     shared = [left_by_id[i] for i in left_by_id.keys() & right_by_id.keys()]
     left_only = [left_by_id[i] for i in left_by_id.keys() - right_by_id.keys()]
     right_only = [right_by_id[i] for i in right_by_id.keys() - left_by_id.keys()]
-    key = lambda item: str(item.get('displayName') or '').lower()  # noqa: E731
+    key = lambda item: str(item.get('displayName') or '').lower()
     return (sorted(shared, key=key), sorted(left_only, key=key), sorted(right_only, key=key))
 
 

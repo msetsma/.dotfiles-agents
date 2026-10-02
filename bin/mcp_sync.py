@@ -33,6 +33,7 @@ import re
 import sys
 from pathlib import Path
 
+
 try:
     import tomllib
 except ModuleNotFoundError:  # pragma: no cover - py<3.11
@@ -122,7 +123,7 @@ def expand(value, ctx: dict):
 
 
 def opcodeify(value: str) -> str:
-    """opencode spells env references ``{env:VAR}`` instead of ``${VAR}``."""
+    """Opencode spells env references ``{env:VAR}`` instead of ``${VAR}``."""
     return ENV_REF.sub(lambda m: '{env:%s}' % m.group(1), value)
 
 

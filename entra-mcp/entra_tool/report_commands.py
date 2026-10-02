@@ -1,15 +1,15 @@
 from entra_tool.cache_freshness import cache_state_label
+from entra_tool.detail_formatters import print_kv, print_report_mode, print_reports_legend
 from entra_tool.directory import fetch_report_user_json, load_user_search_rows, user_search_cache_is_fresh
 from entra_tool.errors import GraphError, die
-from entra_tool.detail_formatters import print_kv, print_report_mode, print_reports_legend
-from entra_tool.report_table_formatters import format_reports_table
-from entra_tool.terminal_colors import COLORS
 from entra_tool.models import Options, State
 from entra_tool.output_paths import reports_tsv_path
 from entra_tool.picker import run_fzf, selected_hidden_value
 from entra_tool.picker_formatters import format_picker_rows
 from entra_tool.report_rows import report_has_title, report_is_enabled, report_is_visible
+from entra_tool.report_table_formatters import format_reports_table
 from entra_tool.report_tree import collect_report_tree
+from entra_tool.terminal_colors import COLORS
 from entra_tool.tsv_outputs import write_report_tsv
 
 

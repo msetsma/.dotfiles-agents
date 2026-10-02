@@ -5,13 +5,13 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
-
 from teams_browser.api.calls import derive_title, list_calls, matches, parse_call_log_message
 from teams_browser.client import TeamsClient
 from teams_browser.errors import ApiError, ResourceNotFound
 from teams_browser.models import Call, CallParticipant, RegionConfig, TokenInfo, TokenSet, Transcript, TranscriptEntry
 
 from .helpers import make_jwt
+
 
 FIXTURES = Path(__file__).parent / 'fixtures'
 PAST = datetime.now(tz=timezone.utc) - timedelta(days=1)

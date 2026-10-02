@@ -6,6 +6,7 @@ import re
 
 from .models import TranscriptEntry
 
+
 _TIMECODE = re.compile(r'^(?:(\d+):)?(\d{1,2}):(\d{1,2})(?:\.(\d+))?$')
 
 

@@ -26,6 +26,7 @@ from .chats import list_raw_messages
 from .http import HttpClient
 from .util import parse_dt
 
+
 CALL_LOGS_CONVERSATION = '48:calllogs'
 
 _CALL_LOG_MEDIA = ('RichText/Media_CallLogTranscript', 'RichText/Media_CallLogRecording')
