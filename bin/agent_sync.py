@@ -5,6 +5,7 @@ Single source of truth
 ----------------------
   catalog/mcp/*.toml   one file per MCP server (custom + third-party)
   catalog/skills/*.toml    one file per skill (content in catalog/skills/<name>/)
+  catalog/plugins/*.toml   one file per plugin (content in catalog/plugins/<name>.ts)
   catalog/hooks/*.toml     one file per event hook
   catalog/clients.toml     where each agent keeps each kind, and how it spells it
   catalog/paths.toml       machine-specific command paths + variables
@@ -202,6 +203,24 @@ def load_skills(ctx: dict) -> dict:
     return skills
 
 
+def load_plugins(ctx: dict) -> dict:
+    """Each ``catalog/plugins/<name>.toml`` points at ``catalog/plugins/<name>.ts``."""
+    plugins: dict[str, dict] = {}
+    for path in sorted((CATALOG / 'plugins').glob('*.toml')):
+        raw = load_toml(path)
+        name = raw['name']
+        source = CATALOG / 'plugins' / f'{name}.ts'
+        if not source.is_file():
+            die(f'{path.name}: missing {source.relative_to(REPO)}')
+        plugins[name] = {
+            'name': name,
+            'description': raw.get('description', ''),
+            'clients': list(raw.get('clients', [])),
+            'source': source,
+        }
+    return plugins
+
+
 def load_hooks(ctx: dict) -> dict:
     hooks: dict[str, dict] = {}
     for path in sorted((CATALOG / 'hooks').glob('*.toml')):
@@ -267,12 +286,7 @@ def r_codex(srv: dict, cli: dict) -> dict:
     return {'url': srv['url']}
 
 
-RENDERERS = {
-    'opencode': r_opencode,
-    'claude-code': r_claude_code,
-    'claude-desktop': r_claude_desktop,
-    'codex': r_codex,
-}
+RENDERERS = {'opencode': r_opencode, 'claude-code': r_claude_code, 'claude-desktop': r_claude_desktop, 'codex': r_codex}
 
 
 def render(srv: dict, cli: dict, client: str) -> dict:
@@ -451,6 +465,35 @@ def sync_skills(client: str, cli: dict, skills: dict, retired: list) -> bool:
     return dirty
 
 
+def sync_plugins(client: str, cli: dict, plugins: dict, retired: list) -> bool:
+    base = Path(os.path.expanduser(cli['path']))
+    manage_root = (CATALOG / 'plugins').resolve()
+    desired = {f'{n}.ts': p for n, p in plugins.items() if client in p['clients'] and n not in retired}
+
+    # Only touch symlinks that point back into our catalog/plugins/.
+    existing: dict[str, str] = {}
+    if base.is_dir():
+        for entry in base.iterdir():
+            if entry.is_symlink():
+                resolved = os.path.realpath(entry)
+                if resolved == str(manage_root) or resolved.startswith(str(manage_root) + os.sep):
+                    existing[entry.name] = resolved
+
+    added = sorted(n for n in desired if n not in existing)
+    changed = sorted(n for n in desired if n in existing and existing[n] != str(desired[n]['source'].resolve()))
+    removed = sorted(n for n in existing if n not in desired)
+    dirty = report(client, base, added, changed, removed, kind='plugins')
+    if DRY_RUN or not dirty:
+        return dirty
+
+    base.mkdir(parents=True, exist_ok=True)
+    for name in removed + changed:
+        (base / name).unlink()
+    for name in added + changed:
+        (base / name).symlink_to(desired[name]['source'])
+    return dirty
+
+
 # --------------------------------------------------------------------------- #
 # hooks (additive merge into a shared event map)
 # --------------------------------------------------------------------------- #
@@ -537,6 +580,8 @@ def sync_client(client: str, kinds: dict, catalogs: dict, retired: dict) -> bool
         dirty |= MCP_SYNCERS[mcp_client_kind(cli)](client, cli, desired, retired['mcp'])
     if 'skills' in kinds:
         dirty |= sync_skills(client, kinds['skills'], catalogs['skills'], retired['skills'])
+    if 'plugins' in kinds:
+        dirty |= sync_plugins(client, kinds['plugins'], catalogs['plugins'], retired['plugins'])
     if 'hooks' in kinds:
         dirty |= sync_hooks(client, kinds['hooks'], catalogs['hooks'], retired['hook_commands'])
     return dirty
@@ -551,12 +596,18 @@ def main() -> int:
     DRY_RUN = args.dry_run
 
     ctx = build_context()
-    catalogs = {'mcp': load_mcp(ctx), 'skills': load_skills(ctx), 'hooks': load_hooks(ctx)}
+    catalogs = {
+        'mcp': load_mcp(ctx),
+        'skills': load_skills(ctx),
+        'plugins': load_plugins(ctx),
+        'hooks': load_hooks(ctx),
+    }
     clients = load_toml(CATALOG / 'clients.toml')
     raw_retired = load_toml(CATALOG / 'retired.toml')
     retired = {
         'mcp': raw_retired.get('mcp', []),
         'skills': raw_retired.get('skills', []),
+        'plugins': raw_retired.get('plugins', []),
         'hook_commands': raw_retired.get('hook_commands', []),
     }
 

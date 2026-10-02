@@ -1,0 +1,18 @@
+# Runs after the agent writes or edits a Python file: ruff auto-fixes and
+# formats what it can, then the remaining findings are handed back to the model
+# to fix. Suppressions (`# noqa`) are ignored on the final pass, so the only
+# accepted resolution is a real fix.
+#
+# The logic lives in bin/clean-python, which is shared with the opencode plugin
+# of the same name (delivered via the `plugins` kind).
+
+name        = "python-clean"
+description = "Ruff check --fix + format agent-written Python, then report what could not be fixed."
+event       = "PostToolUse"
+matcher     = "Write|Edit|MultiEdit"
+clients     = ["claude-code"]
+
+[command]
+run           = "${AGENT_HOME}/bin/clean-python"
+timeout       = 30
+statusMessage = "ruff: fix + verify"

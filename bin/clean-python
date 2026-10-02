@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# clean-python - one gate for agent-written Python, shared by every client.
+#
+# Auto-fixes and formats what ruff can, then reports anything that is left so
+# the model has to fix it. Suppressions (`# noqa`) are deliberately ignored on
+# the final pass: the only accepted resolution is a real fix.
+#
+# Two ways in, so a single implementation serves every client:
+#   clean-python <path>    explicit file (used by the opencode plugin)
+#   ... | clean-python     Claude Code PostToolUse JSON on stdin
+#
+# Exit 0: clean / auto-fixed / not a Python file (no-op).
+# Exit 2: something auto-fix could not resolve -> report on stderr.
+set -uo pipefail
+
+# --------------------------------------------------------------------------- #
+# target
+# --------------------------------------------------------------------------- #
+target="${1:-}"
+if [[ -z "$target" ]]; then
+    payload="$(cat)"
+    [[ -n "$payload" ]] || exit 0
+    target="$(printf '%s' "$payload" | python3 -c '
+import json, sys
+try:
+    doc = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+tool_input = doc.get("tool_input") or {}
+tool_response = doc.get("tool_response") or {}
+print(tool_input.get("file_path") or tool_response.get("filePath") or tool_response.get("file_path") or "")
+' 2>/dev/null)" || exit 0
+fi
+
+[[ -n "$target" ]] || exit 0
+case "$target" in
+    *.py | *.pyi) ;;
+    *) exit 0 ;;
+esac
+[[ -f "$target" ]] || exit 0
+
+# --------------------------------------------------------------------------- #
+# ruff: project venv first, then $RUFF, then PATH
+# --------------------------------------------------------------------------- #
+ruff_bin=""
+root="$(git -C "$(dirname "$target")" rev-parse --show-toplevel 2>/dev/null || true)"
+if [[ -n "$root" && -x "$root/.venv/bin/ruff" ]]; then
+    ruff_bin="$root/.venv/bin/ruff"
+elif [[ -n "${RUFF:-}" && -x "$RUFF" ]]; then
+    ruff_bin="$RUFF"
+else
+    ruff_bin="$(command -v ruff || true)"
+fi
+
+if [[ -z "$ruff_bin" ]]; then
+    echo "clean-python: ruff not found; skipping $(basename "$target")" >&2
+    exit 0
+fi
+
+# --------------------------------------------------------------------------- #
+# fix what we can, then verify with suppressions ignored
+# --------------------------------------------------------------------------- #
+"$ruff_bin" check --fix --quiet "$target" >/dev/null 2>&1 || true
+"$ruff_bin" format --quiet "$target" >/dev/null 2>&1 || true
+
+if report="$("$ruff_bin" check --ignore-noqa --output-format concise "$target" 2>&1)"; then
+    exit 0
+fi
+
+{
+    echo "clean-python: ruff found issues auto-fix could not resolve in $target"
+    echo
+    echo "$report"
+    echo
+    echo "Fix the code itself. Suppression (# noqa) is ignored on this check."
+} >&2
+exit 2

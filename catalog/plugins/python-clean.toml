@@ -1,0 +1,3 @@
+name        = "python-clean"
+description = "Run bin/clean-python after opencode writes or edits a Python file, appending anything ruff could not fix to the tool result."
+clients     = ["opencode"]

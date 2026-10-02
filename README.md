@@ -1,4 +1,4 @@
-# Agent configs: MCP servers, skills & hooks
+# Agent configs: MCP servers, skills, plugins & hooks
 
 One repo for everything this machine's coding agents load — MCP servers (the
 **custom** ones that live here, and **third-party** ones pulled in from `npx`,
@@ -18,6 +18,7 @@ tasks; the catalog is the source of truth.
 ├── catalog/                 # single source of truth
 │   ├── mcp/*.toml           #   one file per MCP server
 │   ├── skills/<name>.toml   #   one file per skill (content in <name>/)
+│   ├── plugins/<name>.toml  #   one file per plugin (content in <name>.ts)
 │   ├── hooks/<name>.toml    #   one file per event hook
 │   ├── clients.toml         #   where each agent keeps each kind
 │   ├── paths.toml           #   machine-specific command paths + ${VARS}
@@ -25,6 +26,7 @@ tasks; the catalog is the source of truth.
 ├── bin/
 │   ├── agent-sync           #   wrapper (uv + tomlkit)
 │   ├── agent_sync.py        #   the sync engine
+│   ├── clean-python         #   ruff gate behind the python-clean hook/plugin
 │   ├── agent-update         #   update checker/applier
 │   └── agent_update.py
 └── mcp/                     # MCP server projects
@@ -39,6 +41,7 @@ tasks; the catalog is the source of truth.
 ```
 catalog/mcp/*.toml ─┐
 catalog/skills/       ──┤
+catalog/plugins/      ──┤
 catalog/hooks/*.toml  ──┤  bin/agent-sync
 catalog/clients.toml  ──┤
 catalog/paths.toml    ──┤
@@ -51,7 +54,7 @@ catalog/retired.toml  ──┘
         ├── merge   ──▶ .../Claude/claude_desktop_config.json  Claude Desktop (mcp)
         ├── merge   ──▶ ~/.config/opencode/opencode.jsonc opencode        (mcp)
         ├── symlink ──▶ ~/.claude/skills/                 Claude Code     (skills)
-        └── symlink ──▶ ~/.config/opencode/skills/        opencode        (skills)
+        └── symlink ──▶ ~/.config/opencode/plugins/       opencode        (plugins)
 ```
 
 * A client declares one `[<client>.<kind>]` block per kind it supports; a kind
@@ -61,14 +64,19 @@ catalog/retired.toml  ──┘
   alone. Codex keeps its per-tool tables (`[mcp_servers.databricks.tools.*]`),
   and the servers Codex ships itself (`node_repl`, `computer-use`) are never
   touched.
-* **Skills** are symlinked per item; **hooks** merge additively. Both are done
-  by `bin/agent-sync` directly - there is no second deployment tool.
+* **Skills** and **plugins** are symlinked per item; **hooks** merge additively.
+  All three are done by `bin/agent-sync` directly - there is no second
+  deployment tool.
+* The `python-clean` hook (Claude Code) and plugin (opencode) both call
+  `bin/clean-python`, so agent-written Python is auto-fixed and formatted, and
+  anything auto-fix cannot resolve is handed back to the model.
 
 ## Clients
 
 | Client | Kind | Location | Handling |
 |---|---|---|---|
 | opencode | mcp | `~/.config/opencode/opencode.jsonc` | merge |
+| opencode | plugins | `~/.config/opencode/plugins/` | symlink |
 | Claude Code | mcp | `~/.claude.json` → `mcpServers` | merge |
 | Claude Code | skills | `~/.claude/skills/` | symlink |
 | Claude Code | hooks | `~/.claude/settings.json` → `hooks` | merge |
@@ -99,6 +107,23 @@ skills in opencode's own directory.
 > Removing a client's `[<client>.skills]` block stops managing that directory, so
 > links already placed there are left behind — delete them by hand.
 
+## Plugins
+
+opencode hooks are plugins, not a JSON event map, so they get their own kind:
+
+```
+catalog/plugins/<name>.toml   # clients = [...]
+catalog/plugins/<name>.ts     # the plugin itself
+```
+
+`agent-sync` symlinks `catalog/plugins/<name>.ts` into each listed client's
+plugins directory. opencode auto-discovers direct `.ts` files under
+`~/.config/opencode/plugins/`, so no `opencode.jsonc` entry is needed.
+
+`catalog/plugins/python-clean.ts` registers a `tool.execute.after` hook that
+runs `bin/clean-python` on every `.py`/`.pyi` file the agent writes and appends
+its findings to the tool result.
+
 ## Hooks
 
 ```
@@ -116,6 +141,10 @@ manage in the same file untouched. Retire a hook by adding its exact command to
 
 `catalog/hooks/example-hook.toml` ships inert (`clients = []`) — add a client to
 enable it.
+
+`catalog/hooks/python-clean.toml` is the Claude Code side of the Python gate: a
+`PostToolUse` hook on `Write|Edit|MultiEdit` that runs `bin/clean-python`, whose
+final ruff pass uses `--ignore-noqa` so a suppression is never an accepted fix.
 
 ## Inventory
 

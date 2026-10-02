@@ -11,6 +11,9 @@
 #   [<client>.skills]   agent skills
 #       path        = directory holding one folder per skill
 #
+#   [<client>.plugins]  agent plugins (one .ts file per plugin, symlinked)
+#       path        = directory to link the plugin files into
+#
 #   [<client>.hooks]    event hooks
 #       format      = json
 #       container   = key path to the event -> hook-list map
@@ -25,6 +28,11 @@ style     = "opencode"
 # opencode also loads ~/.claude/skills (its "Claude-compatible" global path), so
 # it inherits Claude Code's skills. Add [opencode.skills] only if you want
 # skills in opencode's own directory instead.
+
+# Plugins are discovered automatically from this directory (direct .ts/.js
+# files), so agent-sync only has to symlink them in.
+[opencode.plugins]
+path = "~/.config/opencode/plugins"
 
 [claude-code.mcp]
 path      = "~/.claude.json"

@@ -51,16 +51,26 @@ README is the detail.
 
 Tool-level detail lives in each directory's `README.md`. Don't duplicate it here.
 
-## Skills & hooks
+## Skills, plugins & hooks
 
-Alongside servers, the catalog owns two more kinds:
+Alongside servers, the catalog owns three more kinds:
 
 - **Skills** — `catalog/skills/<name>.toml` (definition) plus
   `catalog/skills/<name>/SKILL.md` (content), symlinked into each listed client's
   skills directory. Never hand-edit a client's skills dir; edit the catalog.
+- **Plugins** — `catalog/plugins/<name>.toml` (definition) plus
+  `catalog/plugins/<name>.ts` (content), symlinked into each listed client's
+  plugins directory. This is how opencode hooks are delivered (opencode plugins,
+  not a JSON event map).
 - **Hooks** — `catalog/hooks/<name>.toml`, merged additively into each listed
   client's hook map (Claude Code, Codex). See
   [`catalog/hooks/example-hook.toml`](catalog/hooks/) for the shape.
+
+The `python-clean` gate is the worked example: it deploys as a Claude Code hook
+(`catalog/hooks/python-clean.toml`) and an opencode plugin
+(`catalog/plugins/python-clean.ts`), both calling the shared `bin/clean-python`,
+which auto-fixes + formats with ruff and hands anything unfixable back to the
+model (suppressions are ignored).
 
 `catalog/clients.toml` declares a `[<client>.<kind>]` block for each kind a
 client supports; a kind with no block is skipped for that client.
