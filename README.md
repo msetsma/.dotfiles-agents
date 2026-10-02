@@ -69,7 +69,10 @@ catalog/retired.toml  ──┘
   deployment tool.
 * The `python-clean` hook (Claude Code) and plugin (opencode) both call
   `bin/clean-python`, so agent-written Python is auto-fixed and formatted, and
-  anything auto-fix cannot resolve is handed back to the model.
+  anything auto-fix cannot resolve is handed back to the model and then
+  **enforced**: the opencode plugin injects its own follow-up prompt, and Claude
+  Code's `python-clean-stop` Stop hook refuses to end the turn until the file
+  passes (released after a few refusals so an unfixable finding cannot trap it).
 
 ## Clients
 
@@ -121,8 +124,10 @@ plugins directory. opencode auto-discovers direct `.ts` files under
 `~/.config/opencode/plugins/`, so no `opencode.jsonc` entry is needed.
 
 `catalog/plugins/python-clean.ts` registers a `tool.execute.after` hook that
-runs `bin/clean-python` on every `.py`/`.pyi` file the agent writes and appends
-its findings to the tool result.
+runs `bin/clean-python` on every `.py`/`.pyi` file the agent writes. It appends
+the findings to the tool result *and*, when residue remains, injects a session
+prompt so the agent must fix it. A per-file counter in plugin storage stops an
+unfixable finding from looping.
 
 ## Hooks
 
@@ -142,9 +147,15 @@ manage in the same file untouched. Retire a hook by adding its exact command to
 `catalog/hooks/example-hook.toml` ships inert (`clients = []`) — add a client to
 enable it.
 
-`catalog/hooks/python-clean.toml` is the Claude Code side of the Python gate: a
-`PostToolUse` hook on `Write|Edit|MultiEdit` that runs `bin/clean-python`, whose
-final ruff pass uses `--ignore-noqa` so a suppression is never an accepted fix.
+The Claude Code side of the Python gate is two hooks. `catalog/hooks/python-clean.toml`
+is a `PostToolUse` hook on `Write|Edit|MultiEdit` that runs `bin/clean-python`
+(its final ruff pass uses `--ignore-noqa`, so a suppression is never an accepted
+fix) and records any still-broken file under `$TMPDIR/clean-python/`.
+`catalog/hooks/python-clean-stop.toml` is a `Stop` hook running
+`bin/clean-python --stop-check`: it re-checks those files and exits 2 while
+residue remains, so the turn cannot end on broken Python. A file is released
+once it is clean, or after three refused stops, so an unfixable finding cannot
+trap the session.
 
 ## Inventory
 

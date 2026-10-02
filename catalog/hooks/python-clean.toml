@@ -3,11 +3,14 @@
 # to fix. Suppressions (`# noqa`) are ignored on the final pass, so the only
 # accepted resolution is a real fix.
 #
+# Files that are still broken are recorded for the companion python-clean-stop
+# hook, which refuses to end the turn until they pass.
+#
 # The logic lives in bin/clean-python, which is shared with the opencode plugin
 # of the same name (delivered via the `plugins` kind).
 
 name        = "python-clean"
-description = "Ruff check --fix + format agent-written Python, then report what could not be fixed."
+description = "Ruff check --fix + format agent-written Python, then report and enforce what could not be fixed."
 event       = "PostToolUse"
 matcher     = "Write|Edit|MultiEdit"
 clients     = ["claude-code"]

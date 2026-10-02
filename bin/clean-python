@@ -5,22 +5,125 @@
 # the model has to fix it. Suppressions (`# noqa`) are deliberately ignored on
 # the final pass: the only accepted resolution is a real fix.
 #
-# Two ways in, so a single implementation serves every client:
-#   clean-python <path>    explicit file (used by the opencode plugin)
-#   ... | clean-python     Claude Code PostToolUse JSON on stdin
+# Three ways in, so a single implementation serves every client:
+#   clean-python <path>      explicit file (used by the opencode plugin)
+#   ... | clean-python       Claude Code PostToolUse JSON on stdin
+#   clean-python --stop-check Claude Code Stop JSON on stdin
 #
-# Exit 0: clean / auto-fixed / not a Python file (no-op).
-# Exit 2: something auto-fix could not resolve -> report on stderr.
+# Exit 0: clean / auto-fixed / not a Python file / no pending residue (no-op).
+# Exit 2: something auto-fix could not resolve -> report on stderr. For
+#         --stop-check, exit 2 also refuses the Stop hook, forcing another turn.
+#
+# The opencode plugin injects its own follow-up prompt when this exits 2. Claude
+# Code has no such hook, so PostToolUse records every still-broken file in a
+# per-session state file and the Stop hook re-checks them before the turn may
+# end. A file is dropped once it passes, or after MAX_BLOCKS refused stops, so a
+# problem the agent cannot fix cannot trap the session forever.
 set -uo pipefail
 
+MAX_BLOCKS=3
+state_dir="${TMPDIR:-/tmp}/clean-python"
+
 # --------------------------------------------------------------------------- #
-# target
+# ruff + reporting helpers
 # --------------------------------------------------------------------------- #
-target="${1:-}"
-if [[ -z "$target" ]]; then
+ruff_for() {
+    # Print the ruff binary to use for $1: project venv first, then $RUFF, then PATH.
+    local target="$1" root
+    root="$(git -C "$(dirname "$target")" rev-parse --show-toplevel 2>/dev/null || true)"
+    if [[ -n "$root" && -x "$root/.venv/bin/ruff" ]]; then
+        printf '%s' "$root/.venv/bin/ruff"
+        return
+    fi
+    if [[ -n "${RUFF:-}" && -x "$RUFF" ]]; then
+        printf '%s' "$RUFF"
+        return
+    fi
+    command -v ruff || true
+}
+
+is_python() {
+    case "$1" in
+        *.py | *.pyi) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+state_file() {
+    printf '%s/pending-%s' "$state_dir" "$(printf '%s' "$1" | tr -cd 'A-Za-z0-9._-')"
+}
+
+record_pending() {
+    # $1 session id, $2 path. Idempotent; the counter belongs to --stop-check.
+    local sf
+    sf="$(state_file "$1")"
+    mkdir -p "$state_dir" || return 0
+    if [[ -f "$sf" ]] && cut -f2- "$sf" | grep -qxF "$2"; then
+        return 0
+    fi
+    printf '0\t%s\n' "$2" >>"$sf"
+}
+
+# --------------------------------------------------------------------------- #
+# Stop mode: refuse to finish while Python written this session still fails
+# --------------------------------------------------------------------------- #
+if [[ "${1:-}" == "--stop-check" ]]; then
     payload="$(cat)"
     [[ -n "$payload" ]] || exit 0
-    target="$(printf '%s' "$payload" | python3 -c '
+    session="$(printf '%s' "$payload" | python3 -c '
+import json, sys
+try:
+    print(json.load(sys.stdin).get("session_id") or "")
+except Exception:
+    print("")
+' 2>/dev/null)" || exit 0
+    [[ -n "$session" ]] || exit 0
+
+    sf="$(state_file "$session")"
+    [[ -f "$sf" ]] || exit 0
+
+    pending=""
+    report=""
+    while IFS=$'\t' read -r count path; do
+        [[ -n "$path" && -f "$path" ]] || continue
+        ruff_bin="$(ruff_for "$path")"
+        [[ -n "$ruff_bin" ]] || continue
+        if "$ruff_bin" check --ignore-noqa --output-format concise "$path" >/dev/null 2>&1; then
+            continue # clean -> drop
+        fi
+        count=$((count + 1))
+        if [[ "$count" -le "$MAX_BLOCKS" ]]; then
+            pending+="${count}"$'\t'"${path}"$'\n'
+            report+="$("$ruff_bin" check --ignore-noqa --output-format concise "$path" 2>&1)"$'\n'
+        fi
+    done <"$sf"
+
+    if [[ -n "$pending" ]]; then
+        printf '%s' "$pending" >"$sf"
+        {
+            echo "clean-python: Python you wrote still has ruff findings that auto-fix could not resolve."
+            echo
+            printf '%s' "$report"
+            echo "Fix the code itself. Suppression (# noqa) is ignored on this check."
+        } >&2
+        exit 2
+    fi
+
+    rm -f "$sf"
+    exit 0
+fi
+
+# --------------------------------------------------------------------------- #
+# target + session
+# --------------------------------------------------------------------------- #
+target=""
+session=""
+if [[ -n "${1:-}" ]]; then
+    target="$1"
+else
+    payload="$(cat)"
+    [[ -n "$payload" ]] || exit 0
+    parsed="$(printf '%s' "$payload" | python3 -c '
 import json, sys
 try:
     doc = json.load(sys.stdin)
@@ -29,29 +132,17 @@ except Exception:
 tool_input = doc.get("tool_input") or {}
 tool_response = doc.get("tool_response") or {}
 print(tool_input.get("file_path") or tool_response.get("filePath") or tool_response.get("file_path") or "")
+print(doc.get("session_id") or "")
 ' 2>/dev/null)" || exit 0
+    target="$(printf '%s\n' "$parsed" | sed -n '1p')"
+    session="$(printf '%s\n' "$parsed" | sed -n '2p')"
 fi
 
 [[ -n "$target" ]] || exit 0
-case "$target" in
-    *.py | *.pyi) ;;
-    *) exit 0 ;;
-esac
+is_python "$target" || exit 0
 [[ -f "$target" ]] || exit 0
 
-# --------------------------------------------------------------------------- #
-# ruff: project venv first, then $RUFF, then PATH
-# --------------------------------------------------------------------------- #
-ruff_bin=""
-root="$(git -C "$(dirname "$target")" rev-parse --show-toplevel 2>/dev/null || true)"
-if [[ -n "$root" && -x "$root/.venv/bin/ruff" ]]; then
-    ruff_bin="$root/.venv/bin/ruff"
-elif [[ -n "${RUFF:-}" && -x "$RUFF" ]]; then
-    ruff_bin="$RUFF"
-else
-    ruff_bin="$(command -v ruff || true)"
-fi
-
+ruff_bin="$(ruff_for "$target")"
 if [[ -z "$ruff_bin" ]]; then
     echo "clean-python: ruff not found; skipping $(basename "$target")" >&2
     exit 0
@@ -65,6 +156,12 @@ fi
 
 if report="$("$ruff_bin" check --ignore-noqa --output-format concise "$target" 2>&1)"; then
     exit 0
+fi
+
+# Claude Code PostToolUse carries a session id; remember the file so its Stop
+# hook can refuse to end the turn while this is unresolved.
+if [[ -n "$session" ]]; then
+    record_pending "$session" "$target"
 fi
 
 {

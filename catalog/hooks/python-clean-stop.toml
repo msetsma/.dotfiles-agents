@@ -1,0 +1,20 @@
+# Claude Code side of the Python gate's enforcement half.
+#
+# bin/clean-python's PostToolUse pass records any Python file that ruff still
+# objects to. This Stop hook re-checks those files and exits 2 while residue
+# remains, so the turn cannot end on broken Python - Claude gets the report and
+# has to fix it. A file is released once it passes, or after a small number of
+# refusals, so an unresolvable finding cannot trap the session.
+#
+# opencode needs no equivalent: its plugin injects the follow-up prompt itself.
+
+name        = "python-clean-stop"
+description = "Refuse to end the turn while Python written this session still fails ruff."
+event       = "Stop"
+matcher     = ""
+clients     = ["claude-code"]
+
+[command]
+run           = "${AGENT_HOME}/bin/clean-python --stop-check"
+timeout       = 30
+statusMessage = "ruff: verify before stop"
