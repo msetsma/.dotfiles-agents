@@ -6,7 +6,6 @@
 #       format      = how the file is parsed/written (json / jsonc / toml)
 #       container   = key path to the server map
 #       style       = renderer that speaks this agent's dialect
-#       whole_file  = pure-MCP config (rendered to generated/ and dotter-symlinked)
 #       inject_path = PATH to add to every server's env (GUI apps need it)
 #
 #   [<client>.skills]   agent skills

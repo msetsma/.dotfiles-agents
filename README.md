@@ -27,7 +27,6 @@ runs tasks, per-host packages live in `.dotter/`.
 │   ├── agent_sync.py        #   the sync engine
 │   ├── agent-update         #   update checker/applier
 │   └── agent_update.py
-├── generated/               # rendered pure-config files (gitignored)
 ├── .dotter/                 # dotter packages + pre-deploy hook
 └── mcp/                     # MCP server projects
     ├── m365-local-mcp/      #   custom (own project)
@@ -63,9 +62,6 @@ catalog/retired.toml  ──┘
   alone. Codex keeps its per-tool tables (`[mcp_servers.databricks.tools.*]`),
   and the servers Codex ships itself (`node_repl`, `computer-use`) are never
   touched.
-* A client can be marked `whole_file = true` when its config is nothing but one
-  kind; agent-sync then renders it to `generated/` and dotter symlinks it. No
-  client uses this today.
 * `.dotter/pre_deploy.sh` runs `bin/agent-sync`, so a single `dotter` run keeps
   every agent in sync.
 

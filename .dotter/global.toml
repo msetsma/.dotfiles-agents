@@ -4,9 +4,8 @@
 # Every client config is a shared, stateful file (Claude Code, Claude Desktop,
 # Codex, opencode), and dotter can only symlink or template, not merge - so
 # those are handled entirely by bin/agent-sync (run from .dotter/pre_deploy.sh
-# before deploy). If you ever add a *pure* config file (nothing but one kind),
-# map it here under [mac.files] / [common.files] and mark the client
-# `whole_file = true`; agent-sync renders it to generated/ and dotter symlinks it.
+# before deploy). There are currently no pure files to deploy; add one under
+# [mac.files] / [common.files] if a purely-dotter-managed file ever appears.
 
 [mac.files]
 

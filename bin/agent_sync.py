@@ -12,14 +12,11 @@ Single source of truth
 
 Behaviour
 ---------
-Each client declares one block per *kind* it supports. Three strategies:
+Each client declares one block per *kind* it supports. Two strategies:
 
 * ``merge``     rewrite a subtree of a shared config in place, leaving every
                 other key alone (MCP maps; hook event maps).
 * ``symlink``   link each catalog item into a client directory (skills).
-* ``whole_file`` pure config rendered to ``generated/<client>.<ext>`` for dotter
-                to symlink, so the repo owns the target outright (unused by any
-                client today; kept for a future pure config).
 
 Codex keeps its per-tool tables (``[mcp_servers.databricks.tools.*]``); only the
 managed keys change.
@@ -48,7 +45,6 @@ except ModuleNotFoundError:  # pragma: no cover - py<3.11
 
 REPO = Path(__file__).resolve().parent.parent
 CATALOG = REPO / 'catalog'
-GENERATED = REPO / 'generated'
 
 ENV_REF = re.compile(r'\$\{([A-Za-z0-9_]+)\}')
 OPCODE_ENV_REF = re.compile(r'\{env:([A-Za-z0-9_]+)\}')
@@ -363,26 +359,6 @@ def sync_json_mcp(client: str, cli: dict, desired: dict, retired: list) -> bool:
     return dirty
 
 
-def sync_whole_file_mcp(client: str, cli: dict, desired: dict, retired: list) -> bool:
-    """Pure-MCP client: render to generated/ for dotter to symlink."""
-    target = Path(os.path.expanduser(cli['path']))
-    if target.exists():
-        doc = json.loads(strip_jsonc(target.read_text()))
-    else:
-        doc = {}
-    container = deep_get(doc, cli['container'])
-    added, changed, removed = semantic_diff(container, desired, retired)
-    dirty = report(client, target, added, changed, removed)
-    print(f'    -> generated/{client}.json (dotter symlinks this to the target)')
-    if DRY_RUN:
-        return dirty
-    for name in retired:
-        container.pop(name, None)
-    container.update(desired)
-    write_json(GENERATED / f'{client}.json', doc)
-    return dirty
-
-
 def sync_codex_mcp(client: str, cli: dict, desired: dict, retired: list) -> bool:
     target = Path(os.path.expanduser(cli['path']))
     try:
@@ -432,12 +408,10 @@ def sync_codex_mcp(client: str, cli: dict, desired: dict, retired: list) -> bool
     return dirty
 
 
-MCP_SYNCERS = {'json': sync_json_mcp, 'whole_file': sync_whole_file_mcp, 'codex': sync_codex_mcp}
+MCP_SYNCERS = {'json': sync_json_mcp, 'codex': sync_codex_mcp}
 
 
 def mcp_client_kind(cli: dict) -> str:
-    if cli.get('whole_file'):
-        return 'whole_file'
     if cli['format'] == 'toml':
         return 'codex'
     if cli['format'] in ('json', 'jsonc'):
