@@ -24,9 +24,18 @@ __pycache__/
 dist/
 build/
 
-# teams-mcp/.ori working dir, but keep the chat-history backup
-/mcp/teams-mcp/.ori/*
-!/mcp/teams-mcp/.ori/state.sqlite
+# teams-mcp/.ori working dir (session history + logs)
+/mcp/teams-mcp/.ori/
+
+# SQLite databases and their WAL/SHM/journal sidecars - never commit these
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite-journal
+*.sqlite3
+*.db
+*.db-shm
+*.db-wal
 
 # macOS
 .DS_Store
