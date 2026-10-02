@@ -12,26 +12,26 @@ SAMPLE_LIMIT = 25
 
 
 def _is_disabled(member: dict[str, Any]) -> bool:
-    value = member.get("accountEnabled")
+    value = member.get('accountEnabled')
     if isinstance(value, str):
-        return value.strip().lower() == "false"
+        return value.strip().lower() == 'false'
     return value is False
 
 
 def _is_guest(member: dict[str, Any]) -> bool:
-    return str(member.get("userType") or "").strip().lower() == "guest"
+    return str(member.get('userType') or '').strip().lower() == 'guest'
 
 
 def _has_title(member: dict[str, Any]) -> bool:
-    return bool(str(member.get("jobTitle") or "").strip())
+    return bool(str(member.get('jobTitle') or '').strip())
 
 
 def _sample(members: Sequence[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
     return [
         {
-            "id": member.get("id"),
-            "displayName": member.get("displayName"),
-            "userPrincipalName": member.get("userPrincipalName"),
+            'id': member.get('id'),
+            'displayName': member.get('displayName'),
+            'userPrincipalName': member.get('userPrincipalName'),
         }
         for member in list(members)[:limit]
     ]
@@ -51,32 +51,32 @@ def summarize_group_audit(
 
     findings: list[str] = []
     if empty:
-        findings.append("Empty: no members and no nested groups.")
+        findings.append('Empty: no members and no nested groups.')
     if disabled:
-        findings.append(f"{len(disabled)} disabled account(s).")
+        findings.append(f'{len(disabled)} disabled account(s).')
     if guests:
-        findings.append(f"{len(guests)} guest(s).")
+        findings.append(f'{len(guests)} guest(s).')
     if untitled:
-        findings.append(f"{len(untitled)} member(s) with no job title.")
+        findings.append(f'{len(untitled)} member(s) with no job title.')
     if nested_groups:
-        findings.append(f"{len(nested_groups)} nested group(s).")
+        findings.append(f'{len(nested_groups)} nested group(s).')
     if not owners:
-        findings.append("No owners — nobody can manage this group.")
+        findings.append('No owners — nobody can manage this group.')
 
     return {
-        "total_users": len(members),
-        "nested_group_count": len(nested_groups),
-        "owner_count": len(owners),
-        "disabled_count": len(disabled),
-        "guest_count": len(guests),
-        "untitled_count": len(untitled),
-        "empty": empty,
-        "findings": findings,
-        "samples": {
-            "disabled": _sample(disabled, sample_limit),
-            "guests": _sample(guests, sample_limit),
-            "untitled": _sample(untitled, sample_limit),
+        'total_users': len(members),
+        'nested_group_count': len(nested_groups),
+        'owner_count': len(owners),
+        'disabled_count': len(disabled),
+        'guest_count': len(guests),
+        'untitled_count': len(untitled),
+        'empty': empty,
+        'findings': findings,
+        'samples': {
+            'disabled': _sample(disabled, sample_limit),
+            'guests': _sample(guests, sample_limit),
+            'untitled': _sample(untitled, sample_limit),
         },
-        "nested_groups": list(nested_groups),
-        "owners": list(owners),
+        'nested_groups': list(nested_groups),
+        'owners': list(owners),
     }

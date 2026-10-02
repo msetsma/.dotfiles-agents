@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 class TokenInfo:
     token: str
     expires_at: datetime | None
-    resource: str = ""
+    resource: str = ''
 
     def is_expired(self, *, skew_seconds: int = 60) -> bool:
         if self.expires_at is None:
@@ -83,10 +83,10 @@ class Meeting(BaseModel):
     is_online_meeting: bool = False
     join_url: str | None = None
     thread_id: str | None = None
-    my_response: str = "None"
-    show_as: str = "Unknown"
+    my_response: str = 'None'
+    show_as: str = 'Unknown'
     is_organizer: bool = False
-    event_type: str = "Single"
+    event_type: str = 'Single'
 
 
 class CallParticipant(BaseModel):
@@ -125,10 +125,10 @@ class Call(BaseModel):
 
 
 class TranscriptEntry(BaseModel):
-    start: str = ""
-    end: str = ""
-    speaker: str = ""
-    text: str = ""
+    start: str = ''
+    end: str = ''
+    speaker: str = ''
+    text: str = ''
 
 
 class Transcript(BaseModel):
@@ -165,7 +165,7 @@ class TranscriptAnalytics(BaseModel):
 
 class Conversation(BaseModel):
     id: str
-    kind: str = "group"
+    kind: str = 'group'
     topic: str | None = None
     team_id: str | None = None
     team_name: str | None = None
@@ -187,7 +187,7 @@ class ChatMessage(BaseModel):
     sender: str | None = None
     sender_mri: str | None = None
     timestamp: datetime | None = None
-    text: str = ""
+    text: str = ''
     content_type: str | None = None
     message_type: str | None = None
     is_system: bool = False
@@ -230,4 +230,3 @@ class SyncReport(BaseModel):
     files: int = 0
     skipped: int = 0
     errors: list[str] = Field(default_factory=list)
-

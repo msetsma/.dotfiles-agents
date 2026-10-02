@@ -1,26 +1,16 @@
 from typing import Any
 
 from entra_tool.picker_table import picker_emit
-from entra_tool.terminal import (
-    bool_color,
-    cell,
-    clean,
-    date_value,
-    fit,
-    sorted_rows,
-    text_color,
-    type_color,
-    yn,
-)
+from entra_tool.terminal import bool_color, cell, clean, date_value, fit, sorted_rows, text_color, type_color, yn
 from entra_tool.terminal_colors import COLORS
 
 
 def format_group_picker_rows(rows: list[list[Any]]) -> str:
-    headers = ["GROUP", "MAIL", "ID", "MAIL_EN", "SEC_EN", "TYPE", "CREATED"]
+    headers = ['GROUP', 'MAIL', 'ID', 'MAIL_EN', 'SEC_EN', 'TYPE', 'CREATED']
     widths = [56, 72, 36, 7, 6, 18, 10]
     picker_rows = []
     for row in sorted_rows(rows):
-        padded = list(row) + [""] * (7 - len(row))
+        padded = list(row) + [''] * (7 - len(row))
         name = fit(padded[0], 56)
         mail = fit(padded[1], 72)
         object_id = clean(padded[2])

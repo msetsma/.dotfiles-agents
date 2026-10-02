@@ -19,14 +19,7 @@ from pathlib import Path
 from typing import Any, Iterable, Iterator
 
 from .api.util import iso_utc, parse_dt
-from .models import (
-    ChatMessage,
-    Conversation,
-    Meeting,
-    SearchHit,
-    SharedFile,
-    Transcript,
-)
+from .models import ChatMessage, Conversation, Meeting, SearchHit, SharedFile, Transcript
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS meetings (
@@ -126,13 +119,13 @@ def _fts_query(text: str) -> str:
     ``:``), so every token is quoted. The final token gets a prefix wildcard so
     partial words still match.
     """
-    tokens = [t for t in text.replace('"', " ").split() if t]
+    tokens = [t for t in text.replace('"', ' ').split() if t]
     if not tokens:
-        return ""
+        return ''
     quoted = [f'"{t}"' for t in tokens[:-1]]
-    last = tokens[-1].replace("*", "")
+    last = tokens[-1].replace('*', '')
     quoted.append(f'"{last}"*')
-    return " AND ".join(quoted)
+    return ' AND '.join(quoted)
 
 
 def _now() -> str:
@@ -147,13 +140,13 @@ class Store:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(self.path))
         self._conn.row_factory = sqlite3.Row
-        self._conn.execute("PRAGMA journal_mode=WAL")
-        self._conn.execute("PRAGMA foreign_keys=ON")
+        self._conn.execute('PRAGMA journal_mode=WAL')
+        self._conn.execute('PRAGMA foreign_keys=ON')
         self._conn.executescript(_SCHEMA)
         self._conn.commit()
 
     @classmethod
-    def default(cls) -> "Store":
+    def default(cls) -> 'Store':
         from .config import Paths
 
         return cls(Paths.default().db_file)
@@ -163,7 +156,7 @@ class Store:
     def close(self) -> None:
         self._conn.close()
 
-    def __enter__(self) -> "Store":
+    def __enter__(self) -> 'Store':
         return self
 
     def __exit__(self, *exc: object) -> None:
@@ -181,14 +174,14 @@ class Store:
     def set_state(self, key: str, value: str) -> None:
         with self._tx() as conn:
             conn.execute(
-                "INSERT INTO sync_state (key, value) VALUES (?, ?) "
-                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                'INSERT INTO sync_state (key, value) VALUES (?, ?) '
+                'ON CONFLICT(key) DO UPDATE SET value = excluded.value',
                 (key, value),
             )
 
     def get_state(self, key: str) -> str | None:
-        row = self._conn.execute("SELECT value FROM sync_state WHERE key = ?", (key,)).fetchone()
-        return row["value"] if row else None
+        row = self._conn.execute('SELECT value FROM sync_state WHERE key = ?', (key,)).fetchone()
+        return row['value'] if row else None
 
     # -- writes ------------------------------------------------------------- #
 
@@ -215,14 +208,14 @@ class Store:
         ]
         with self._tx() as conn:
             conn.executemany(
-                "INSERT INTO meetings VALUES "
-                "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
-                "ON CONFLICT(id) DO UPDATE SET "
-                "subject=excluded.subject, start_time=excluded.start_time, "
-                "end_time=excluded.end_time, organizer_name=excluded.organizer_name, "
-                "location=excluded.location, thread_id=excluded.thread_id, "
-                "my_response=excluded.my_response, show_as=excluded.show_as, "
-                "fetched_at=excluded.fetched_at",
+                'INSERT INTO meetings VALUES '
+                '(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) '
+                'ON CONFLICT(id) DO UPDATE SET '
+                'subject=excluded.subject, start_time=excluded.start_time, '
+                'end_time=excluded.end_time, organizer_name=excluded.organizer_name, '
+                'location=excluded.location, thread_id=excluded.thread_id, '
+                'my_response=excluded.my_response, show_as=excluded.show_as, '
+                'fetched_at=excluded.fetched_at',
                 rows,
             )
         return len(rows)
@@ -231,13 +224,13 @@ class Store:
         speakers = json.dumps(transcript.speakers)
         with self._tx() as conn:
             conn.execute(
-                "INSERT INTO transcripts VALUES (?,?,?,?,?,?,?,?,?) "
-                "ON CONFLICT(thread_id) DO UPDATE SET "
-                "meeting_subject=excluded.meeting_subject, "
-                "recording_start=excluded.recording_start, "
-                "recording_end=excluded.recording_end, entry_count=excluded.entry_count, "
-                "speakers=excluded.speakers, entries=excluded.entries, "
-                "text=excluded.text, fetched_at=excluded.fetched_at",
+                'INSERT INTO transcripts VALUES (?,?,?,?,?,?,?,?,?) '
+                'ON CONFLICT(thread_id) DO UPDATE SET '
+                'meeting_subject=excluded.meeting_subject, '
+                'recording_start=excluded.recording_start, '
+                'recording_end=excluded.recording_end, entry_count=excluded.entry_count, '
+                'speakers=excluded.speakers, entries=excluded.entries, '
+                'text=excluded.text, fetched_at=excluded.fetched_at',
                 (
                     transcript.thread_id,
                     transcript.meeting_subject,
@@ -250,10 +243,10 @@ class Store:
                     _now(),
                 ),
             )
-            conn.execute("DELETE FROM transcripts_fts WHERE thread_id = ?", (transcript.thread_id,))
+            conn.execute('DELETE FROM transcripts_fts WHERE thread_id = ?', (transcript.thread_id,))
             conn.execute(
-                "INSERT INTO transcripts_fts (thread_id, meeting_subject, text) VALUES (?,?,?)",
-                (transcript.thread_id, transcript.meeting_subject or "", transcript.text),
+                'INSERT INTO transcripts_fts (thread_id, meeting_subject, text) VALUES (?,?,?)',
+                (transcript.thread_id, transcript.meeting_subject or '', transcript.text),
             )
 
     def upsert_conversations(self, conversations: Iterable[Conversation]) -> int:
@@ -273,13 +266,13 @@ class Store:
         ]
         with self._tx() as conn:
             conn.executemany(
-                "INSERT INTO conversations VALUES (?,?,?,?,?,?,?,?,?) "
-                "ON CONFLICT(id) DO UPDATE SET "
-                "kind=excluded.kind, topic=excluded.topic, team_id=excluded.team_id, "
-                "last_message_at=excluded.last_message_at, "
-                "last_message_preview=excluded.last_message_preview, "
-                "last_sender=excluded.last_sender, is_favorite=excluded.is_favorite, "
-                "fetched_at=excluded.fetched_at",
+                'INSERT INTO conversations VALUES (?,?,?,?,?,?,?,?,?) '
+                'ON CONFLICT(id) DO UPDATE SET '
+                'kind=excluded.kind, topic=excluded.topic, team_id=excluded.team_id, '
+                'last_message_at=excluded.last_message_at, '
+                'last_message_preview=excluded.last_message_preview, '
+                'last_sender=excluded.last_sender, is_favorite=excluded.is_favorite, '
+                'fetched_at=excluded.fetched_at',
                 rows,
             )
         return len(rows)
@@ -289,10 +282,10 @@ class Store:
         with self._tx() as conn:
             for m in items:
                 conn.execute(
-                    "INSERT INTO messages VALUES (?,?,?,?,?,?,?) "
-                    "ON CONFLICT(id) DO UPDATE SET text=excluded.text, "
-                    "timestamp=excluded.timestamp, sender=excluded.sender, "
-                    "is_system=excluded.is_system, fetched_at=excluded.fetched_at",
+                    'INSERT INTO messages VALUES (?,?,?,?,?,?,?) '
+                    'ON CONFLICT(id) DO UPDATE SET text=excluded.text, '
+                    'timestamp=excluded.timestamp, sender=excluded.sender, '
+                    'is_system=excluded.is_system, fetched_at=excluded.fetched_at',
                     (
                         m.id,
                         m.conversation_id,
@@ -303,12 +296,11 @@ class Store:
                         _now(),
                     ),
                 )
-                conn.execute("DELETE FROM messages_fts WHERE id = ?", (m.id,))
+                conn.execute('DELETE FROM messages_fts WHERE id = ?', (m.id,))
                 if not m.is_system and m.text:
                     conn.execute(
-                        "INSERT INTO messages_fts (id, conversation_id, sender, text) "
-                        "VALUES (?,?,?,?)",
-                        (m.id, m.conversation_id, m.sender or "", m.text),
+                        'INSERT INTO messages_fts (id, conversation_id, sender, text) VALUES (?,?,?,?)',
+                        (m.id, m.conversation_id, m.sender or '', m.text),
                     )
         return len(items)
 
@@ -330,9 +322,9 @@ class Store:
         ]
         with self._tx() as conn:
             conn.executemany(
-                "INSERT INTO files VALUES (?,?,?,?,?,?,?,?,?,?) "
-                "ON CONFLICT(id) DO UPDATE SET name=excluded.name, kind=excluded.kind, "
-                "url=excluded.url, thread_id=excluded.thread_id, fetched_at=excluded.fetched_at",
+                'INSERT INTO files VALUES (?,?,?,?,?,?,?,?,?,?) '
+                'ON CONFLICT(id) DO UPDATE SET name=excluded.name, kind=excluded.kind, '
+                'url=excluded.url, thread_id=excluded.thread_id, fetched_at=excluded.fetched_at',
                 rows,
             )
         return len(rows)
@@ -342,111 +334,107 @@ class Store:
     def meetings(
         self, *, start: datetime | None = None, end: datetime | None = None, limit: int = 100
     ) -> list[Meeting]:
-        sql = "SELECT * FROM meetings"
+        sql = 'SELECT * FROM meetings'
         clauses: list[str] = []
         params: list[Any] = []
         if start:
-            clauses.append("start_time >= ?")
+            clauses.append('start_time >= ?')
             params.append(iso_utc(start))
         if end:
-            clauses.append("start_time < ?")
+            clauses.append('start_time < ?')
             params.append(iso_utc(end))
         if clauses:
-            sql += " WHERE " + " AND ".join(clauses)
-        sql += " ORDER BY start_time LIMIT ?"
+            sql += ' WHERE ' + ' AND '.join(clauses)
+        sql += ' ORDER BY start_time LIMIT ?'
         params.append(limit)
         return [_row_meeting(r) for r in self._conn.execute(sql, params)]
 
     def transcript(self, thread_id: str) -> Transcript | None:
-        row = self._conn.execute(
-            "SELECT * FROM transcripts WHERE thread_id = ?", (thread_id,)
-        ).fetchone()
+        row = self._conn.execute('SELECT * FROM transcripts WHERE thread_id = ?', (thread_id,)).fetchone()
         if not row:
             return None
         from .models import TranscriptEntry
 
         try:
-            raw_entries = json.loads(row["entries"] or "[]")
+            raw_entries = json.loads(row['entries'] or '[]')
         except (TypeError, ValueError):
             raw_entries = []
         return Transcript(
-            meeting_subject=row["meeting_subject"],
-            thread_id=row["thread_id"],
-            recording_start=parse_dt(row["recording_start"]),
-            recording_end=parse_dt(row["recording_end"]),
+            meeting_subject=row['meeting_subject'],
+            thread_id=row['thread_id'],
+            recording_start=parse_dt(row['recording_start']),
+            recording_end=parse_dt(row['recording_end']),
             entries=[TranscriptEntry(**e) for e in raw_entries],
-            speakers=json.loads(row["speakers"] or "[]"),
+            speakers=json.loads(row['speakers'] or '[]'),
         )
 
     def conversations(self, *, kind: str | None = None, limit: int = 100) -> list[Conversation]:
-        sql = "SELECT * FROM conversations"
+        sql = 'SELECT * FROM conversations'
         params: list[Any] = []
         if kind:
-            sql += " WHERE kind = ?"
+            sql += ' WHERE kind = ?'
             params.append(kind)
         sql += " ORDER BY COALESCE(last_message_at, '') DESC LIMIT ?"
         params.append(limit)
         return [
             Conversation(
-                id=r["id"],
-                kind=r["kind"] or "group",
-                topic=r["topic"],
-                team_id=r["team_id"],
-                last_message_at=parse_dt(r["last_message_at"]),
-                last_message_preview=r["last_message_preview"],
-                last_sender=r["last_sender"],
-                is_favorite=bool(r["is_favorite"]),
+                id=r['id'],
+                kind=r['kind'] or 'group',
+                topic=r['topic'],
+                team_id=r['team_id'],
+                last_message_at=parse_dt(r['last_message_at']),
+                last_message_preview=r['last_message_preview'],
+                last_sender=r['last_sender'],
+                is_favorite=bool(r['is_favorite']),
             )
             for r in self._conn.execute(sql, params)
         ]
 
-    def messages(
-        self, conversation_id: str, *, limit: int = 200, include_system: bool = False
-    ) -> list[ChatMessage]:
-        sql = "SELECT * FROM messages WHERE conversation_id = ?"
+    def messages(self, conversation_id: str, *, limit: int = 200, include_system: bool = False) -> list[ChatMessage]:
+        sql = 'SELECT * FROM messages WHERE conversation_id = ?'
         params: list[Any] = [conversation_id]
         if not include_system:
-            sql += " AND is_system = 0"
+            sql += ' AND is_system = 0'
         sql += " ORDER BY COALESCE(timestamp, '') ASC LIMIT ?"
         params.append(limit)
         return [
             ChatMessage(
-                id=r["id"],
-                conversation_id=r["conversation_id"],
-                sender=r["sender"],
-                timestamp=parse_dt(r["timestamp"]),
-                text=r["text"] or "",
-                is_system=bool(r["is_system"]),
+                id=r['id'],
+                conversation_id=r['conversation_id'],
+                sender=r['sender'],
+                timestamp=parse_dt(r['timestamp']),
+                text=r['text'] or '',
+                is_system=bool(r['is_system']),
             )
             for r in self._conn.execute(sql, params)
         ]
 
     def files(self, *, thread_id: str | None = None, limit: int = 200) -> list[SharedFile]:
-        sql = "SELECT * FROM files"
+        sql = 'SELECT * FROM files'
         params: list[Any] = []
         if thread_id:
-            sql += " WHERE thread_id = ?"
+            sql += ' WHERE thread_id = ?'
             params.append(thread_id)
         sql += " ORDER BY COALESCE(created_at, '') DESC LIMIT ?"
         params.append(limit)
         return [
             SharedFile(
-                id=r["id"],
-                name=r["name"],
-                extension=r["extension"],
-                kind=r["kind"],
-                created_at=parse_dt(r["created_at"]),
-                modified_at=parse_dt(r["modified_at"]),
-                url=r["url"],
-                thread_id=r["thread_id"],
-                is_recording=bool(r["is_recording"]),
+                id=r['id'],
+                name=r['name'],
+                extension=r['extension'],
+                kind=r['kind'],
+                created_at=parse_dt(r['created_at']),
+                modified_at=parse_dt(r['modified_at']),
+                url=r['url'],
+                thread_id=r['thread_id'],
+                is_recording=bool(r['is_recording']),
             )
             for r in self._conn.execute(sql, params)
         ]
 
     def transcript_index(self, *, limit: int = 50) -> list[dict[str, Any]]:
         rows = self._conn.execute(
-            "SELECT thread_id, meeting_subject, entry_count, recording_start "
+            'SELECT thread_id, meeting_subject, entry_count, recording_start '
             "FROM transcripts ORDER BY COALESCE(recording_start, '') DESC LIMIT ?",
             (limit,),
         ).fetchall()
@@ -455,112 +443,103 @@ class Store:
     # -- search ------------------------------------------------------------- #
 
     def search(
-        self,
-        query: str,
-        *,
-        sources: Iterable[str] | None = None,
-        conversation_id: str | None = None,
-        limit: int = 25,
+        self, query: str, *, sources: Iterable[str] | None = None, conversation_id: str | None = None, limit: int = 25
     ) -> list[SearchHit]:
-        wanted = set(sources) if sources else {"transcript", "chat", "meeting", "file"}
+        wanted = set(sources) if sources else {'transcript', 'chat', 'meeting', 'file'}
         match = _fts_query(query)
         hits: list[SearchHit] = []
-        if match and "transcript" in wanted:
+        if match and 'transcript' in wanted:
             hits += self._search_transcripts(match, limit)
-        if match and "chat" in wanted:
+        if match and 'chat' in wanted:
             hits += self._search_chats(match, conversation_id, limit)
-        if "meeting" in wanted:
+        if 'meeting' in wanted:
             hits += self._search_meetings(query, limit)
-        if "file" in wanted:
+        if 'file' in wanted:
             hits += self._search_files(query, limit)
         hits.sort(key=lambda h: (h.score is None, h.score or 0.0))
         return hits[:limit]
 
     def _search_transcripts(self, match: str, limit: int) -> list[SearchHit]:
         rows = self._conn.execute(
-            "SELECT transcripts_fts.thread_id AS ref, "
-            "transcripts_fts.meeting_subject AS title, "
+            'SELECT transcripts_fts.thread_id AS ref, '
+            'transcripts_fts.meeting_subject AS title, '
             "snippet(transcripts_fts, 2, '[', ']', ' ... ', 16) AS snip, "
-            "transcripts.recording_start AS ts, bm25(transcripts_fts) AS score "
-            "FROM transcripts_fts "
-            "LEFT JOIN transcripts ON transcripts.thread_id = transcripts_fts.thread_id "
-            "WHERE transcripts_fts MATCH ? ORDER BY score LIMIT ?",
+            'transcripts.recording_start AS ts, bm25(transcripts_fts) AS score '
+            'FROM transcripts_fts '
+            'LEFT JOIN transcripts ON transcripts.thread_id = transcripts_fts.thread_id '
+            'WHERE transcripts_fts MATCH ? ORDER BY score LIMIT ?',
             (match, limit),
         )
         return [
             SearchHit(
-                source="transcript",
-                ref=row["ref"],
-                title=row["title"] or "(transcript)",
-                subtitle="transcript",
-                snippet=row["snip"],
-                timestamp=parse_dt(row["ts"]),
-                score=row["score"],
+                source='transcript',
+                ref=row['ref'],
+                title=row['title'] or '(transcript)',
+                subtitle='transcript',
+                snippet=row['snip'],
+                timestamp=parse_dt(row['ts']),
+                score=row['score'],
             )
             for row in rows
         ]
 
-    def _search_chats(
-        self, match: str, conversation_id: str | None, limit: int
-    ) -> list[SearchHit]:
+    def _search_chats(self, match: str, conversation_id: str | None, limit: int) -> list[SearchHit]:
         sql = (
-            "SELECT messages_fts.id AS ref, messages_fts.sender AS title, "
-            "messages_fts.conversation_id AS conv, "
+            'SELECT messages_fts.id AS ref, messages_fts.sender AS title, '
+            'messages_fts.conversation_id AS conv, '
             "snippet(messages_fts, 3, '[', ']', ' ... ', 16) AS snip, "
-            "messages.timestamp AS ts, bm25(messages_fts) AS score "
-            "FROM messages_fts "
-            "LEFT JOIN messages ON messages.id = messages_fts.id "
-            "WHERE messages_fts MATCH ? "
+            'messages.timestamp AS ts, bm25(messages_fts) AS score '
+            'FROM messages_fts '
+            'LEFT JOIN messages ON messages.id = messages_fts.id '
+            'WHERE messages_fts MATCH ? '
         )
         params: list[Any] = [match]
         if conversation_id:
-            sql += "AND messages_fts.conversation_id = ? "
+            sql += 'AND messages_fts.conversation_id = ? '
             params.append(conversation_id)
-        sql += "ORDER BY score LIMIT ?"
+        sql += 'ORDER BY score LIMIT ?'
         params.append(limit)
         return [
             SearchHit(
-                source="chat",
-                ref=row["ref"],
-                title=row["title"] or "(chat)",
-                subtitle=row["conv"],
-                snippet=row["snip"],
-                timestamp=parse_dt(row["ts"]),
-                score=row["score"],
+                source='chat',
+                ref=row['ref'],
+                title=row['title'] or '(chat)',
+                subtitle=row['conv'],
+                snippet=row['snip'],
+                timestamp=parse_dt(row['ts']),
+                score=row['score'],
             )
             for row in self._conn.execute(sql, params)
         ]
 
     def _search_meetings(self, query: str, limit: int) -> list[SearchHit]:
         rows = self._conn.execute(
-            "SELECT id, subject, start_time FROM meetings WHERE subject LIKE ? "
-            "ORDER BY start_time DESC LIMIT ?",
-            (f"%{query}%", limit),
+            'SELECT id, subject, start_time FROM meetings WHERE subject LIKE ? ORDER BY start_time DESC LIMIT ?',
+            (f'%{query}%', limit),
         )
         return [
             SearchHit(
-                source="meeting",
-                ref=row["id"],
-                title=row["subject"],
-                subtitle="meeting",
-                timestamp=parse_dt(row["start_time"]),
+                source='meeting',
+                ref=row['id'],
+                title=row['subject'],
+                subtitle='meeting',
+                timestamp=parse_dt(row['start_time']),
             )
             for row in rows
         ]
 
     def _search_files(self, query: str, limit: int) -> list[SearchHit]:
         rows = self._conn.execute(
-            "SELECT id, name, kind, created_at FROM files WHERE name LIKE ? "
-            "ORDER BY created_at DESC LIMIT ?",
-            (f"%{query}%", limit),
+            'SELECT id, name, kind, created_at FROM files WHERE name LIKE ? ORDER BY created_at DESC LIMIT ?',
+            (f'%{query}%', limit),
         )
         return [
             SearchHit(
-                source="file",
-                ref=row["id"],
-                title=row["name"],
-                subtitle=row["kind"] or "file",
-                timestamp=parse_dt(row["created_at"]),
+                source='file',
+                ref=row['id'],
+                title=row['name'],
+                subtitle=row['kind'] or 'file',
+                timestamp=parse_dt(row['created_at']),
             )
             for row in rows
         ]
@@ -569,33 +548,33 @@ class Store:
 
     def stats(self) -> dict[str, Any]:
         def count(table: str) -> int:
-            return int(self._conn.execute(f"SELECT COUNT(*) AS n FROM {table}").fetchone()["n"])
+            return int(self._conn.execute(f'SELECT COUNT(*) AS n FROM {table}').fetchone()['n'])
 
         return {
-            "path": str(self.path),
-            "meetings": count("meetings"),
-            "transcripts": count("transcripts"),
-            "conversations": count("conversations"),
-            "messages": count("messages"),
-            "files": count("files"),
-            "last_sync": self.get_state("last_sync"),
+            'path': str(self.path),
+            'meetings': count('meetings'),
+            'transcripts': count('transcripts'),
+            'conversations': count('conversations'),
+            'messages': count('messages'),
+            'files': count('files'),
+            'last_sync': self.get_state('last_sync'),
         }
 
 
 def _row_meeting(row: sqlite3.Row) -> Meeting:
     return Meeting(
-        id=row["id"],
-        subject=row["subject"] or "",
-        start_time=parse_dt(row["start_time"]),
-        end_time=parse_dt(row["end_time"]),
-        organizer_name=row["organizer_name"],
-        organizer_address=row["organizer_address"],
-        location=row["location"],
-        is_online_meeting=bool(row["is_online_meeting"]),
-        join_url=row["join_url"],
-        thread_id=row["thread_id"],
-        my_response=row["my_response"] or "None",
-        show_as=row["show_as"] or "Unknown",
-        is_organizer=bool(row["is_organizer"]),
-        event_type=row["event_type"] or "Single",
+        id=row['id'],
+        subject=row['subject'] or '',
+        start_time=parse_dt(row['start_time']),
+        end_time=parse_dt(row['end_time']),
+        organizer_name=row['organizer_name'],
+        organizer_address=row['organizer_address'],
+        location=row['location'],
+        is_online_meeting=bool(row['is_online_meeting']),
+        join_url=row['join_url'],
+        thread_id=row['thread_id'],
+        my_response=row['my_response'] or 'None',
+        show_as=row['show_as'] or 'Unknown',
+        is_organizer=bool(row['is_organizer']),
+        event_type=row['event_type'] or 'Single',
     )

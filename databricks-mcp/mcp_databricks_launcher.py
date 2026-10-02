@@ -10,8 +10,8 @@ stable command name (``databricks-mcp``) that agents can point at.
 def main() -> None:
     from databricks_mcp_server.server import mcp
 
-    mcp.run(transport="stdio")
+    mcp.run(transport='stdio')
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

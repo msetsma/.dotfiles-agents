@@ -32,7 +32,7 @@ class _TranscriptJob(NamedTuple):
 
 
 def sync(
-    client: "TeamsClient",
+    client: 'TeamsClient',
     store: Store,
     *,
     days_back: int = 7,
@@ -51,9 +51,7 @@ def sync(
     report = SyncReport(started_at=started)
     emit: Callable[[str], None] = log or (lambda message: None)
 
-    meetings = _sync_meetings(
-        client, store, report, started, days_back, days_forward, emit
-    )
+    meetings = _sync_meetings(client, store, report, started, days_back, days_forward, emit)
 
     if include_transcripts:
         targets = _meeting_transcript_targets(meetings)
@@ -64,17 +62,15 @@ def sync(
     if include_files:
         _sync_files(client, store, report, files_limit, emit)
     if include_chats:
-        _sync_chats(
-            client, store, report, conversation_limit, messages_per_conversation, pause, emit
-        )
+        _sync_chats(client, store, report, conversation_limit, messages_per_conversation, pause, emit)
 
     report.finished_at = datetime.now(tz=timezone.utc)
-    store.set_state("last_sync", report.finished_at.isoformat())
+    store.set_state('last_sync', report.finished_at.isoformat())
     return report
 
 
 def _sync_meetings(
-    client: "TeamsClient",
+    client: 'TeamsClient',
     store: Store,
     report: SyncReport,
     started: datetime,
@@ -84,46 +80,44 @@ def _sync_meetings(
 ) -> list[Meeting]:
     try:
         meetings = client.list_meetings(
-            start=started - timedelta(days=days_back),
-            end=started + timedelta(days=days_forward),
-            limit=200,
+            start=started - timedelta(days=days_back), end=started + timedelta(days=days_forward), limit=200
         )
     except TeamsBrowserError as exc:
-        _record(report, emit, "meetings", exc)
+        _record(report, emit, 'meetings', exc)
         return []
     report.meetings = store.upsert_meetings(meetings)
-    emit(f"meetings: {report.meetings}")
+    emit(f'meetings: {report.meetings}')
     return meetings
 
 
 def _meeting_transcript_targets(meetings: list[Meeting]) -> list[_TranscriptJob]:
     # Future meetings have no transcript yet; only past online meetings qualify.
     return [
-        _TranscriptJob(m.thread_id, m.subject, m.start_time, "transcript")
+        _TranscriptJob(m.thread_id, m.subject, m.start_time, 'transcript')
         for m in meetings
         if m.thread_id and m.start_time
     ]
 
 
 def _call_transcript_targets(
-    client: "TeamsClient", report: SyncReport, emit: Callable[[str], None]
+    client: 'TeamsClient', report: SyncReport, emit: Callable[[str], None]
 ) -> list[_TranscriptJob]:
     try:
         calls = client.list_calls(limit=100)
     except TeamsBrowserError as exc:
-        _record(report, emit, "calls", exc)
+        _record(report, emit, 'calls', exc)
         return []
     report.calls = len(calls)
-    emit(f"calls: {report.calls}")
+    emit(f'calls: {report.calls}')
     return [
-        _TranscriptJob(c.thread_id, c.title or c.call_id, c.start_time, "call transcript")
+        _TranscriptJob(c.thread_id, c.title or c.call_id, c.start_time, 'call transcript')
         for c in calls
         if c.has_transcript
     ]
 
 
 def _store_transcripts(
-    client: "TeamsClient",
+    client: 'TeamsClient',
     store: Store,
     report: SyncReport,
     targets: list[_TranscriptJob],
@@ -139,38 +133,32 @@ def _store_transcripts(
         if job.started_at and job.started_at > report.started_at:
             continue
         try:
-            transcript = client.get_transcript(
-                job.thread_id, subject=job.subject, meeting_date=job.started_at
-            )
+            transcript = client.get_transcript(job.thread_id, subject=job.subject, meeting_date=job.started_at)
         except (TranscriptUnavailable, ResourceNotFound):
             report.skipped += 1
             continue
         except Exception as exc:  # noqa: BLE001 - one bad item must not abort the sync
-            _record(report, emit, f"{job.label} {job.subject!r}", exc)
+            _record(report, emit, f'{job.label} {job.subject!r}', exc)
             continue
         store.upsert_transcript(transcript)
         seen.add(job.thread_id)
         report.transcripts += 1
-        emit(f"  {job.label}: {job.subject}")
+        emit(f'  {job.label}: {job.subject}')
         _nap(pause)
 
 
 def _sync_files(
-    client: "TeamsClient",
-    store: Store,
-    report: SyncReport,
-    limit: int,
-    emit: Callable[[str], None],
+    client: 'TeamsClient', store: Store, report: SyncReport, limit: int, emit: Callable[[str], None]
 ) -> None:
     try:
         report.files = store.upsert_files(client.list_files(top=limit))
-        emit(f"files: {report.files}")
+        emit(f'files: {report.files}')
     except TeamsBrowserError as exc:
-        _record(report, emit, "files", exc)
+        _record(report, emit, 'files', exc)
 
 
 def _sync_chats(
-    client: "TeamsClient",
+    client: 'TeamsClient',
     store: Store,
     report: SyncReport,
     conversation_limit: int,
@@ -181,29 +169,25 @@ def _sync_chats(
     try:
         conversations = client.list_conversations(top=conversation_limit)
     except TeamsBrowserError as exc:
-        _record(report, emit, "conversations", exc)
+        _record(report, emit, 'conversations', exc)
         return
     report.conversations = store.upsert_conversations(conversations)
-    emit(f"conversations: {report.conversations}")
+    emit(f'conversations: {report.conversations}')
     for conversation in conversations:
         try:
-            messages = client.list_messages(
-                conversation.id, page_size=messages_per_conversation
-            )
+            messages = client.list_messages(conversation.id, page_size=messages_per_conversation)
         except Exception as exc:  # noqa: BLE001 - one bad conversation must not abort
-            _record(report, emit, f"messages {conversation.id}", exc)
+            _record(report, emit, f'messages {conversation.id}', exc)
             continue
         report.messages += store.upsert_messages(messages)
         _nap(pause)
 
 
-def _record(
-    report: SyncReport, emit: Callable[[str], None], context: str, exc: Exception
-) -> None:
-    message = f"{context}: {exc}"
+def _record(report: SyncReport, emit: Callable[[str], None], context: str, exc: Exception) -> None:
+    message = f'{context}: {exc}'
     if len(report.errors) < _MAX_ERRORS:
         report.errors.append(message)
-    emit(f"  ! {message}")
+    emit(f'  ! {message}')
 
 
 def _nap(seconds: float) -> None:

@@ -83,10 +83,10 @@ def find_containment_path(
         for node in frontier:
             expanded += 1
             for group in batch.get(node, []):
-                group_id = group.get("id")
+                group_id = group.get('id')
                 if not group_id or group_id in seen:
                     continue
-                names.setdefault(group_id, group.get("displayName") or "")
+                names.setdefault(group_id, group.get('displayName') or '')
                 seen[group_id] = node
                 if group_id in other:
                     meeting = group_id
@@ -96,10 +96,7 @@ def find_containment_path(
                 break
 
         if meeting:
-            return (
-                _join_path(meeting, user_id, target_group_id, fwd_parent, bwd_parent),
-                names,
-            )
+            return (_join_path(meeting, user_id, target_group_id, fwd_parent, bwd_parent), names)
         if forward:
             fwd_frontier = next_frontier
         else:

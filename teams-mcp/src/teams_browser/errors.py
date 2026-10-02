@@ -27,7 +27,7 @@ class ApiError(TeamsBrowserError):
     """An upstream Teams/Substrate API call failed."""
 
     def __init__(self, status: int, message: str, *, body: str | None = None):
-        super().__init__(f"HTTP {status}: {message}")
+        super().__init__(f'HTTP {status}: {message}')
         self.status = status
         self.body = body
 

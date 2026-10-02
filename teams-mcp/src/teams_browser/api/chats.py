@@ -25,32 +25,27 @@ from ..models import ChatMessage, Conversation, MessageAttachment, RegionConfig,
 from .http import HttpClient
 from .util import parse_dt
 
-_VIEW = "msnp24Equivalent"
+_VIEW = 'msnp24Equivalent'
 
 # Message types that are Teams bookkeeping rather than conversation
 # (members added, calls started, etc.).
-_SYSTEM_PREFIXES = ("ThreadActivity/", "EventMessage")
+_SYSTEM_PREFIXES = ('ThreadActivity/', 'EventMessage')
 
-_TAG = re.compile(r"<[^>]+>")
+_TAG = re.compile(r'<[^>]+>')
 _AT = re.compile(r'<at[^>]*>(.*?)</at>', re.IGNORECASE | re.DOTALL)
-_IMG = re.compile(r"<img\b[^>]*>", re.IGNORECASE)
+_IMG = re.compile(r'<img\b[^>]*>', re.IGNORECASE)
 _IMG_SRC = re.compile(r'src="([^"]+)"', re.IGNORECASE)
 _IMG_ALT = re.compile(r'alt="([^"]*)"', re.IGNORECASE)
 _ATTR_ID = re.compile(r'id="([^"]+)"', re.IGNORECASE)
-_BREAK = re.compile(r"<\s*(br|/p|/div|/li)\s*/?>", re.IGNORECASE)
+_BREAK = re.compile(r'<\s*(br|/p|/div|/li)\s*/?>', re.IGNORECASE)
 
 
 def _headers(tokens: TokenSet) -> dict[str, str]:
     if not tokens.skype_token:
         from ..errors import TokenExpired
 
-        raise TokenExpired(
-            "No skypetoken in the session. Run `teams-browser login` to refresh."
-        )
-    return {
-        "Authentication": f"skypetoken={tokens.skype_token}",
-        "Accept": "application/json",
-    }
+        raise TokenExpired('No skypetoken in the session. Run `teams-browser login` to refresh.')
+    return {'Authentication': f'skypetoken={tokens.skype_token}', 'Accept': 'application/json'}
 
 
 # --------------------------------------------------------------------------- #
@@ -66,18 +61,18 @@ def html_to_text(content: str | None) -> str:
     the words and drop the markup, turning block boundaries into newlines.
     """
     if not content:
-        return ""
+        return ''
     text = content
     # Drop quoted reply blocks entirely - they duplicate earlier messages.
-    text = re.sub(r"<blockquote\b.*?</blockquote>", " ", text, flags=re.IGNORECASE | re.DOTALL)
-    text = re.sub(r"<attachment\b[^>]*>(.*?)</attachment>", r" \1 ", text, flags=re.IGNORECASE | re.DOTALL)
-    text = _BREAK.sub("\n", text)
-    text = re.sub(r"<li\b[^>]*>", "\n- ", text, flags=re.IGNORECASE)
-    text = _TAG.sub("", text)
+    text = re.sub(r'<blockquote\b.*?</blockquote>', ' ', text, flags=re.IGNORECASE | re.DOTALL)
+    text = re.sub(r'<attachment\b[^>]*>(.*?)</attachment>', r' \1 ', text, flags=re.IGNORECASE | re.DOTALL)
+    text = _BREAK.sub('\n', text)
+    text = re.sub(r'<li\b[^>]*>', '\n- ', text, flags=re.IGNORECASE)
+    text = _TAG.sub('', text)
     text = html.unescape(text)
-    text = text.replace("\u200b", "").replace("\xa0", " ")
+    text = text.replace('\u200b', '').replace('\xa0', ' ')
     lines = [line.strip() for line in text.splitlines()]
-    return "\n".join(line for line in lines if line).strip()
+    return '\n'.join(line for line in lines if line).strip()
 
 
 def _extract_mentions(content: str | None) -> list[str]:
@@ -85,7 +80,7 @@ def _extract_mentions(content: str | None) -> list[str]:
         return []
     seen: list[str] = []
     for raw in _AT.findall(content):
-        name = html.unescape(_TAG.sub("", raw)).strip().lstrip("@")
+        name = html.unescape(_TAG.sub('', raw)).strip().lstrip('@')
         if name and name not in seen:
             seen.append(name)
     return seen
@@ -100,9 +95,7 @@ def _extract_images(content: str | None) -> list[MessageAttachment]:
         alt = _IMG_ALT.search(tag)
         out.append(
             MessageAttachment(
-                name=(alt.group(1) if alt and alt.group(1) else None),
-                url=(src.group(1) if src else None),
-                kind="image",
+                name=(alt.group(1) if alt and alt.group(1) else None), url=(src.group(1) if src else None), kind='image'
             )
         )
     return out
@@ -110,7 +103,7 @@ def _extract_images(content: str | None) -> list[MessageAttachment]:
 
 def _extract_files(properties: dict[str, Any] | None) -> list[MessageAttachment]:
     """Parse the ``properties.files`` JSON blob Teams attaches to media messages."""
-    raw = (properties or {}).get("files")
+    raw = (properties or {}).get('files')
     if not raw:
         return []
     try:
@@ -123,9 +116,9 @@ def _extract_files(properties: dict[str, Any] | None) -> list[MessageAttachment]
             continue
         out.append(
             MessageAttachment(
-                name=item.get("title") or item.get("fileName"),
-                url=item.get("fileUrl") or item.get("fileInfo", {}).get("fileUrl"),
-                kind=(item.get("fileType") or "file"),
+                name=item.get('title') or item.get('fileName'),
+                url=item.get('fileUrl') or item.get('fileInfo', {}).get('fileUrl'),
+                kind=(item.get('fileType') or 'file'),
             )
         )
     return out
@@ -137,59 +130,59 @@ def _extract_files(properties: dict[str, Any] | None) -> list[MessageAttachment]
 
 
 def conversation_kind(raw: dict[str, Any]) -> str:
-    props = raw.get("threadProperties") or {}
-    cid = raw.get("id") or ""
-    if props.get("productThreadType") == "TeamsTeam" or props.get("threadType") == "space":
-        return "channel"
-    if cid.startswith("19:meeting_"):
-        return "meeting"
-    if "@thread.tacv2" in cid:
-        return "channel"
-    if "@unq.gbl.spaces" in cid:
-        return "one_to_one"
-    if "@thread.v2" in cid:
-        return "group"
-    return "group"
+    props = raw.get('threadProperties') or {}
+    cid = raw.get('id') or ''
+    if props.get('productThreadType') == 'TeamsTeam' or props.get('threadType') == 'space':
+        return 'channel'
+    if cid.startswith('19:meeting_'):
+        return 'meeting'
+    if '@thread.tacv2' in cid:
+        return 'channel'
+    if '@unq.gbl.spaces' in cid:
+        return 'one_to_one'
+    if '@thread.v2' in cid:
+        return 'group'
+    return 'group'
 
 
 def parse_conversation(raw: dict[str, Any]) -> Conversation:
-    props = raw.get("threadProperties") or {}
-    last = raw.get("lastMessage") or {}
+    props = raw.get('threadProperties') or {}
+    last = raw.get('lastMessage') or {}
     kind = conversation_kind(raw)
-    topic = props.get("topic") or props.get("spaceThreadTopic") or None
+    topic = props.get('topic') or props.get('spaceThreadTopic') or None
     return Conversation(
-        id=raw.get("id") or "",
+        id=raw.get('id') or '',
         kind=kind,
         topic=topic,
-        team_id=props.get("groupId"),
-        last_message_at=parse_dt(last.get("composetime") or last.get("originalarrivaltime")),
-        last_message_preview=html_to_text(last.get("content")) or None,
-        last_sender=last.get("imdisplayname") or None,
-        is_favorite=str((raw.get("properties") or {}).get("favorite", "")).lower() == "true",
+        team_id=props.get('groupId'),
+        last_message_at=parse_dt(last.get('composetime') or last.get('originalarrivaltime')),
+        last_message_preview=html_to_text(last.get('content')) or None,
+        last_sender=last.get('imdisplayname') or None,
+        is_favorite=str((raw.get('properties') or {}).get('favorite', '')).lower() == 'true',
     )
 
 
 def parse_message(raw: dict[str, Any], conversation_id: str | None = None) -> ChatMessage:
-    message_type = raw.get("messagetype") or ""
-    content = raw.get("content")
-    is_system = message_type.startswith(_SYSTEM_PREFIXES) or raw.get("type") == "EventMessage"
+    message_type = raw.get('messagetype') or ''
+    content = raw.get('content')
+    is_system = message_type.startswith(_SYSTEM_PREFIXES) or raw.get('type') == 'EventMessage'
 
-    attachments = _extract_files(raw.get("properties"))
+    attachments = _extract_files(raw.get('properties'))
     attachments.extend(_extract_images(content))
 
     reactions: dict[str, int] = {}
-    for item in (raw.get("properties") or {}).get("emotions") or []:
-        if isinstance(item, dict) and item.get("key"):
-            reactions[str(item["key"])] = len(item.get("users") or [])
+    for item in (raw.get('properties') or {}).get('emotions') or []:
+        if isinstance(item, dict) and item.get('key'):
+            reactions[str(item['key'])] = len(item.get('users') or [])
 
     return ChatMessage(
-        id=str(raw.get("id") or ""),
-        conversation_id=raw.get("conversationid") or conversation_id or "",
-        sender=raw.get("imdisplayname") or None,
-        sender_mri=raw.get("from") or None,
-        timestamp=parse_dt(raw.get("composetime") or raw.get("originalarrivaltime")),
+        id=str(raw.get('id') or ''),
+        conversation_id=raw.get('conversationid') or conversation_id or '',
+        sender=raw.get('imdisplayname') or None,
+        sender_mri=raw.get('from') or None,
+        timestamp=parse_dt(raw.get('composetime') or raw.get('originalarrivaltime')),
         text=html_to_text(content),
-        content_type=raw.get("contenttype") or None,
+        content_type=raw.get('contenttype') or None,
         message_type=message_type or None,
         is_system=is_system,
         attachments=attachments,
@@ -204,31 +197,27 @@ def parse_message(raw: dict[str, Any], conversation_id: str | None = None) -> Ch
 
 
 def list_conversations(
-    region: RegionConfig,
-    tokens: TokenSet,
-    *,
-    top: int = 50,
-    client: HttpClient | None = None,
+    region: RegionConfig, tokens: TokenSet, *, top: int = 50, client: HttpClient | None = None
 ) -> list[Conversation]:
     owns = client is None
     client = client or HttpClient()
     try:
         try:
             data = client.get_json(
-                f"{region.chat_service_url}/v1/users/ME/conversations",
+                f'{region.chat_service_url}/v1/users/ME/conversations',
                 headers=_headers(tokens),
-                params={"view": _VIEW, "pageSize": str(top), "$top": str(top)},
+                params={'view': _VIEW, 'pageSize': str(top), '$top': str(top)},
             )
         except ApiError as exc:
             if exc.status in (401, 403):
                 raise ResourceNotFound(
-                    "The chatsvc service rejected the skypetoken. Run `teams-browser login`."
+                    'The chatsvc service rejected the skypetoken. Run `teams-browser login`.'
                 ) from exc
             raise
     finally:
         if owns:
             client.close()
-    return [parse_conversation(c) for c in (data.get("conversations") or [])]
+    return [parse_conversation(c) for c in (data.get('conversations') or [])]
 
 
 def list_raw_messages(
@@ -249,14 +238,14 @@ def list_raw_messages(
     client = client or HttpClient()
     try:
         data = client.get_json(
-            f"{region.chat_service_url}/v1/users/ME/conversations/{conversation_id}/messages",
+            f'{region.chat_service_url}/v1/users/ME/conversations/{conversation_id}/messages',
             headers=_headers(tokens),
-            params={"view": _VIEW, "pageSize": str(page_size)},
+            params={'view': _VIEW, 'pageSize': str(page_size)},
         )
     finally:
         if owns:
             client.close()
-    return list(data.get("messages") or [])
+    return list(data.get('messages') or [])
 
 
 def list_messages(
@@ -267,9 +256,7 @@ def list_messages(
     page_size: int = 50,
     client: HttpClient | None = None,
 ) -> list[ChatMessage]:
-    raw = list_raw_messages(
-        region, tokens, conversation_id, page_size=page_size, client=client
-    )
+    raw = list_raw_messages(region, tokens, conversation_id, page_size=page_size, client=client)
     messages = [parse_message(m, conversation_id) for m in raw]
     # chatsvc returns newest-first; present chronologically.
     messages.sort(key=lambda m: (m.timestamp is None, m.timestamp))
@@ -277,16 +264,11 @@ def list_messages(
 
 
 def find_conversation(
-    region: RegionConfig,
-    tokens: TokenSet,
-    needle: str,
-    *,
-    top: int = 100,
-    client: HttpClient | None = None,
+    region: RegionConfig, tokens: TokenSet, needle: str, *, top: int = 100, client: HttpClient | None = None
 ) -> Conversation:
     """Find a conversation by exact id or case-insensitive topic substring."""
-    if needle.startswith("19:") and ("@" in needle):
-        candidate = Conversation(id=needle, kind="group")
+    if needle.startswith('19:') and ('@' in needle):
+        candidate = Conversation(id=needle, kind='group')
         try:
             list_messages(region, tokens, needle, page_size=1, client=client)
             return candidate
@@ -295,9 +277,7 @@ def find_conversation(
 
     lowered = unquote(needle).lower()
     matches = [
-        c
-        for c in list_conversations(region, tokens, top=top, client=client)
-        if lowered in (c.topic or "").lower()
+        c for c in list_conversations(region, tokens, top=top, client=client) if lowered in (c.topic or '').lower()
     ]
     if not matches:
         raise ResourceNotFound(f"No conversation matched '{needle}'.")

@@ -30,14 +30,14 @@ from mcp.server import MCPServer
 from mcp.types import ToolAnnotations
 
 mcp = MCPServer(
-    name="m365-local",
-    version="0.1.0",
+    name='m365-local',
+    version='0.1.0',
     instructions=(
-        "Read-only access to local M365 data: Outlook meetings (Calendar.app), "
-        "mail search (Mail.app), and OneDrive-synced SharePoint files. "
+        'Read-only access to local M365 data: Outlook meetings (Calendar.app), '
+        'mail search (Mail.app), and OneDrive-synced SharePoint files. '
         "Prefer mail_search(field='subject') -- it is sub-second. field='body' "
-        "fetches message bodies one at a time and is far slower, so always pass "
-        "`days`. sp_find never downloads anything; sp_read downloads on demand."
+        'fetches message bodies one at a time and is far slower, so always pass '
+        '`days`. sp_find never downloads anything; sp_read downloads on demand.'
     ),
 )
 
@@ -48,14 +48,14 @@ READ_ONLY = ToolAnnotations(read_only_hint=True, destructive_hint=False, idempot
 # Field / record separators. Subjects routinely contain "|", ",", tabs and
 # newlines, so any printable delimiter eventually corrupts parsing. ASCII
 # unit/record separators never appear in real mail text.
-FS = "\x1f"
-RS = "\x1e"
+FS = '\x1f'
+RS = '\x1e'
 
-MAIL_ACCOUNT = os.environ.get("M365_MAIL_ACCOUNT", "Exchange")
+MAIL_ACCOUNT = os.environ.get('M365_MAIL_ACCOUNT', 'Exchange')
 
 # AppleScript error codes worth translating into human instructions.
-ERR_NOT_AUTHORIZED = "-1743"  # user denied the Automation prompt
-ERR_TIMED_OUT = "-1712"  # AppleEvent timed out
+ERR_NOT_AUTHORIZED = '-1743'  # user denied the Automation prompt
+ERR_TIMED_OUT = '-1712'  # AppleEvent timed out
 
 
 class OsaError(RuntimeError):
@@ -98,31 +98,27 @@ def osa(script: str, timeout: int = 60) -> str:
     """
     try:
         proc = subprocess.run(
-            ["osascript"],
-            input=OSA_PRELUDE + script,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
+            ['osascript'], input=OSA_PRELUDE + script, capture_output=True, text=True, timeout=timeout
         )
     except subprocess.TimeoutExpired:
         raise OsaError(
-            f"AppleScript exceeded {timeout}s. For body searches, narrow `days` "
-            "or lower `limit`; for meetings, narrow the date window."
+            f'AppleScript exceeded {timeout}s. For body searches, narrow `days` '
+            'or lower `limit`; for meetings, narrow the date window.'
         ) from None
 
     if proc.returncode != 0:
-        err = (proc.stderr or "").strip()
+        err = (proc.stderr or '').strip()
         if ERR_NOT_AUTHORIZED in err:
             raise OsaError(
-                "macOS denied Automation access. Grant it in System Settings > "
-                "Privacy & Security > Automation, then retry."
+                'macOS denied Automation access. Grant it in System Settings > '
+                'Privacy & Security > Automation, then retry.'
             )
         if ERR_TIMED_OUT in err:
             raise OsaError(
-                "Mail/Calendar stopped responding (AppleEvent timeout). The app "
-                "may be mid-sync; retry with a narrower query."
+                'Mail/Calendar stopped responding (AppleEvent timeout). The app '
+                'may be mid-sync; retry with a narrower query.'
             )
-        raise OsaError(err or f"osascript exited {proc.returncode}")
+        raise OsaError(err or f'osascript exited {proc.returncode}')
     return proc.stdout
 
 
@@ -144,7 +140,7 @@ def parse_records(raw: str, n_fields: int) -> list[list[str]]:
 
 def esc(s: str) -> str:
     """Quote a Python string for embedding in an AppleScript literal."""
-    return s.replace("\\", "\\\\").replace('"', '\\"')
+    return s.replace('\\', '\\\\').replace('"', '\\"')
 
 
 def mailbox_ref(mailbox: str) -> str:
@@ -153,8 +149,8 @@ def mailbox_ref(mailbox: str) -> str:
     "Inbox" maps to Mail's special unified `inbox`; everything else is
     addressed through the account.
     """
-    if mailbox.strip().lower() == "inbox":
-        return "inbox"
+    if mailbox.strip().lower() == 'inbox':
+        return 'inbox'
     return f'mailbox "{esc(mailbox)}" of account "{esc(MAIL_ACCOUNT)}"'
 
 
@@ -165,10 +161,7 @@ def mailbox_ref(mailbox: str) -> str:
 
 @mcp.tool(annotations=READ_ONLY)
 def meetings_list(
-    days_back: int = 1,
-    days_ahead: int = 7,
-    calendar: str | None = None,
-    include_attendees: bool = False,
+    days_back: int = 1, days_ahead: int = 7, calendar: str | None = None, include_attendees: bool = False
 ) -> dict[str, Any]:
     """List calendar events in a date window.
 
@@ -182,7 +175,7 @@ def meetings_list(
         include_attendees: Fetch attendee names/emails. Slower -- one extra
             round-trip per event.
     """
-    cal_filter = ""
+    cal_filter = ''
     if calendar:
         # `considering case` because AppleScript string comparison is
         # case- and diacritic-insensitive by default, and calendar names are
@@ -258,44 +251,44 @@ return out
     recurring = 0
     for cal, start, end, summary, location, uid, att in rows:
         ev: dict[str, Any] = {
-            "calendar": cal,
-            "start": start,
-            "end": end,
-            "summary": summary,
-            "location": location,
-            "uid": uid,
+            'calendar': cal,
+            'start': start,
+            'end': end,
+            'summary': summary,
+            'location': location,
+            'uid': uid,
         }
         try:
             in_window = lo_check <= datetime.fromisoformat(start) <= hi_check
         except ValueError:
             in_window = True  # unparseable date: do not claim anything about it
         if not in_window:
-            ev["recurring_series"] = True
-            ev["start_note"] = (
+            ev['recurring_series'] = True
+            ev['start_note'] = (
                 "This is a recurring event; `start` is the series' first "
-                "occurrence, not the one falling in the requested window."
+                'occurrence, not the one falling in the requested window.'
             )
             recurring += 1
         events.append(ev)
         if include_attendees:
-            ev["attendees"] = [a for a in att.split(";") if a]
+            ev['attendees'] = [a for a in att.split(';') if a]
 
-    events.sort(key=lambda e: e["start"])
+    events.sort(key=lambda e: e['start'])
     out: dict[str, Any] = {
-        "window": {
-            "days_back": days_back,
-            "days_ahead": days_ahead,
-            "from": lo.isoformat(timespec="seconds"),
-            "to": hi.isoformat(timespec="seconds"),
+        'window': {
+            'days_back': days_back,
+            'days_ahead': days_ahead,
+            'from': lo.isoformat(timespec='seconds'),
+            'to': hi.isoformat(timespec='seconds'),
         },
-        "count": len(events),
-        "events": events,
+        'count': len(events),
+        'events': events,
     }
     if recurring:
-        out["recurring_series_count"] = recurring
-        out["note"] = (
-            f"{recurring} event(s) are recurring and show their series start date. "
-            "They do occur in the requested window; the exact occurrence time is "
+        out['recurring_series_count'] = recurring
+        out['note'] = (
+            f'{recurring} event(s) are recurring and show their series start date. '
+            'They do occur in the requested window; the exact occurrence time is '
             "not available through Calendar.app's AppleScript interface."
         )
     return out
@@ -328,10 +321,7 @@ return out
 """
     rows = parse_records(osa(script, timeout=200), 2)
     return {
-        "calendars": [
-            {"index": i + 1, "name": name, "events_next_30d": int(n)}
-            for i, (name, n) in enumerate(rows)
-        ]
+        'calendars': [{'index': i + 1, 'name': name, 'events_next_30d': int(n)} for i, (name, n) in enumerate(rows)]
     }
 
 
@@ -372,14 +362,12 @@ return out
     rows = parse_records(osa(script, timeout=140), 3)
     accounts: dict[str, dict[str, Any]] = {}
     for acct, addr, mbox in rows:
-        entry = accounts.setdefault(acct, {"account": acct, "address": addr, "mailboxes": []})
-        entry["mailboxes"].append(mbox)
-    return {"accounts": list(accounts.values()), "configured_account": MAIL_ACCOUNT}
+        entry = accounts.setdefault(acct, {'account': acct, 'address': addr, 'mailboxes': []})
+        entry['mailboxes'].append(mbox)
+    return {'accounts': list(accounts.values()), 'configured_account': MAIL_ACCOUNT}
 
 
-def _search_metadata(
-    clause: str, limit: int, timeout: int
-) -> tuple[list[list[str]], int]:
+def _search_metadata(clause: str, limit: int, timeout: int) -> tuple[list[list[str]], int]:
     """Run a metadata-only whose-clause search. Fast: no bodies fetched.
 
     Returns (rows, total_matched). `total_matched` is the size of the full match
@@ -389,7 +377,7 @@ def _search_metadata(
     Rows come back in Mail's own collection order, which is NOT guaranteed to be
     newest-first; callers that care must sort.
     """
-    cap = "" if limit <= 0 else f"\n        if n > {int(limit)} then set n to {int(limit)}"
+    cap = '' if limit <= 0 else f'\n        if n > {int(limit)} then set n to {int(limit)}'
     script = f"""
 set out to ""
 tell application "Mail"
@@ -418,8 +406,8 @@ end tell
 @mcp.tool(annotations=READ_ONLY)
 def mail_search(
     query: str,
-    mailbox: str = "Inbox",
-    field: str = "subject",
+    mailbox: str = 'Inbox',
+    field: str = 'subject',
     days: int | None = None,
     limit: int = 25,
     max_scan: int = 60,
@@ -446,44 +434,41 @@ def mail_search(
             scan was truncated.
     """
     field = field.lower().strip()
-    if field not in {"subject", "sender", "body"}:
-        return {"error": f"field must be subject, sender or body (got {field!r})"}
+    if field not in {'subject', 'sender', 'body'}:
+        return {'error': f'field must be subject, sender or body (got {field!r})'}
     if not query.strip():
-        return {"error": "query must not be empty"}
+        return {'error': 'query must not be empty'}
 
     mb = mailbox_ref(mailbox)
-    date_clause = ""
+    date_clause = ''
     if days is not None:
-        date_clause = f" and date received > ((current date) - ({int(days)} * days))"
+        date_clause = f' and date received > ((current date) - ({int(days)} * days))'
 
     started = time.monotonic()
 
-    if field in {"subject", "sender"}:
+    if field in {'subject', 'sender'}:
         clause = f'messages of {mb} whose {field} contains "{esc(query)}"{date_clause}'
         rows, total = _search_metadata(clause, limit, timeout=90)
-        results = [
-            {"id": int(mid), "date": d, "sender": s, "subject": subj}
-            for mid, d, s, subj in rows
-        ]
-        results.sort(key=lambda r: r["date"], reverse=True)
+        results = [{'id': int(mid), 'date': d, 'sender': s, 'subject': subj} for mid, d, s, subj in rows]
+        results.sort(key=lambda r: r['date'], reverse=True)
         out: dict[str, Any] = {
-            "query": query,
-            "field": field,
-            "mailbox": mailbox,
-            "count": len(results),
-            "elapsed_s": round(time.monotonic() - started, 2),
-            "results": results,
+            'query': query,
+            'field': field,
+            'mailbox': mailbox,
+            'count': len(results),
+            'elapsed_s': round(time.monotonic() - started, 2),
+            'results': results,
         }
         # A capped list must never read as an exhaustive one.
         if total > len(results):
-            out["total_matched"] = total
-            out["truncated"] = True
-            out["note"] = (
-                f"{total} messages match; {len(results)} returned (limit={limit}). "
-                "Raise `limit` or narrow with `days` to see the rest."
+            out['total_matched'] = total
+            out['truncated'] = True
+            out['note'] = (
+                f'{total} messages match; {len(results)} returned (limit={limit}). '
+                'Raise `limit` or narrow with `days` to see the rest.'
             )
         elif total < 0:
-            out["truncated"] = "unknown"
+            out['truncated'] = 'unknown'
         return out
 
     # --- body search: two-stage ------------------------------------------
@@ -492,13 +477,13 @@ def mail_search(
     # stage 2 fetches bodies for a capped candidate set in ONE osascript call.
     if days is None:
         days = 7
-        date_clause = " and date received > ((current date) - (7 * days))"
+        date_clause = ' and date received > ((current date) - (7 * days))'
 
     # How many recent messages to pull bodies for. Measured ~0.13s/message on
     # locally-cached mail, so 200 is roughly a 30s ceiling. Tunable because the
     # right depth depends on the mailbox, not on anything we can detect here.
     cap = max(1, min(int(max_scan), 200))
-    clause = f"messages of {mb} whose date received > ((current date) - ({int(days)} * days))"
+    clause = f'messages of {mb} whose date received > ((current date) - ({int(days)} * days))'
     # Pull the whole window's metadata uncapped (cheap -- no bodies) and sort
     # newest-first here. Mail's collection order is not guaranteed to be
     # newest-first, so capping inside AppleScript could hand back the OLDEST
@@ -509,16 +494,16 @@ def mail_search(
 
     if not candidates:
         return {
-            "query": query,
-            "field": "body",
-            "mailbox": mailbox,
-            "count": 0,
-            "results": [],
-            "note": f"No messages in the last {days} days in {mailbox}.",
+            'query': query,
+            'field': 'body',
+            'mailbox': mailbox,
+            'count': 0,
+            'results': [],
+            'note': f'No messages in the last {days} days in {mailbox}.',
         }
 
     ids = [c[0] for c in candidates]
-    id_list = ", ".join(ids)
+    id_list = ', '.join(ids)
     # Bodies in one call: ~0.4s each measured, so scale the timeout by count.
     body_timeout = min(20 + int(len(ids) * 3), 240)
     script = f"""
@@ -542,7 +527,7 @@ return out
     meta = {c[0]: c for c in candidates}
     results = []
     for mid in ids:
-        body = bodies.get(mid, "")
+        body = bodies.get(mid, '')
         pos = body.lower().find(needle)
         if pos < 0:
             continue
@@ -550,54 +535,54 @@ return out
         start = max(0, pos - 120)
         results.append(
             {
-                "id": int(mid),
-                "date": d,
-                "sender": sender,
-                "subject": subject,
-                "snippet": body[start : pos + 240].replace("\n", " ").strip(),
+                'id': int(mid),
+                'date': d,
+                'sender': sender,
+                'subject': subject,
+                'snippet': body[start : pos + 240].replace('\n', ' ').strip(),
             }
         )
         if len(results) >= limit:
             break
 
     out: dict[str, Any] = {
-        "query": query,
-        "field": "body",
-        "mailbox": mailbox,
-        "count": len(results),
-        "elapsed_s": round(time.monotonic() - started, 2),
-        "results": results,
+        'query': query,
+        'field': 'body',
+        'mailbox': mailbox,
+        'count': len(results),
+        'elapsed_s': round(time.monotonic() - started, 2),
+        'results': results,
     }
     # Never let a bounded scan look like an exhaustive one.
     if total_in_window > len(candidates):
-        out["truncated"] = True
-        out["messages_in_window"] = total_in_window
-        out["note"] = (
-            f"{total_in_window} messages fall in the last {days} days; only the "
-            f"{len(candidates)} most recent were body-scanned (max_scan={cap}). "
-            "Raise `max_scan`, narrow `days`, or search by subject for full coverage."
+        out['truncated'] = True
+        out['messages_in_window'] = total_in_window
+        out['note'] = (
+            f'{total_in_window} messages fall in the last {days} days; only the '
+            f'{len(candidates)} most recent were body-scanned (max_scan={cap}). '
+            'Raise `max_scan`, narrow `days`, or search by subject for full coverage.'
         )
     unavailable = len(ids) - len(bodies)
     if unavailable > 0:
-        out["bodies_unavailable"] = unavailable
+        out['bodies_unavailable'] = unavailable
     # Some messages (calendar invites, image-only HTML) return an empty
     # `content`. They cannot be body-matched, so report them rather than letting
     # them look like genuine non-matches. Counted over messages we actually got
     # back, so they are not double-counted with `bodies_unavailable`.
     empty = sum(1 for body in bodies.values() if not body.strip())
     if empty:
-        out["bodies_empty"] = empty
-        out["bodies_empty_note"] = (
-            f"{empty} of {len(bodies)} fetched message(s) have no extractable text "
-            "body (typically meeting invites or image-only mail) and could not be "
-            "body-matched. Search by subject to reach those."
+        out['bodies_empty'] = empty
+        out['bodies_empty_note'] = (
+            f'{empty} of {len(bodies)} fetched message(s) have no extractable text '
+            'body (typically meeting invites or image-only mail) and could not be '
+            'body-matched. Search by subject to reach those.'
         )
-    out["candidates_scanned"] = len(ids)
+    out['candidates_scanned'] = len(ids)
     return out
 
 
 @mcp.tool(annotations=READ_ONLY)
-def mail_get(message_id: int, mailbox: str = "Inbox", max_chars: int = 20000) -> dict[str, Any]:
+def mail_get(message_id: int, mailbox: str = 'Inbox', max_chars: int = 20000) -> dict[str, Any]:
     """Fetch one message's full headers and body by id.
 
     Get ids from `mail_search`.
@@ -616,18 +601,18 @@ end tell
     raw = osa(script, timeout=270)
     fields = raw.split(FS)
     if len(fields) < 5:
-        return {"error": f"message {message_id} not found in {mailbox}"}
+        return {'error': f'message {message_id} not found in {mailbox}'}
     subject, sender, date, reply_to, body = fields[0], fields[1], fields[2], fields[3], FS.join(fields[4:])
     return {
-        "id": message_id,
-        "mailbox": mailbox,
-        "subject": subject,
-        "sender": sender,
-        "date": date,
-        "reply_to": reply_to,
-        "body": body[:max_chars],
-        "body_chars": len(body),
-        "body_truncated": len(body) > max_chars,
+        'id': message_id,
+        'mailbox': mailbox,
+        'subject': subject,
+        'sender': sender,
+        'date': date,
+        'reply_to': reply_to,
+        'body': body[:max_chars],
+        'body_chars': len(body),
+        'body_truncated': len(body) > max_chars,
     }
 
 
@@ -635,9 +620,9 @@ end tell
 # SharePoint (OneDrive-synced libraries on disk)
 # --------------------------------------------------------------------------
 
-SKIP_DIRS = {".Trash", ".DS_Store"}
-TEXT_SUFFIXES = {".txt", ".md", ".csv", ".tsv", ".json", ".xml", ".yaml", ".yml", ".log", ".sql", ".py"}
-OFFICE_SUFFIXES = {".xlsx", ".xlsm", ".docx", ".pptx"}
+SKIP_DIRS = {'.Trash', '.DS_Store'}
+TEXT_SUFFIXES = {'.txt', '.md', '.csv', '.tsv', '.json', '.xml', '.yaml', '.yml', '.log', '.sql', '.py'}
+OFFICE_SUFFIXES = {'.xlsx', '.xlsm', '.docx', '.pptx'}
 
 # Refuse to download and decode anything larger than this. Placeholders report
 # their true size for free, so an oversized file costs nothing to reject.
@@ -651,8 +636,8 @@ def sync_roots() -> list[Path]:
     "OneDrive-SharedLibraries-<Org> 2" (it appends " 2" after a name
     collision), and both the org name and that suffix can change.
     """
-    base = Path.home() / "Library" / "CloudStorage"
-    roots = sorted(p for p in base.glob("OneDrive-SharedLibraries-*") if p.is_dir())
+    base = Path.home() / 'Library' / 'CloudStorage'
+    roots = sorted(p for p in base.glob('OneDrive-SharedLibraries-*') if p.is_dir())
     return roots
 
 
@@ -665,8 +650,8 @@ def _resolve_in_roots(raw_path: str) -> Path:
     roots = sync_roots()
     if not roots:
         raise ValueError(
-            f"No synced SharePoint library found under {Path.home()}/Library/CloudStorage "
-            "(looked for OneDrive-SharedLibraries-*). Sync a library in SharePoint first."
+            f'No synced SharePoint library found under {Path.home()}/Library/CloudStorage '
+            '(looked for OneDrive-SharedLibraries-*). Sync a library in SharePoint first.'
         )
     target = Path(raw_path).expanduser()
     if not target.is_absolute():
@@ -676,8 +661,7 @@ def _resolve_in_roots(raw_path: str) -> Path:
         if target == root.resolve() or target.is_relative_to(root.resolve()):
             return target
     raise ValueError(
-        f"Path is outside the synced SharePoint roots: {target}. Allowed roots: "
-        + ", ".join(str(r) for r in roots)
+        f'Path is outside the synced SharePoint roots: {target}. Allowed roots: ' + ', '.join(str(r) for r in roots)
     )
 
 
@@ -693,7 +677,7 @@ def _is_hydrated(st: os.stat_result) -> bool:
     """
     if st.st_size == 0:
         return True
-    return getattr(st, "st_blocks", 0) > 0
+    return getattr(st, 'st_blocks', 0) > 0
 
 
 @mcp.tool(annotations=READ_ONLY)
@@ -703,21 +687,16 @@ def sp_roots() -> dict[str, Any]:
     for root in sync_roots():
         libs = []
         for child in sorted(root.iterdir()):
-            if child.name.startswith(".") or child.name == "Icon\r":
+            if child.name.startswith('.') or child.name == 'Icon\r':
                 continue
             if child.is_dir():
                 libs.append(child.name)
-        out.append({"root": str(root), "libraries": libs})
-    return {"roots": out}
+        out.append({'root': str(root), 'libraries': libs})
+    return {'roots': out}
 
 
 @mcp.tool(annotations=READ_ONLY)
-def sp_find(
-    pattern: str,
-    subdir: str | None = None,
-    limit: int = 100,
-    include_dirs: bool = False,
-) -> dict[str, Any]:
+def sp_find(pattern: str, subdir: str | None = None, limit: int = 100, include_dirs: bool = False) -> dict[str, Any]:
     """Search synced SharePoint files by name or path. Downloads nothing.
 
     Matches filenames only -- no file contents are read, so this is instant and
@@ -734,18 +713,18 @@ def sp_find(
     """
     roots = sync_roots()
     if not roots:
-        return {"error": "No synced SharePoint libraries found under ~/Library/CloudStorage."}
+        return {'error': 'No synced SharePoint libraries found under ~/Library/CloudStorage.'}
 
     if subdir:
         try:
             search_bases = [_resolve_in_roots(subdir)]
         except ValueError as e:
             # Return the error shape the model can act on, not a traceback.
-            return {"error": str(e)}
+            return {'error': str(e)}
     else:
         search_bases = roots
 
-    is_glob = any(ch in pattern for ch in "*?")
+    is_glob = any(ch in pattern for ch in '*?')
     needle = pattern.lower()
 
     hits: list[dict[str, Any]] = []
@@ -756,17 +735,15 @@ def sp_find(
     # sorted by date -- presenting itself as "newest first" while omitting newer
     # files found later in the walk. Metadata-only, so a full walk is cheap.
     for base in search_bases:
-        for path in base.rglob("*"):
-            if any(part in SKIP_DIRS or part.startswith("._") for part in path.parts):
+        for path in base.rglob('*'):
+            if any(part in SKIP_DIRS or part.startswith('._') for part in path.parts):
                 continue
             is_dir = path.is_dir()
             if is_dir and not include_dirs:
                 continue
             scanned += 1
             name = path.name
-            matched = (
-                fnmatch.fnmatch(name.lower(), needle) if is_glob else needle in name.lower()
-            )
+            matched = fnmatch.fnmatch(name.lower(), needle) if is_glob else needle in name.lower()
             if not matched:
                 continue
             try:
@@ -775,40 +752,38 @@ def sp_find(
                 continue
             hits.append(
                 {
-                    "path": str(path),
-                    "name": name,
-                    "is_dir": is_dir,
-                    "size": st.st_size,
-                    "modified": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(st.st_mtime)),
-                    "hydrated": _is_hydrated(st),
+                    'path': str(path),
+                    'name': name,
+                    'is_dir': is_dir,
+                    'size': st.st_size,
+                    'modified': time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(st.st_mtime)),
+                    'hydrated': _is_hydrated(st),
                 }
             )
 
-    hits.sort(key=lambda h: h["modified"], reverse=True)
+    hits.sort(key=lambda h: h['modified'], reverse=True)
     total_matched = len(hits)
     truncated = total_matched > limit
     hits = hits[:limit]
 
     result: dict[str, Any] = {
-        "pattern": pattern,
-        "match_mode": "glob" if is_glob else "substring",
-        "scanned": scanned,
-        "count": len(hits),
-        "results": hits,
+        'pattern': pattern,
+        'match_mode': 'glob' if is_glob else 'substring',
+        'scanned': scanned,
+        'count': len(hits),
+        'results': hits,
     }
     if truncated:
-        result["truncated"] = True
-        result["total_matched"] = total_matched
-        result["note"] = (
-            f"{total_matched} files match; the {limit} most recently modified are "
-            "returned. Raise `limit` or narrow `pattern`/`subdir`."
+        result['truncated'] = True
+        result['total_matched'] = total_matched
+        result['note'] = (
+            f'{total_matched} files match; the {limit} most recently modified are '
+            'returned. Raise `limit` or narrow `pattern`/`subdir`.'
         )
-    not_local = sum(1 for h in hits if not h["hydrated"] and not h["is_dir"])
+    not_local = sum(1 for h in hits if not h['hydrated'] and not h['is_dir'])
     if not_local:
-        result["placeholders"] = not_local
-        result["placeholder_note"] = (
-            f"{not_local} result(s) are not downloaded yet; sp_read will fetch them on demand."
-        )
+        result['placeholders'] = not_local
+        result['placeholder_note'] = f'{not_local} result(s) are not downloaded yet; sp_read will fetch them on demand.'
     return result
 
 
@@ -817,8 +792,8 @@ def _xml_text(data: bytes) -> str:
     try:
         root = ET.fromstring(data)
     except ET.ParseError:
-        return ""
-    return " ".join(t.strip() for t in root.itertext() if t and t.strip())
+        return ''
+    return ' '.join(t.strip() for t in root.itertext() if t and t.strip())
 
 
 def _xlsx_sheet_parts(zf: zipfile.ZipFile) -> list[tuple[str, str]]:
@@ -830,36 +805,36 @@ def _xlsx_sheet_parts(zf: zipfile.ZipFile) -> list[tuple[str, str]]:
     everything past the ninth sheet (sheet1, sheet10, sheet11, sheet2, ...), so
     the relationship table is resolved properly here.
     """
-    main = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
-    rel_ns = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
-    pkg_ns = "{http://schemas.openxmlformats.org/package/2006/relationships}"
+    main = '{http://schemas.openxmlformats.org/spreadsheetml/2006/main}'
+    rel_ns = '{http://schemas.openxmlformats.org/officeDocument/2006/relationships}'
+    pkg_ns = '{http://schemas.openxmlformats.org/package/2006/relationships}'
 
     parts = zf.namelist()
 
     rels: dict[str, str] = {}
-    if "xl/_rels/workbook.xml.rels" in parts:
+    if 'xl/_rels/workbook.xml.rels' in parts:
         try:
-            tree = ET.fromstring(zf.read("xl/_rels/workbook.xml.rels"))
-            for rel in tree.iter(f"{pkg_ns}Relationship"):
-                rid, target = rel.get("Id"), rel.get("Target", "")
+            tree = ET.fromstring(zf.read('xl/_rels/workbook.xml.rels'))
+            for rel in tree.iter(f'{pkg_ns}Relationship'):
+                rid, target = rel.get('Id'), rel.get('Target', '')
                 if not rid or not target:
                     continue
-                target = target.lstrip("/")
-                if not target.startswith("xl/"):
-                    target = "xl/" + target
+                target = target.lstrip('/')
+                if not target.startswith('xl/'):
+                    target = 'xl/' + target
                 rels[rid] = target
         except ET.ParseError:
             pass
 
     ordered: list[tuple[str, str]] = []
     names: list[str] = []
-    if "xl/workbook.xml" in parts:
+    if 'xl/workbook.xml' in parts:
         try:
-            wb = ET.fromstring(zf.read("xl/workbook.xml"))
-            for sheet in wb.iter(f"{main}sheet"):
-                name = sheet.get("name", "")
+            wb = ET.fromstring(zf.read('xl/workbook.xml'))
+            for sheet in wb.iter(f'{main}sheet'):
+                name = sheet.get('name', '')
                 names.append(name)
-                part = rels.get(sheet.get(f"{rel_ns}id", ""), "")
+                part = rels.get(sheet.get(f'{rel_ns}id', ''), '')
                 if part in parts:
                     ordered.append((name, part))
         except ET.ParseError:
@@ -870,12 +845,10 @@ def _xlsx_sheet_parts(zf: zipfile.ZipFile) -> list[tuple[str, str]]:
     # No usable relationship table. Sort parts NUMERICALLY (so sheet2 precedes
     # sheet10 -- lexicographic order is what mislabels 10+ sheet workbooks).
     def sheet_no(p: str) -> int:
-        m = re.search(r"sheet(\d+)\.xml$", p)
+        m = re.search(r'sheet(\d+)\.xml$', p)
         return int(m.group(1)) if m else 0
 
-    sheet_parts = sorted(
-        (p for p in parts if re.match(r"xl/worksheets/sheet\d+\.xml$", p)), key=sheet_no
-    )
+    sheet_parts = sorted((p for p in parts if re.match(r'xl/worksheets/sheet\d+\.xml$', p)), key=sheet_no)
     # If workbook.xml still gave us names, pair them positionally: numeric part
     # order matches document order in all but pathological files, and keeping
     # the real sheet names beats labelling everything "sheetN".
@@ -891,65 +864,63 @@ def _xlsx_text(zf: zipfile.ZipFile, max_chars: int) -> str:
     formatting, merged cells, formulas and number formats (a date shows as its
     serial number). Upgrade to openpyxl if real cell typing is needed.
     """
-    ns = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+    ns = '{http://schemas.openxmlformats.org/spreadsheetml/2006/main}'
     shared: list[str] = []
-    if "xl/sharedStrings.xml" in zf.namelist():
+    if 'xl/sharedStrings.xml' in zf.namelist():
         try:
-            sst = ET.fromstring(zf.read("xl/sharedStrings.xml"))
-            for si in sst.findall(f"{ns}si"):
-                shared.append(" ".join(t.strip() for t in si.itertext() if t and t.strip()))
+            sst = ET.fromstring(zf.read('xl/sharedStrings.xml'))
+            for si in sst.findall(f'{ns}si'):
+                shared.append(' '.join(t.strip() for t in si.itertext() if t and t.strip()))
         except ET.ParseError:
             pass
 
     chunks: list[str] = []
     total = 0
     for label, sheet in _xlsx_sheet_parts(zf):
-        chunks.append(f"### sheet: {label}")
+        chunks.append(f'### sheet: {label}')
         try:
             ws = ET.fromstring(zf.read(sheet))
         except (ET.ParseError, KeyError):
             continue
-        for row in ws.iter(f"{ns}row"):
+        for row in ws.iter(f'{ns}row'):
             cells = []
-            for c in row.iter(f"{ns}c"):
-                v = c.find(f"{ns}v")
-                if c.get("t") == "s" and v is not None and v.text and v.text.isdigit():
+            for c in row.iter(f'{ns}c'):
+                v = c.find(f'{ns}v')
+                if c.get('t') == 's' and v is not None and v.text and v.text.isdigit():
                     i = int(v.text)
-                    cells.append(shared[i] if i < len(shared) else "")
-                elif c.get("t") == "inlineStr":
-                    cells.append(" ".join(t.strip() for t in c.itertext() if t and t.strip()))
+                    cells.append(shared[i] if i < len(shared) else '')
+                elif c.get('t') == 'inlineStr':
+                    cells.append(' '.join(t.strip() for t in c.itertext() if t and t.strip()))
                 elif v is not None and v.text:
                     cells.append(v.text)
                 else:
-                    cells.append("")
-            line = "\t".join(cells).rstrip()
+                    cells.append('')
+            line = '\t'.join(cells).rstrip()
             if line:
                 chunks.append(line)
                 total += len(line)
                 if total > max_chars:
-                    chunks.append("... [truncated]")
-                    return "\n".join(chunks)
-    return "\n".join(chunks)
+                    chunks.append('... [truncated]')
+                    return '\n'.join(chunks)
+    return '\n'.join(chunks)
 
 
 def _office_text(path: Path, max_chars: int) -> str:
     """Text from an OOXML file using only the stdlib (these are zip + XML)."""
     with zipfile.ZipFile(path) as zf:
         suffix = path.suffix.lower()
-        if suffix in {".xlsx", ".xlsm"}:
+        if suffix in {'.xlsx', '.xlsm'}:
             return _xlsx_text(zf, max_chars)
-        if suffix == ".docx":
-            return _xml_text(zf.read("word/document.xml"))
-        if suffix == ".pptx":
-            slides = sorted(
-                n for n in zf.namelist() if re.match(r"ppt/slides/slide\d+\.xml$", n)
-            )
+        if suffix == '.docx':
+            return _xml_text(zf.read('word/document.xml'))
+        if suffix == '.pptx':
+            slides = sorted(n for n in zf.namelist() if re.match(r'ppt/slides/slide\d+\.xml$', n))
             parts = []
             for i, s in enumerate(slides, 1):
-                parts.append(f"### slide {i}")
+                parts.append(f'### slide {i}')
                 parts.append(_xml_text(zf.read(s)))
-            return "\n".join(parts)
-    return ""
+            return '\n'.join(parts)
+    return ''
 
 
 @mcp.tool(annotations=READ_ONLY)
@@ -965,35 +936,32 @@ def sp_read(path: str, max_chars: int = 20000) -> dict[str, Any]:
     try:
         target = _resolve_in_roots(path)
     except ValueError as e:
-        return {"error": str(e)}
+        return {'error': str(e)}
 
     if not target.exists():
-        return {"error": f"Not found: {target}"}
+        return {'error': f'Not found: {target}'}
     if target.is_dir():
-        return {"error": f"Path is a directory, not a file: {target}"}
+        return {'error': f'Path is a directory, not a file: {target}'}
 
     st = target.stat()
     was_hydrated = _is_hydrated(st)
     suffix = target.suffix.lower()
 
-    if suffix == ".pdf":
-        return {
-            "error": "PDF text extraction is not supported. Open the file directly.",
-            "path": str(target),
-        }
+    if suffix == '.pdf':
+        return {'error': 'PDF text extraction is not supported. Open the file directly.', 'path': str(target)}
 
     # Size gate BEFORE reading. `max_chars` only trims after the whole file is
     # decoded, so without this a multi-gigabyte placeholder (.mp4, .zip, .pst)
     # would be fully downloaded from OneDrive and decoded into memory.
     if st.st_size > MAX_READ_BYTES:
         return {
-            "error": (
-                f"File is {st.st_size:,} bytes, over the {MAX_READ_BYTES:,}-byte read "
-                "limit. Refusing to download and decode it. Open it directly instead."
+            'error': (
+                f'File is {st.st_size:,} bytes, over the {MAX_READ_BYTES:,}-byte read '
+                'limit. Refusing to download and decode it. Open it directly instead.'
             ),
-            "path": str(target),
-            "size": st.st_size,
-            "was_downloaded_before": was_hydrated,
+            'path': str(target),
+            'size': st.st_size,
+            'was_downloaded_before': was_hydrated,
         }
 
     try:
@@ -1002,16 +970,16 @@ def sp_read(path: str, max_chars: int = 20000) -> dict[str, Any]:
         else:
             # Known text suffixes, extensionless files, and anything else: try
             # text and let replacement chars reveal a binary.
-            text = target.read_text(errors="replace")
+            text = target.read_text(errors='replace')
     except zipfile.BadZipFile:
-        return {"error": f"Not a readable OOXML file (corrupt or wrong extension): {target}"}
+        return {'error': f'Not a readable OOXML file (corrupt or wrong extension): {target}'}
     except KeyError as e:
         # A valid zip missing the part we expect (odd producers, renamed archive).
-        return {"error": f"Missing expected part {e} in {target.name}; not a usable OOXML file."}
+        return {'error': f'Missing expected part {e} in {target.name}; not a usable OOXML file.'}
     except OSError as e:
         return {
-            "error": f"Read failed ({e}). If the file is a placeholder, OneDrive may be "
-            "offline or the download was blocked."
+            'error': f'Read failed ({e}). If the file is a placeholder, OneDrive may be '
+            'offline or the download was blocked.'
         }
 
     # NOTE: deliberately no html.unescape here. Office text arrives already
@@ -1019,21 +987,21 @@ def sp_read(path: str, max_chars: int = 20000) -> dict[str, Any]:
     # reading "&lt;tag&gt;" into "<tag>"; and for plain text/CSV/JSON it
     # corrupts ordinary content ("x=1&amp;y=2" -> "x=1&y=2").
     return {
-        "path": str(target),
-        "size": st.st_size,
-        "was_downloaded_before": was_hydrated,
-        "content": text[:max_chars],
-        "chars": len(text),
-        "truncated": len(text) > max_chars,
+        'path': str(target),
+        'size': st.st_size,
+        'was_downloaded_before': was_hydrated,
+        'content': text[:max_chars],
+        'chars': len(text),
+        'truncated': len(text) > max_chars,
     }
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     # stdio transport: stdout is the protocol channel, so diagnostics go to stderr.
     if not sync_roots():
         print(
-            "warning: no OneDrive-SharedLibraries-* root found; SharePoint tools "
-            "will return errors until a library is synced.",
+            'warning: no OneDrive-SharedLibraries-* root found; SharePoint tools '
+            'will return errors until a library is synced.',
             file=sys.stderr,
         )
     mcp.run()

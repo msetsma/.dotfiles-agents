@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 def cache_ttl_seconds() -> int:
-    value = os.environ.get("ENTRA_MEMBERSHIP_CACHE_TTL_SECONDS", "86400")
+    value = os.environ.get('ENTRA_MEMBERSHIP_CACHE_TTL_SECONDS', '86400')
     return int(value) if value.isdigit() else 86400
 
 
@@ -30,16 +30,16 @@ def cache_created_at(meta_file: Path) -> int | None:
 
 def human_age(seconds: int | None) -> str:
     if seconds is None:
-        return "-"
+        return '-'
     if seconds < 60:
-        return f"{seconds}s"
+        return f'{seconds}s'
     minutes = seconds // 60
     if minutes < 60:
-        return f"{minutes}m"
+        return f'{minutes}m'
     hours = minutes // 60
     if hours < 48:
-        return f"{hours}h"
-    return f"{hours // 24}d"
+        return f'{hours}h'
+    return f'{hours // 24}d'
 
 
 def cache_state_label(from_cache: bool, is_fresh: bool) -> str:
@@ -49,15 +49,15 @@ def cache_state_label(from_cache: bool, is_fresh: bool) -> str:
     a cache served because the refresh failed.
     """
     if not from_cache:
-        return "fresh"
-    return "hit" if is_fresh else "stale"
+        return 'fresh'
+    return 'hit' if is_fresh else 'stale'
 
 
 def report_cache_entry_is_fresh(entry: object) -> bool:
     if not isinstance(entry, dict):
         return False
-    fetched_at = entry.get("fetchedAt")
-    children = entry.get("children")
+    fetched_at = entry.get('fetchedAt')
+    children = entry.get('children')
     if not isinstance(fetched_at, int) or not isinstance(children, list):
         return False
     age = int(time.time()) - fetched_at

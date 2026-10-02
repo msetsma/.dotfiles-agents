@@ -26,18 +26,15 @@ from .chats import list_raw_messages
 from .http import HttpClient
 from .util import parse_dt
 
-CALL_LOGS_CONVERSATION = "48:calllogs"
+CALL_LOGS_CONVERSATION = '48:calllogs'
 
-_CALL_LOG_MEDIA = ("RichText/Media_CallLogTranscript", "RichText/Media_CallLogRecording")
+_CALL_LOG_MEDIA = ('RichText/Media_CallLogTranscript', 'RichText/Media_CallLogRecording')
 
 
 def _participant(raw: Any) -> CallParticipant | None:
     if not isinstance(raw, dict):
         return None
-    return CallParticipant(
-        id=raw.get("id") or raw.get("mri") or None,
-        display_name=(raw.get("displayName") or None),
-    )
+    return CallParticipant(id=raw.get('id') or raw.get('mri') or None, display_name=(raw.get('displayName') or None))
 
 
 def _loads(value: Any) -> dict[str, Any] | None:
@@ -54,54 +51,54 @@ def _loads(value: Any) -> dict[str, Any] | None:
 
 def parse_call_log_entry(log: dict[str, Any]) -> Call | None:
     """Build a ::class:`Call` from a ``properties.call-log`` JSON object."""
-    call_id = log.get("callId")
+    call_id = log.get('callId')
     if not call_id:
         return None
-    participants = [p for p in map(_participant, log.get("participantList") or []) if p]
+    participants = [p for p in map(_participant, log.get('participantList') or []) if p]
     return Call(
         call_id=str(call_id),
-        direction=log.get("callDirection") or None,
-        kind=log.get("callType") or None,
-        state=log.get("callState") or None,
-        start_time=parse_dt(log.get("startTime")),
-        end_time=parse_dt(log.get("endTime")),
-        originator=_participant(log.get("originatorParticipant")) or _participant(log.get("originator")),
-        target=_participant(log.get("targetParticipant")) or _participant(log.get("target")),
+        direction=log.get('callDirection') or None,
+        kind=log.get('callType') or None,
+        state=log.get('callState') or None,
+        start_time=parse_dt(log.get('startTime')),
+        end_time=parse_dt(log.get('endTime')),
+        originator=_participant(log.get('originatorParticipant')) or _participant(log.get('originator')),
+        target=_participant(log.get('targetParticipant')) or _participant(log.get('target')),
         participants=participants,
     )
 
 
 def parse_call_log_event(raw: dict[str, Any]) -> Call | None:
     """Build a ::class:`Call` from a ``Media_CallLog*`` event message."""
-    message_type = raw.get("messagetype") or ""
+    message_type = raw.get('messagetype') or ''
     if message_type not in _CALL_LOG_MEDIA:
         return None
-    payload = _loads(raw.get("content"))
-    if not payload or not payload.get("CallId"):
+    payload = _loads(raw.get('content'))
+    if not payload or not payload.get('CallId'):
         return None
-    types = str(payload.get("ContentTypes") or "").lower()
+    types = str(payload.get('ContentTypes') or '').lower()
     return Call(
-        call_id=str(payload["CallId"]),
-        thread_id=payload.get("ThreadId") or None,
-        has_transcript="transcript" in types or message_type.endswith("Transcript"),
-        has_recording="recording" in types or message_type.endswith("Recording"),
+        call_id=str(payload['CallId']),
+        thread_id=payload.get('ThreadId') or None,
+        has_transcript='transcript' in types or message_type.endswith('Transcript'),
+        has_recording='recording' in types or message_type.endswith('Recording'),
     )
 
 
 def parse_call_log_message(raw: dict[str, Any]) -> Call | None:
     """Parse any message in the call-logs conversation, or ``None``."""
-    message_type = raw.get("messagetype") or ""
+    message_type = raw.get('messagetype') or ''
     if message_type in _CALL_LOG_MEDIA:
         return parse_call_log_event(raw)
-    if message_type == "Text":
-        properties = raw.get("properties") or {}
-        return parse_call_log_entry(_loads(properties.get("call-log")) or {})
+    if message_type == 'Text':
+        properties = raw.get('properties') or {}
+        return parse_call_log_entry(_loads(properties.get('call-log')) or {})
     return None
 
 
 def _merge(base: Call, update: Call) -> None:
     """Fold an event's thread/availability onto its call-log entry."""
-    for field in ("thread_id", "direction", "kind", "state", "start_time", "end_time", "title"):
+    for field in ('thread_id', 'direction', 'kind', 'state', 'start_time', 'end_time', 'title'):
         if getattr(base, field) is None and getattr(update, field) is not None:
             setattr(base, field, getattr(update, field))
     base.has_transcript = base.has_transcript or update.has_transcript
@@ -115,11 +112,7 @@ def _merge(base: Call, update: Call) -> None:
 
 
 def list_calls(
-    region: RegionConfig,
-    tokens: TokenSet,
-    *,
-    limit: int = 100,
-    client: HttpClient | None = None,
+    region: RegionConfig, tokens: TokenSet, *, limit: int = 100, client: HttpClient | None = None
 ) -> list[Call]:
     """Recent call history, newest first, joined on ``CallId``.
 
@@ -127,9 +120,7 @@ def list_calls(
     filter on ``has_transcript``/``thread_id`` when they need text.
     """
     try:
-        raw = list_raw_messages(
-            region, tokens, CALL_LOGS_CONVERSATION, page_size=limit, client=client
-        )
+        raw = list_raw_messages(region, tokens, CALL_LOGS_CONVERSATION, page_size=limit, client=client)
     except ApiError as exc:
         # Not every tenant provisions the synthetic call-logs chat.
         if exc.status in (403, 404):
@@ -148,17 +139,12 @@ def list_calls(
             _merge(existing, call)
 
     calls = list(merged.values())
-    calls.sort(
-        key=lambda c: c.start_time or datetime.min.replace(tzinfo=timezone.utc),
-        reverse=True,
-    )
+    calls.sort(key=lambda c: c.start_time or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
     return calls
 
 
 def _participants_of(call: Call) -> list[CallParticipant]:
-    return [
-        p for p in (call.originator, call.target, *call.participants) if p is not None
-    ]
+    return [p for p in (call.originator, call.target, *call.participants) if p is not None]
 
 
 def derive_title(call: Call, *, me: str | None = None) -> str | None:
@@ -170,15 +156,15 @@ def derive_title(call: Call, *, me: str | None = None) -> str | None:
     for participant in _participants_of(call):
         name = participant.display_name
         if name and (not me or name.lower() != me.lower()):
-            return f"Call with {name}"
+            return f'Call with {name}'
     return None
 
 
 def matches(call: Call, needle: str) -> bool:
     """Case-insensitive match against title, participant names/MRIs or call id."""
     lowered = needle.lower()
-    values = [call.call_id, call.title or ""]
+    values = [call.call_id, call.title or '']
     for participant in _participants_of(call):
-        values.append(participant.display_name or "")
-        values.append(participant.id or "")
+        values.append(participant.display_name or '')
+        values.append(participant.id or '')
     return any(lowered in value.lower() for value in values if value)

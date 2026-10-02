@@ -18,12 +18,7 @@ from .api.http import HttpClient
 from .auth import login as login_module
 from .auth import refresh as refresh_module
 from .auth.session import Paths, SessionState, load_session
-from .auth.tokens import (
-    extract_region_config,
-    extract_tokens,
-    get_identity,
-    require_region,
-)
+from .auth.tokens import extract_region_config, extract_tokens, get_identity, require_region
 from .config import region_override
 from .errors import AuthRequired, ResourceNotFound, TeamsBrowserError
 from .models import (
@@ -66,9 +61,7 @@ class TeamsClient:
         if self._session is None:
             state = load_session(self.paths)
             if state is None:
-                raise AuthRequired(
-                    "No Teams session found. Run `teams-browser login` first."
-                )
+                raise AuthRequired('No Teams session found. Run `teams-browser login` first.')
             self._session = state
         return self._session
 
@@ -98,7 +91,7 @@ class TeamsClient:
         if not self.auto_refresh:
             from .errors import TokenExpired
 
-            raise TokenExpired("Session tokens are expired. Run `teams-browser login`.")
+            raise TokenExpired('Session tokens are expired. Run `teams-browser login`.')
         self.refresh()
         self.reload()
 
@@ -107,21 +100,20 @@ class TeamsClient:
         state = self._load()
         try:
             if refresh_module.refresh_via_http(state, self.paths):
-                return "http"
+                return 'http'
         except Exception:
             pass
         if not self.browser_refresh:
             raise AuthRequired(
-                "Session tokens are stale and the silent refresh failed. "
-                "Run `teams-browser login` (or `teams-browser refresh`)."
+                'Session tokens are stale and the silent refresh failed. '
+                'Run `teams-browser login` (or `teams-browser refresh`).'
             )
         try:
             login_module.refresh_session_headless(paths=self.paths)
-            return "browser"
+            return 'browser'
         except Exception as exc:  # pragma: no cover - environment dependent
             raise AuthRequired(
-                "Automatic token refresh failed (the sign-in is no longer valid). "
-                "Run `teams-browser login` again."
+                'Automatic token refresh failed (the sign-in is no longer valid). Run `teams-browser login` again.'
             ) from exc
 
     # -- context ------------------------------------------------------------ #
@@ -145,37 +137,28 @@ class TeamsClient:
         name, upn = get_identity(state)
         region = extract_region_config(state)
         return {
-            "display_name": name,
-            "upn": upn,
-            "region": None if not region else region.region,
-            "partition": None if not region else region.partition,
-            "tokens": {
-                "substrate": _tok(tokens.substrate),
-                "spaces": _tok(tokens.spaces),
-                "csa": _tok(tokens.csa),
-                "graph": _tok(tokens.graph),
-                "skypetoken": bool(tokens.skype_token),
-                "authtoken": bool(tokens.auth_token),
+            'display_name': name,
+            'upn': upn,
+            'region': None if not region else region.region,
+            'partition': None if not region else region.partition,
+            'tokens': {
+                'substrate': _tok(tokens.substrate),
+                'spaces': _tok(tokens.spaces),
+                'csa': _tok(tokens.csa),
+                'graph': _tok(tokens.graph),
+                'skypetoken': bool(tokens.skype_token),
+                'authtoken': bool(tokens.auth_token),
             },
         }
 
     # -- meetings ----------------------------------------------------------- #
 
     def list_meetings(
-        self,
-        *,
-        start: datetime | None = None,
-        end: datetime | None = None,
-        limit: int = 50,
+        self, *, start: datetime | None = None, end: datetime | None = None, limit: int = 50
     ) -> list[Meeting]:
-        self.ensure_valid(require=("skype_token", "spaces"))
+        self.ensure_valid(require=('skype_token', 'spaces'))
         return calendar_api.list_meetings(
-            self.region(),
-            self.tokens,
-            start=start,
-            end=end,
-            limit=limit,
-            client=self._client,
+            self.region(), self.tokens, start=start, end=end, limit=limit, client=self._client
         )
 
     def find_meetings(
@@ -192,7 +175,7 @@ class TeamsClient:
             end = start + timedelta(days=1)
         meetings = self.list_meetings(start=start, end=end, limit=limit)
         needle = subject.lower()
-        return [m for m in meetings if needle in (m.subject or "").lower()]
+        return [m for m in meetings if needle in (m.subject or '').lower()]
 
     def find_online_meeting(
         self,
@@ -204,9 +187,7 @@ class TeamsClient:
         limit: int = 100,
     ) -> Meeting | None:
         """First matching meeting that is a Teams online meeting with a thread."""
-        matches = self.find_meetings(
-            subject, on_date=on_date, start=start, end=end, limit=limit
-        )
+        matches = self.find_meetings(subject, on_date=on_date, start=start, end=end, limit=limit)
         return next((m for m in matches if m.thread_id), None)
 
     # -- calls -------------------------------------------------------------- #
@@ -221,10 +202,8 @@ class TeamsClient:
         has_transcript: bool | None = None,
     ) -> list[Call]:
         """Recent call history, including ad-hoc calls missing from the calendar."""
-        self.ensure_valid(require=("skype_token",))
-        calls = calls_api.list_calls(
-            self.region(), self.tokens, limit=limit, client=self._client
-        )
+        self.ensure_valid(require=('skype_token',))
+        calls = calls_api.list_calls(self.region(), self.tokens, limit=limit, client=self._client)
         me_name, _ = self.identity()
         for call in calls:
             call.title = call.title or calls_api.derive_title(call, me=me_name)
@@ -239,56 +218,29 @@ class TeamsClient:
     # -- transcripts -------------------------------------------------------- #
 
     def get_transcript(
-        self,
-        thread_id: str,
-        *,
-        subject: str | None = None,
-        meeting_date: datetime | None = None,
+        self, thread_id: str, *, subject: str | None = None, meeting_date: datetime | None = None
     ) -> Transcript:
-        self.ensure_valid(require=("substrate",))
+        self.ensure_valid(require=('substrate',))
         return transcript_api.get_transcript(
-            self.tokens,
-            thread_id,
-            thread_subject=subject,
-            meeting_date=meeting_date,
-            client=self._client,
+            self.tokens, thread_id, thread_subject=subject, meeting_date=meeting_date, client=self._client
         )
 
     def get_transcript_for(
-        self,
-        subject: str,
-        *,
-        on_date: date | None = None,
-        start: datetime | None = None,
-        end: datetime | None = None,
+        self, subject: str, *, on_date: date | None = None, start: datetime | None = None, end: datetime | None = None
     ) -> Transcript:
         if on_date is not None:
             start = datetime.combine(on_date, time.min, tzinfo=timezone.utc)
             end = start + timedelta(days=1)
-        meeting = self.find_online_meeting(
-            subject, start=start, end=end
-        )
+        meeting = self.find_online_meeting(subject, start=start, end=end)
         if meeting:
-            return self.get_transcript(
-                meeting.thread_id,
-                subject=meeting.subject,
-                meeting_date=meeting.start_time,
-            )
+            return self.get_transcript(meeting.thread_id, subject=meeting.subject, meeting_date=meeting.start_time)
         # Ad-hoc calls never appear in the calendar, so fall back to call history.
         call = self._find_call(subject, since=start, until=end)
         if call:
-            return self.get_transcript(
-                call.thread_id,
-                subject=call.title or subject,
-                meeting_date=call.start_time,
-            )
-        raise ResourceNotFound(
-            f"No meetings or calls with a transcript matched '{subject}'."
-        )
+            return self.get_transcript(call.thread_id, subject=call.title or subject, meeting_date=call.start_time)
+        raise ResourceNotFound(f"No meetings or calls with a transcript matched '{subject}'.")
 
-    def _find_call(
-        self, needle: str, *, since: datetime | None = None, until: datetime | None = None
-    ) -> Call | None:
+    def _find_call(self, needle: str, *, since: datetime | None = None, until: datetime | None = None) -> Call | None:
         try:
             calls = self.list_calls(since=since, until=until, limit=100)
         except TeamsBrowserError:
@@ -301,26 +253,18 @@ class TeamsClient:
     # -- chats -------------------------------------------------------------- #
 
     def list_conversations(self, *, top: int = 50) -> list[Conversation]:
-        self.ensure_valid(require=("skype_token",))
+        self.ensure_valid(require=('skype_token',))
         return chats_api.list_conversations(self.region(), self.tokens, top=top, client=self._client)
 
-    def list_messages(
-        self, conversation_id: str, *, page_size: int = 50
-    ) -> list[ChatMessage]:
-        self.ensure_valid(require=("skype_token",))
+    def list_messages(self, conversation_id: str, *, page_size: int = 50) -> list[ChatMessage]:
+        self.ensure_valid(require=('skype_token',))
         return chats_api.list_messages(
-            self.region(),
-            self.tokens,
-            conversation_id,
-            page_size=page_size,
-            client=self._client,
+            self.region(), self.tokens, conversation_id, page_size=page_size, client=self._client
         )
 
     def get_conversation(self, needle: str, *, top: int = 100) -> Conversation:
-        self.ensure_valid(require=("skype_token",))
-        return chats_api.find_conversation(
-            self.region(), self.tokens, needle, top=top, client=self._client
-        )
+        self.ensure_valid(require=('skype_token',))
+        return chats_api.find_conversation(self.region(), self.tokens, needle, top=top, client=self._client)
 
     def get_messages_for(self, needle: str, *, page_size: int = 50) -> tuple[Conversation, list[ChatMessage]]:
         conversation = self.get_conversation(needle)
@@ -329,15 +273,11 @@ class TeamsClient:
     # -- files -------------------------------------------------------------- #
 
     def list_files(self, *, top: int = 50, include_recordings: bool = True) -> list[SharedFile]:
-        self.ensure_valid(require=("substrate",))
-        return files_api.list_files(
-            self.tokens, top=top, include_recordings=include_recordings, client=self._client
-        )
+        self.ensure_valid(require=('substrate',))
+        return files_api.list_files(self.tokens, top=top, include_recordings=include_recordings, client=self._client)
 
-    def get_meeting_files(
-        self, thread_id: str, *, include_recordings: bool = False
-    ) -> list[SharedFile]:
-        self.ensure_valid(require=("substrate",))
+    def get_meeting_files(self, thread_id: str, *, include_recordings: bool = False) -> list[SharedFile]:
+        self.ensure_valid(require=('substrate',))
         return files_api.list_thread_files(
             self.tokens, thread_id, include_recordings=include_recordings, client=self._client
         )
@@ -346,7 +286,7 @@ class TeamsClient:
 
     @property
     def store(self) -> Store:
-        if getattr(self, "_store", None) is None:
+        if getattr(self, '_store', None) is None:
             self._store = Store(self.paths.db_file)
         return self._store
 
@@ -356,33 +296,24 @@ class TeamsClient:
         return run_sync(self, self.store, **kwargs)
 
     def search(
-        self,
-        query: str,
-        *,
-        sources: list[str] | None = None,
-        conversation_id: str | None = None,
-        limit: int = 25,
+        self, query: str, *, sources: list[str] | None = None, conversation_id: str | None = None, limit: int = 25
     ) -> list[SearchHit]:
-        return self.store.search(
-            query, sources=sources, conversation_id=conversation_id, limit=limit
-        )
+        return self.store.search(query, sources=sources, conversation_id=conversation_id, limit=limit)
 
     def close(self) -> None:
-        if getattr(self, "_store", None) is not None:
+        if getattr(self, '_store', None) is not None:
             self._store.close()
             self._store = None
         self._client.close()
 
-    def __enter__(self) -> "TeamsClient":
+    def __enter__(self) -> 'TeamsClient':
         return self
 
     def __exit__(self, *exc: object) -> None:
         self.close()
 
 
-def _in_window(
-    value: datetime | None, since: datetime | None, until: datetime | None
-) -> bool:
+def _in_window(value: datetime | None, since: datetime | None, until: datetime | None) -> bool:
     if value is None:
         return since is None and until is None
     if since is not None and value < since:
@@ -396,24 +327,24 @@ def _tok(info) -> dict | None:
     if info is None:
         return None
     return {
-        "expires_at": info.expires_at.isoformat() if info.expires_at else None,
-        "expired": info.is_expired(skew_seconds=0),
+        'expires_at': info.expires_at.isoformat() if info.expires_at else None,
+        'expired': info.is_expired(skew_seconds=0),
     }
 
 
 def _region_from_override(value: str) -> RegionConfig:
     from .config import teams_base_url
 
-    has_partition = "-" in value
-    region = value.split("-", 1)[0]
+    has_partition = '-' in value
+    region = value.split('-', 1)[0]
     base = teams_base_url()
     return RegionConfig(
         region=region,
-        partition=value.split("-", 1)[1] if has_partition else "",
+        partition=value.split('-', 1)[1] if has_partition else '',
         region_partition=value,
         has_partition=has_partition,
-        middle_tier_url="",
-        chat_service_url=f"{base}/api/chatsvc/{region}",
-        csa_service_url=f"{base}/api/csa/{region}",
+        middle_tier_url='',
+        chat_service_url=f'{base}/api/chatsvc/{region}',
+        csa_service_url=f'{base}/api/csa/{region}',
         teams_base_url=base,
     )

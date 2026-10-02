@@ -20,39 +20,32 @@ from ..models import TokenSet
 _RETRYABLE_STATUS = {429, 500, 502, 503, 504}
 
 # Required to select the flexible schema that embeds transcript/file properties.
-_SUBSTRATE_PREFER = (
-    'substrate.flexibleschema,outlook.data-source="Substrate",'
-    'exchange.behavior="SubstrateFiles"'
-)
+_SUBSTRATE_PREFER = 'substrate.flexibleschema,outlook.data-source="Substrate",exchange.behavior="SubstrateFiles"'
 
 
 def substrate_headers(tokens: TokenSet) -> dict[str, str]:
     """Auth + content negotiation for the Substrate ``WorkingSetFiles`` API."""
     if not tokens.substrate:
-        raise TokenExpired(
-            "No Substrate token in the session. Run `teams-browser login` to refresh."
-        )
+        raise TokenExpired('No Substrate token in the session. Run `teams-browser login` to refresh.')
     return {
-        "Authorization": f"Bearer {tokens.substrate.token}",
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-        "Prefer": _SUBSTRATE_PREFER,
+        'Authorization': f'Bearer {tokens.substrate.token}',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'Prefer': _SUBSTRATE_PREFER,
     }
 
 
 class HttpClient:
     def __init__(self, *, timeout: int | None = None, max_retries: int = MAX_RETRIES):
         self._client = httpx.Client(
-            timeout=timeout or request_timeout(),
-            follow_redirects=True,
-            headers={"User-Agent": "teams-browser/0.1"},
+            timeout=timeout or request_timeout(), follow_redirects=True, headers={'User-Agent': 'teams-browser/0.1'}
         )
         self._max_retries = max_retries
 
     def close(self) -> None:
         self._client.close()
 
-    def __enter__(self) -> "HttpClient":
+    def __enter__(self) -> 'HttpClient':
         return self
 
     def __exit__(self, *exc: object) -> None:
@@ -70,9 +63,7 @@ class HttpClient:
         last_error: Exception | None = None
         for attempt in range(self._max_retries):
             try:
-                response = self._client.request(
-                    method, url, headers=headers, params=params, json=json_body
-                )
+                response = self._client.request(method, url, headers=headers, params=params, json=json_body)
             except httpx.HTTPError as exc:
                 last_error = exc
                 self._sleep(attempt)
@@ -84,23 +75,23 @@ class HttpClient:
                     time.sleep(min(retry_after, 30))
                 else:
                     self._sleep(attempt)
-                last_error = RateLimited("upstream throttled", retry_after)
+                last_error = RateLimited('upstream throttled', retry_after)
                 continue
 
             if response.status_code == 401:
                 raise TokenExpired(
-                    "Upstream returned 401 - the session token is no longer valid. "
-                    "Run `teams-browser login` (or let it auto-refresh)."
+                    'Upstream returned 401 - the session token is no longer valid. '
+                    'Run `teams-browser login` (or let it auto-refresh).'
                 )
             if response.status_code >= 400:
                 raise ApiError(response.status_code, response.reason_phrase, body=response.text)
 
             return response
 
-        raise ApiError(0, f"request failed after {self._max_retries} attempts: {last_error}")
+        raise ApiError(0, f'request failed after {self._max_retries} attempts: {last_error}')
 
     def get_json(self, url: str, **kwargs: Any) -> Any:
-        return self.request("GET", url, **kwargs).json()
+        return self.request('GET', url, **kwargs).json()
 
     def _sleep(self, attempt: int) -> None:
         base = min(1.0 * (2**attempt), 10.0)
@@ -108,7 +99,7 @@ class HttpClient:
 
 
 def _retry_after(response: httpx.Response) -> float | None:
-    value = response.headers.get("Retry-After")
+    value = response.headers.get('Retry-After')
     if not value:
         return None
     try:

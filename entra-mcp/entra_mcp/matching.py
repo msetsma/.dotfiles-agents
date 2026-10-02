@@ -38,12 +38,8 @@ TYPO_MIN_TOKEN = 4
 TYPO_MIN_RATIO = 0.6
 TYPO_MAX_LENGTH_DELTA = 2
 TYPO_PREFILTER_RATIO = 0.4
-STRICTNESS_FLOORS = {
-    "strict": 0.90,
-    "normal": 0.60,
-    "loose": 0.0,
-}
-DEFAULT_STRICTNESS = "strict"
+STRICTNESS_FLOORS = {'strict': 0.90, 'normal': 0.60, 'loose': 0.0}
+DEFAULT_STRICTNESS = 'strict'
 
 
 def normalize(value: str) -> str:
@@ -99,9 +95,7 @@ def subsequence_score(token: str, text: str) -> float | None:
         return None
     length = len(token)
     density = length / (last - first + 1)
-    quality = (
-        (0.5 * density) + (0.3 * contiguous / length) + (0.2 * word_starts / length)
-    )
+    quality = (0.5 * density) + (0.3 * contiguous / length) + (0.2 * word_starts / length)
     return quality * SUBSEQUENCE_CEILING
 
 
@@ -147,7 +141,7 @@ def typo_word_score(token: str, text: str) -> float | None:
         return None
     best: float | None = None
     for word in text.split():
-        trimmed = word.strip(",.()[]-")
+        trimmed = word.strip(',.()[]-')
         if not trimmed or abs(len(trimmed) - len(token)) > TYPO_MAX_LENGTH_DELTA:
             continue
         if multiset_ratio(token, trimmed) < TYPO_PREFILTER_RATIO:
@@ -232,7 +226,7 @@ def search_records(
     if not tokens:
         return []
 
-    primary_name = weights[0][0] if weights else ""
+    primary_name = weights[0][0] if weights else ''
     best: dict[int, tuple[float, dict[str, Any]]] = {}
 
     for index, record in enumerate(records):
@@ -241,7 +235,7 @@ def search_records(
             best[index] = (score, record)
 
     for index, record in enumerate(records):
-        primary = normalize(str(record.get(primary_name) or ""))
+        primary = normalize(str(record.get(primary_name) or ''))
         score = typo_score(tokens, primary)
         if score is None:
             continue

@@ -38,18 +38,10 @@ from entra_tool.directory import (
     load_user_search_rows,
     user_search_cache_is_fresh,
 )
-from entra_tool.directory_filters import (
-    filter_groups,
-    filter_users,
-    sort_by_display_name,
-)
+from entra_tool.directory_filters import filter_groups, filter_users, sort_by_display_name
 from entra_tool.errors import AppError, GraphError
 from entra_tool.graph import az_command, graph_get, odata_string_literal, uri_encode
-from entra_tool.graph_fields import (
-    GROUP_SEARCH_FIELDS,
-    USER_RESOLVE_FIELDS,
-    select_fields,
-)
+from entra_tool.graph_fields import GROUP_SEARCH_FIELDS, USER_RESOLVE_FIELDS, select_fields
 from entra_tool.group_audit import summarize_group_audit
 from entra_tool.report_rows import report_has_title, report_is_enabled, report_sort_key
 from entra_tool.report_tree import collect_report_tree_structured
@@ -57,47 +49,44 @@ from entra_tool.text import is_guid, is_short_hex_id_prefix, looks_like_bad_guid
 
 from entra_mcp.matching import search_records
 
-GRAPH = "https://graph.microsoft.com/v1.0"
+GRAPH = 'https://graph.microsoft.com/v1.0'
 
 # Must stay in sync with the row builders in entra_tool/rows.py; the tests
 # round-trip a row through these to catch drift.
 USER_SEARCH_ROW_FIELDS = [
-    "displayName",
-    "userPrincipalName",
-    "mail",
-    "id",
-    "accountEnabled",
-    "userType",
-    "jobTitle",
-    "department",
-    "companyName",
-    "officeLocation",
+    'displayName',
+    'userPrincipalName',
+    'mail',
+    'id',
+    'accountEnabled',
+    'userType',
+    'jobTitle',
+    'department',
+    'companyName',
+    'officeLocation',
 ]
 GROUP_SEARCH_ROW_FIELDS = [
-    "displayName",
-    "mail",
-    "id",
-    "mailEnabled",
-    "securityEnabled",
-    "groupTypes",
-    "createdDateTime",
+    'displayName',
+    'mail',
+    'id',
+    'mailEnabled',
+    'securityEnabled',
+    'groupTypes',
+    'createdDateTime',
 ]
 
 # Field weights for search. The display name dominates so a name match always
 # outranks a match buried in a department or office string.
 USER_SEARCH_WEIGHTS = (
-    ("displayName", 1.0),
-    ("userPrincipalName", 0.85),
-    ("mail", 0.85),
-    ("jobTitle", 0.6),
-    ("department", 0.6),
-    ("companyName", 0.5),
-    ("officeLocation", 0.5),
+    ('displayName', 1.0),
+    ('userPrincipalName', 0.85),
+    ('mail', 0.85),
+    ('jobTitle', 0.6),
+    ('department', 0.6),
+    ('companyName', 0.5),
+    ('officeLocation', 0.5),
 )
-GROUP_SEARCH_WEIGHTS = (
-    ("displayName", 1.0),
-    ("mail", 0.85),
-)
+GROUP_SEARCH_WEIGHTS = (('displayName', 1.0), ('mail', 0.85))
 
 GROUP_WORKERS = 6
 MAX_PEOPLE_FOR_GROUPS = 100
@@ -107,7 +96,7 @@ MAX_PEOPLE_FOR_GROUPS = 100
 MAX_PATH_NODES = 120
 
 # Cached TSV rows store these as strings; restore real booleans on the way out.
-BOOLEAN_FIELDS = {"mailEnabled", "securityEnabled", "accountEnabled"}
+BOOLEAN_FIELDS = {'mailEnabled', 'securityEnabled', 'accountEnabled'}
 
 
 class EntraError(Exception):
@@ -122,16 +111,14 @@ class EntraError(Exception):
 def _resolve_user(identifier: str) -> dict[str, Any]:
     """Resolve a UPN/email/object id to a user object."""
     try:
-        obj = graph_get(
-            f"{GRAPH}/users/{uri_encode(identifier)}?$select={select_fields(USER_RESOLVE_FIELDS)}"
-        )
+        obj = graph_get(f'{GRAPH}/users/{uri_encode(identifier)}?$select={select_fields(USER_RESOLVE_FIELDS)}')
     except GraphError as exc:
         raise EntraError(
-            f"User not found: {identifier}. Use a full UPN/email address or Entra object id."
+            f'User not found: {identifier}. Use a full UPN/email address or Entra object id.'
             + _suggest_users(identifier)
         ) from exc
-    if not obj.get("id"):
-        raise EntraError(f"User not found: {identifier}" + _suggest_users(identifier))
+    if not obj.get('id'):
+        raise EntraError(f'User not found: {identifier}' + _suggest_users(identifier))
     return obj
 
 
@@ -143,21 +130,16 @@ def _suggest_users(query: str) -> str:
     "Setmsa@example.com" only resembles a display name once the domain (and its
     extra length) is out of the way.
     """
-    term = query.split("@", 1)[0] if "@" in query else query
+    term = query.split('@', 1)[0] if '@' in query else query
     try:
         rows, _ = load_user_search_rows(use_cache=True, refresh_cache=False)
     except (AppError, OSError):
-        return ""
-    candidates = _search(
-        rows, USER_SEARCH_ROW_FIELDS, USER_SEARCH_WEIGHTS, term, 3, "normal"
-    )
+        return ''
+    candidates = _search(rows, USER_SEARCH_ROW_FIELDS, USER_SEARCH_WEIGHTS, term, 3, 'normal')
     if not candidates:
-        return ""
-    listed = "; ".join(
-        f"{c['displayName']} <{c.get('userPrincipalName') or c.get('id')}>"
-        for c in candidates
-    )
-    return f" Closest cached matches: {listed}."
+        return ''
+    listed = '; '.join(f'{c["displayName"]} <{c.get("userPrincipalName") or c.get("id")}>' for c in candidates)
+    return f' Closest cached matches: {listed}.'
 
 
 def _suggest_groups(query: str) -> str:
@@ -165,14 +147,12 @@ def _suggest_groups(query: str) -> str:
     try:
         rows, _ = load_group_search_rows(use_cache=True, refresh_cache=False)
     except (AppError, OSError):
-        return ""
-    candidates = _search(
-        rows, GROUP_SEARCH_ROW_FIELDS, GROUP_SEARCH_WEIGHTS, query, 3, "normal"
-    )
+        return ''
+    candidates = _search(rows, GROUP_SEARCH_ROW_FIELDS, GROUP_SEARCH_WEIGHTS, query, 3, 'normal')
     if not candidates:
-        return ""
-    listed = "; ".join(f"{c['displayName']} <{c['id']}>" for c in candidates)
-    return f" Closest cached matches: {listed}."
+        return ''
+    listed = '; '.join(f'{c["displayName"]} <{c["id"]}>' for c in candidates)
+    return f' Closest cached matches: {listed}.'
 
 
 def _resolve_group(identifier: str) -> dict[str, Any]:
@@ -183,47 +163,37 @@ def _resolve_group(identifier: str) -> dict[str, Any]:
     """
     if is_guid(identifier):
         try:
-            obj = graph_get(
-                f"{GRAPH}/groups/{uri_encode(identifier)}?$select={select_fields(GROUP_SEARCH_FIELDS)}"
-            )
+            obj = graph_get(f'{GRAPH}/groups/{uri_encode(identifier)}?$select={select_fields(GROUP_SEARCH_FIELDS)}')
         except GraphError as exc:
             raise EntraError(
-                f"Group not found: {identifier}. Use a full group object id or exact display name."
+                f'Group not found: {identifier}. Use a full group object id or exact display name.'
             ) from exc
     elif looks_like_bad_guid(identifier):
-        raise EntraError(
-            f"This looks like a group id with extra characters: {identifier}"
-        )
+        raise EntraError(f'This looks like a group id with extra characters: {identifier}')
     elif is_short_hex_id_prefix(identifier):
-        raise EntraError(
-            "Short group id prefixes are not supported. Use the full group id."
-        )
+        raise EntraError('Short group id prefixes are not supported. Use the full group id.')
     else:
-        filter_value = uri_encode(f"displayName eq {odata_string_literal(identifier)}")
+        filter_value = uri_encode(f'displayName eq {odata_string_literal(identifier)}')
         try:
             result = graph_get(
-                f"{GRAPH}/groups?$filter={filter_value}&$select={select_fields(GROUP_SEARCH_FIELDS)}&$top=50"
+                f'{GRAPH}/groups?$filter={filter_value}&$select={select_fields(GROUP_SEARCH_FIELDS)}&$top=50'
             )
         except GraphError as exc:
-            raise EntraError(f"Group lookup failed for: {identifier}") from exc
-        matches = [m for m in (result.get("value") or []) if isinstance(m, dict)]
+            raise EntraError(f'Group lookup failed for: {identifier}') from exc
+        matches = [m for m in (result.get('value') or []) if isinstance(m, dict)]
         if not matches:
             raise EntraError(
-                f"No group found with displayName exactly equal to: {identifier}"
-                + _suggest_groups(identifier)
+                f'No group found with displayName exactly equal to: {identifier}' + _suggest_groups(identifier)
             )
         if len(matches) > 1:
-            candidates = "; ".join(
-                f"{m.get('displayName')} <{m.get('id')}>" for m in matches
-            )
+            candidates = '; '.join(f'{m.get("displayName")} <{m.get("id")}>' for m in matches)
             raise EntraError(
-                f'Multiple groups match "{identifier}". Re-run with the exact group id. '
-                f"Candidates: {candidates}"
+                f'Multiple groups match "{identifier}". Re-run with the exact group id. Candidates: {candidates}'
             )
         obj = matches[0]
 
-    if not obj.get("id"):
-        raise EntraError(f"Group not found: {identifier}")
+    if not obj.get('id'):
+        raise EntraError(f'Group not found: {identifier}')
     return obj
 
 
@@ -239,33 +209,29 @@ def _coerce_bool(value: Any) -> Any:
         return value
     if isinstance(value, str):
         lowered = value.strip().lower()
-        if lowered == "true":
+        if lowered == 'true':
             return True
-        if lowered == "false":
+        if lowered == 'false':
             return False
     return value
 
 
 def _strip_odata(obj: dict[str, Any]) -> dict[str, Any]:
     """Drop Graph's @odata.* metadata so tool output stays readable."""
-    return {key: value for key, value in obj.items() if not key.startswith("@odata.")}
+    return {key: value for key, value in obj.items() if not key.startswith('@odata.')}
 
 
 def _group_ref(group: dict[str, Any]) -> dict[str, Any]:
     """The identity fields a caller needs to act on a group."""
-    return {
-        "id": group.get("id"),
-        "displayName": group.get("displayName"),
-        "mail": group.get("mail"),
-    }
+    return {'id': group.get('id'), 'displayName': group.get('displayName'), 'mail': group.get('mail')}
 
 
 def _row_to_record(row: list[Any], fields: list[str]) -> dict[str, Any]:
-    padded = list(row) + [""] * (len(fields) - len(row))
+    padded = list(row) + [''] * (len(fields) - len(row))
     record = dict(zip(fields, padded))
-    if "groupTypes" in record:
-        raw = record["groupTypes"]
-        record["groupTypes"] = [part for part in str(raw).split(";") if part]
+    if 'groupTypes' in record:
+        raw = record['groupTypes']
+        record['groupTypes'] = [part for part in str(raw).split(';') if part]
     for field in BOOLEAN_FIELDS & record.keys():
         record[field] = _coerce_bool(record[field])
     return record
@@ -284,12 +250,7 @@ def _search(
 
 
 def _listing_response(
-    matches: list[dict[str, Any]],
-    limit: int,
-    *,
-    from_cache: bool,
-    stale: bool,
-    total: int,
+    matches: list[dict[str, Any]], limit: int, *, from_cache: bool, stale: bool, total: int
 ) -> dict[str, Any]:
     """Shape a filtered listing.
 
@@ -298,12 +259,12 @@ def _listing_response(
     """
     capped = max(1, limit)
     return {
-        "from_cache": from_cache,
-        "stale": stale,
-        "total": total,
-        "count": len(matches),
-        "returned": min(len(matches), capped),
-        "matches": matches[:capped],
+        'from_cache': from_cache,
+        'stale': stale,
+        'total': total,
+        'count': len(matches),
+        'returned': min(len(matches), capped),
+        'matches': matches[:capped],
     }
 
 
@@ -313,9 +274,7 @@ def _listing_response(
 
 
 def search_users(
-    query: str,
-    limit: int = 25,
-    strictness: Literal["strict", "normal", "loose"] = "strict",
+    query: str, limit: int = 25, strictness: Literal['strict', 'normal', 'loose'] = 'strict'
 ) -> dict[str, Any]:
     """Find people by name, email, department, or job title.
 
@@ -344,19 +303,15 @@ def search_users(
     """
     rows, from_cache = load_user_search_rows(use_cache=True, refresh_cache=False)
     return {
-        "from_cache": from_cache,
-        "stale": from_cache and not user_search_cache_is_fresh(),
-        "count": len(rows),
-        "matches": _search(
-            rows, USER_SEARCH_ROW_FIELDS, USER_SEARCH_WEIGHTS, query, limit, strictness
-        ),
+        'from_cache': from_cache,
+        'stale': from_cache and not user_search_cache_is_fresh(),
+        'count': len(rows),
+        'matches': _search(rows, USER_SEARCH_ROW_FIELDS, USER_SEARCH_WEIGHTS, query, limit, strictness),
     }
 
 
 def search_groups(
-    query: str,
-    limit: int = 25,
-    strictness: Literal["strict", "normal", "loose"] = "strict",
+    query: str, limit: int = 25, strictness: Literal['strict', 'normal', 'loose'] = 'strict'
 ) -> dict[str, Any]:
     """Find groups by display name or mail address.
 
@@ -380,17 +335,10 @@ def search_groups(
     """
     rows, from_cache = load_group_search_rows(use_cache=True, refresh_cache=False)
     return {
-        "from_cache": from_cache,
-        "stale": from_cache and not group_search_cache_is_fresh(),
-        "count": len(rows),
-        "matches": _search(
-            rows,
-            GROUP_SEARCH_ROW_FIELDS,
-            GROUP_SEARCH_WEIGHTS,
-            query,
-            limit,
-            strictness,
-        ),
+        'from_cache': from_cache,
+        'stale': from_cache and not group_search_cache_is_fresh(),
+        'count': len(rows),
+        'matches': _search(rows, GROUP_SEARCH_ROW_FIELDS, GROUP_SEARCH_WEIGHTS, query, limit, strictness),
     }
 
 
@@ -399,7 +347,7 @@ def list_users(
     job_title: str | None = None,
     company: str | None = None,
     office: str | None = None,
-    user_type: Literal["Member", "Guest"] | None = None,
+    user_type: Literal['Member', 'Guest'] | None = None,
     enabled: bool | None = None,
     has_title: bool | None = None,
     limit: int = 50,
@@ -424,20 +372,8 @@ def list_users(
         has_title: true for people with a job title, false for those without.
         limit: Maximum matches to return (default 50).
     """
-    if not any(
-        [
-            department,
-            job_title,
-            company,
-            office,
-            user_type,
-            enabled is not None,
-            has_title is not None,
-        ]
-    ):
-        raise EntraError(
-            "list_users needs at least one filter; use search_users for free text."
-        )
+    if not any([department, job_title, company, office, user_type, enabled is not None, has_title is not None]):
+        raise EntraError('list_users needs at least one filter; use search_users for free text.')
     rows, from_cache = load_user_search_rows(use_cache=True, refresh_cache=False)
     records = [_row_to_record(row, USER_SEARCH_ROW_FIELDS) for row in rows]
     matches = sort_by_display_name(
@@ -453,11 +389,7 @@ def list_users(
         )
     )
     return _listing_response(
-        matches,
-        limit,
-        from_cache=from_cache,
-        stale=from_cache and not user_search_cache_is_fresh(),
-        total=len(rows),
+        matches, limit, from_cache=from_cache, stale=from_cache and not user_search_cache_is_fresh(), total=len(rows)
     )
 
 
@@ -484,29 +416,17 @@ def list_groups(
         group_type: Match the group types, e.g. "Unified".
         limit: Maximum matches to return (default 50).
     """
-    if not any(
-        [name, mail_enabled is not None, security_enabled is not None, group_type]
-    ):
-        raise EntraError(
-            "list_groups needs at least one filter; use search_groups for free text."
-        )
+    if not any([name, mail_enabled is not None, security_enabled is not None, group_type]):
+        raise EntraError('list_groups needs at least one filter; use search_groups for free text.')
     rows, from_cache = load_group_search_rows(use_cache=True, refresh_cache=False)
     records = [_row_to_record(row, GROUP_SEARCH_ROW_FIELDS) for row in rows]
     matches = sort_by_display_name(
         filter_groups(
-            records,
-            name=name,
-            mail_enabled=mail_enabled,
-            security_enabled=security_enabled,
-            group_type=group_type,
+            records, name=name, mail_enabled=mail_enabled, security_enabled=security_enabled, group_type=group_type
         )
     )
     return _listing_response(
-        matches,
-        limit,
-        from_cache=from_cache,
-        stale=from_cache and not group_search_cache_is_fresh(),
-        total=len(rows),
+        matches, limit, from_cache=from_cache, stale=from_cache and not group_search_cache_is_fresh(), total=len(rows)
     )
 
 
@@ -520,10 +440,10 @@ def get_user(user: str) -> dict[str, Any]:
         user: Full UPN/email address or Entra object id.
     """
     resolved = _resolve_user(user)
-    return _strip_odata(fetch_user_detail(resolved["id"]))
+    return _strip_odata(fetch_user_detail(resolved['id']))
 
 
-def get_user_groups(user: str, mode: str = "transitive") -> dict[str, Any]:
+def get_user_groups(user: str, mode: str = 'transitive') -> dict[str, Any]:
     """List the groups a person belongs to.
 
     Args:
@@ -533,16 +453,16 @@ def get_user_groups(user: str, mode: str = "transitive") -> dict[str, Any]:
             person is assigned to directly.
     """
     resolved = _resolve_user(user)
-    groups = fetch_user_groups_json(resolved["id"], mode)
+    groups = fetch_user_groups_json(resolved['id'], mode)
     return {
-        "user": {
-            "id": resolved.get("id"),
-            "displayName": resolved.get("displayName"),
-            "userPrincipalName": resolved.get("userPrincipalName"),
+        'user': {
+            'id': resolved.get('id'),
+            'displayName': resolved.get('displayName'),
+            'userPrincipalName': resolved.get('userPrincipalName'),
         },
-        "mode": mode,
-        "count": len(groups),
-        "groups": groups,
+        'mode': mode,
+        'count': len(groups),
+        'groups': groups,
     }
 
 
@@ -557,17 +477,17 @@ def get_user_owned_groups(user: str) -> dict[str, Any]:
     """
     resolved = _resolve_user(user)
     try:
-        groups = fetch_user_owned_groups_json(resolved["id"])
+        groups = fetch_user_owned_groups_json(resolved['id'])
     except GraphError:
         groups = []
     return {
-        "user": {
-            "id": resolved.get("id"),
-            "displayName": resolved.get("displayName"),
-            "userPrincipalName": resolved.get("userPrincipalName"),
+        'user': {
+            'id': resolved.get('id'),
+            'displayName': resolved.get('displayName'),
+            'userPrincipalName': resolved.get('userPrincipalName'),
         },
-        "count": len(groups),
-        "groups": groups,
+        'count': len(groups),
+        'groups': groups,
     }
 
 
@@ -590,24 +510,24 @@ def why_user_in_group(user: str, group: str) -> dict[str, Any]:
     resolved = _resolve_user(user)
     target = _resolve_group(group)
     user_ref = {
-        "id": resolved.get("id"),
-        "displayName": resolved.get("displayName"),
-        "userPrincipalName": resolved.get("userPrincipalName"),
+        'id': resolved.get('id'),
+        'displayName': resolved.get('displayName'),
+        'userPrincipalName': resolved.get('userPrincipalName'),
     }
     group_ref = _group_ref(target)
-    user_id = resolved["id"]
-    target_id = target["id"]
+    user_id = resolved['id']
+    target_id = target['id']
 
     # One transitive lookup settles membership definitively, so a non-member is
     # answered without walking the containment graph at all.
-    members = fetch_user_groups_json(user_id, "transitive")
-    if not any(member.get("id") == target_id for member in members):
+    members = fetch_user_groups_json(user_id, 'transitive')
+    if not any(member.get('id') == target_id for member in members):
         return {
-            "user": user_ref,
-            "group": group_ref,
-            "has_access": False,
-            "path": None,
-            "note": "Not a member of this group, directly or transitively.",
+            'user': user_ref,
+            'group': group_ref,
+            'has_access': False,
+            'path': None,
+            'note': 'Not a member of this group, directly or transitively.',
         }
 
     def fetch_parent(node_id: str) -> list[dict[str, Any]]:
@@ -629,38 +549,32 @@ def why_user_in_group(user: str, group: str) -> dict[str, Any]:
 
     if found is None:
         return {
-            "user": user_ref,
-            "group": group_ref,
-            "has_access": True,
-            "path": None,
-            "note": (
-                f"A member, but no nesting path was found within {MAX_PATH_NODES} "
-                "groups; the chain may be deeper or broader."
+            'user': user_ref,
+            'group': group_ref,
+            'has_access': True,
+            'path': None,
+            'note': (
+                f'A member, but no nesting path was found within {MAX_PATH_NODES} '
+                'groups; the chain may be deeper or broader.'
             ),
         }
 
     path_ids, names = found
     display = dict(names)
-    display[user_id] = resolved.get("displayName") or ""
-    display[target_id] = target.get("displayName") or ""
+    display[user_id] = resolved.get('displayName') or ''
+    display[target_id] = target.get('displayName') or ''
     path = [
-        {
-            "kind": "user" if node_id == user_id else "group",
-            "id": node_id,
-            "displayName": display.get(node_id) or "",
-        }
+        {'kind': 'user' if node_id == user_id else 'group', 'id': node_id, 'displayName': display.get(node_id) or ''}
         for node_id in path_ids
     ]
     return {
-        "user": user_ref,
-        "group": group_ref,
-        "has_access": True,
-        "path": path,
-        "hops": len(path_ids) - 1,
-        "note": (
-            "Direct membership."
-            if len(path_ids) == 2
-            else f"Nested through {len(path_ids) - 2} intermediate group(s)."
+        'user': user_ref,
+        'group': group_ref,
+        'has_access': True,
+        'path': path,
+        'hops': len(path_ids) - 1,
+        'note': (
+            'Direct membership.' if len(path_ids) == 2 else f'Nested through {len(path_ids) - 2} intermediate group(s).'
         ),
     }
 
@@ -668,12 +582,11 @@ def why_user_in_group(user: str, group: str) -> dict[str, Any]:
 def _fetch_group_owners(group_id: str) -> list[dict[str, Any]]:
     try:
         page = graph_get(
-            f"{GRAPH}/groups/{uri_encode(group_id)}/owners"
-            f"?$select=id,displayName,userPrincipalName,mail&$top=20"
+            f'{GRAPH}/groups/{uri_encode(group_id)}/owners?$select=id,displayName,userPrincipalName,mail&$top=20'
         )
     except GraphError:
         return []
-    return [owner for owner in (page.get("value") or []) if isinstance(owner, dict)]
+    return [owner for owner in (page.get('value') or []) if isinstance(owner, dict)]
 
 
 def get_group(group: str) -> dict[str, Any]:
@@ -685,15 +598,10 @@ def get_group(group: str) -> dict[str, Any]:
             with an id.
     """
     resolved = _resolve_group(group)
-    return {
-        "group": _strip_odata(resolved),
-        "owners": _fetch_group_owners(resolved["id"]),
-    }
+    return {'group': _strip_odata(resolved), 'owners': _fetch_group_owners(resolved['id'])}
 
 
-def get_group_members(
-    group: str, mode: str = "transitive", include_groups: bool = False
-) -> dict[str, Any]:
+def get_group_members(group: str, mode: str = 'transitive', include_groups: bool = False) -> dict[str, Any]:
     """List the people in a group.
 
     Members are people; nested groups are not returned unless you ask, so a
@@ -708,21 +616,16 @@ def get_group_members(
             "direct", every nested group under "transitive".
     """
     resolved = _resolve_group(group)
-    members = fetch_group_members_json(resolved["id"], mode)
-    result = {
-        "group": _group_ref(resolved),
-        "mode": mode,
-        "count": len(members),
-        "members": members,
-    }
+    members = fetch_group_members_json(resolved['id'], mode)
+    result = {'group': _group_ref(resolved), 'mode': mode, 'count': len(members), 'members': members}
     if include_groups:
-        nested = fetch_group_child_groups_json(resolved["id"], mode)
-        result["nested_group_count"] = len(nested)
-        result["nested_groups"] = nested
+        nested = fetch_group_child_groups_json(resolved['id'], mode)
+        result['nested_group_count'] = len(nested)
+        result['nested_groups'] = nested
     return result
 
 
-def group_audit(group: str, mode: str = "transitive") -> dict[str, Any]:
+def group_audit(group: str, mode: str = 'transitive') -> dict[str, Any]:
     """Review a group: disabled accounts, guests, untitled members, nesting, owners.
 
     Costs a few Graph calls (members, nested groups, owners) and returns counts
@@ -735,14 +638,10 @@ def group_audit(group: str, mode: str = "transitive") -> dict[str, Any]:
             through nesting. "direct" audits only direct assignments.
     """
     resolved = _resolve_group(group)
-    members = fetch_group_members_json(resolved["id"], mode)
-    nested = fetch_group_child_groups_json(resolved["id"], mode)
-    owners = _fetch_group_owners(resolved["id"])
-    return {
-        "group": _group_ref(resolved),
-        "mode": mode,
-        **summarize_group_audit(members, nested, owners),
-    }
+    members = fetch_group_members_json(resolved['id'], mode)
+    nested = fetch_group_child_groups_json(resolved['id'], mode)
+    owners = _fetch_group_owners(resolved['id'])
+    return {'group': _group_ref(resolved), 'mode': mode, **summarize_group_audit(members, nested, owners)}
 
 
 def get_manager(user: str) -> dict[str, Any]:
@@ -754,32 +653,23 @@ def get_manager(user: str) -> dict[str, Any]:
     resolved = _resolve_user(user)
     try:
         manager = graph_get(
-            f"{GRAPH}/users/{uri_encode(resolved['id'])}/manager"
-            f"?$select=id,displayName,userPrincipalName,mail,jobTitle,department"
+            f'{GRAPH}/users/{uri_encode(resolved["id"])}/manager'
+            f'?$select=id,displayName,userPrincipalName,mail,jobTitle,department'
         )
     except GraphError:
         return {
-            "user": {
-                "id": resolved.get("id"),
-                "displayName": resolved.get("displayName"),
-            },
-            "manager": None,
-            "note": "No manager is set for this person.",
+            'user': {'id': resolved.get('id'), 'displayName': resolved.get('displayName')},
+            'manager': None,
+            'note': 'No manager is set for this person.',
         }
     return {
-        "user": {
-            "id": resolved.get("id"),
-            "displayName": resolved.get("displayName"),
-        },
-        "manager": _strip_odata(manager),
+        'user': {'id': resolved.get('id'), 'displayName': resolved.get('displayName')},
+        'manager': _strip_odata(manager),
     }
 
 
 def _tree_node(
-    user_id: str,
-    users: dict[str, dict[str, Any]],
-    children_by_manager: dict[str, list[dict[str, Any]]],
-    seen: set[str],
+    user_id: str, users: dict[str, dict[str, Any]], children_by_manager: dict[str, list[dict[str, Any]]], seen: set[str]
 ) -> dict[str, Any] | None:
     if user_id in seen:
         return None
@@ -788,41 +678,37 @@ def _tree_node(
         return None
     seen.add(user_id)
     node = {
-        "id": user.get("id") or "",
-        "displayName": user.get("displayName") or "",
-        "userPrincipalName": user.get("userPrincipalName") or "",
-        "mail": user.get("mail") or "",
-        "jobTitle": user.get("jobTitle") or "",
-        "department": user.get("department") or "",
-        "accountEnabled": user.get("accountEnabled"),
-        "managerId": user.get("managerId") or "",
-        "managerDisplayName": user.get("managerDisplayName") or "",
-        "directReports": [],
+        'id': user.get('id') or '',
+        'displayName': user.get('displayName') or '',
+        'userPrincipalName': user.get('userPrincipalName') or '',
+        'mail': user.get('mail') or '',
+        'jobTitle': user.get('jobTitle') or '',
+        'department': user.get('department') or '',
+        'accountEnabled': user.get('accountEnabled'),
+        'managerId': user.get('managerId') or '',
+        'managerDisplayName': user.get('managerDisplayName') or '',
+        'directReports': [],
     }
     for child in sorted(children_by_manager.get(user_id, []), key=report_sort_key):
-        child_node = _tree_node(child.get("id") or "", users, children_by_manager, seen)
+        child_node = _tree_node(child.get('id') or '', users, children_by_manager, seen)
         if child_node:
-            node["directReports"].append(child_node)
+            node['directReports'].append(child_node)
     return node
 
 
 def _groups_by_user(user_ids: list[str]) -> dict[str, list[str] | None]:
     def one(user_id: str) -> tuple[str, list[str] | None]:
         try:
-            groups = fetch_user_groups_json(user_id, "transitive")
+            groups = fetch_user_groups_json(user_id, 'transitive')
         except GraphError:
             return user_id, None
-        return user_id, [g.get("displayName") or "" for g in groups]
+        return user_id, [g.get('displayName') or '' for g in groups]
 
     with ThreadPoolExecutor(max_workers=GROUP_WORKERS) as executor:
         return dict(executor.map(one, user_ids))
 
 
-def get_reports(
-    user: str,
-    mode: str = "transitive",
-    include_groups: bool = False,
-) -> dict[str, Any]:
+def get_reports(user: str, mode: str = 'transitive', include_groups: bool = False) -> dict[str, Any]:
     """Walk the reporting tree under a person.
 
     Returns a nested tree rooted at the given person. Unlike the CLI, no one
@@ -839,74 +725,62 @@ def get_reports(
     """
     resolved = _resolve_user(user)
     try:
-        root_json = fetch_report_user_json(resolved["id"])
+        root_json = fetch_report_user_json(resolved['id'])
     except GraphError as exc:
-        raise EntraError(
-            f"User detail lookup failed for reports root: {resolved.get('userPrincipalName')}"
-        ) from exc
+        raise EntraError(f'User detail lookup failed for reports root: {resolved.get("userPrincipalName")}') from exc
 
-    users, children_by_manager = collect_report_tree_structured(
-        resolved["id"], root_json, mode, True, False
-    )
-    tree = _tree_node(resolved["id"], users, children_by_manager, set())
+    users, children_by_manager = collect_report_tree_structured(resolved['id'], root_json, mode, True, False)
+    tree = _tree_node(resolved['id'], users, children_by_manager, set())
 
     hidden_disabled = sum(1 for u in users.values() if not report_is_enabled(u))
-    hidden_missing_title = sum(
-        1 for u in users.values() if report_is_enabled(u) and not report_has_title(u)
-    )
+    hidden_missing_title = sum(1 for u in users.values() if report_is_enabled(u) and not report_has_title(u))
 
-    people = [u for u in users.values() if u.get("id")]
-    levels = [int(u.get("level") or 0) for u in people]
+    people = [u for u in users.values() if u.get('id')]
+    levels = [int(u.get('level') or 0) for u in people]
 
     if include_groups:
         if len(people) > MAX_PEOPLE_FOR_GROUPS:
             raise EntraError(
-                f"include_groups needs one Graph call per person and this tree has "
-                f"{len(people)} (limit {MAX_PEOPLE_FOR_GROUPS}). Narrow the tree with "
+                f'include_groups needs one Graph call per person and this tree has '
+                f'{len(people)} (limit {MAX_PEOPLE_FOR_GROUPS}). Narrow the tree with '
                 f'mode="direct" or drop include_groups.'
             )
-        groups_by_user = _groups_by_user([u["id"] for u in people])
+        groups_by_user = _groups_by_user([u['id'] for u in people])
         for person in people:
-            person["groups"] = groups_by_user.get(person["id"])
+            person['groups'] = groups_by_user.get(person['id'])
 
     return {
-        "root": {
-            "id": resolved.get("id"),
-            "displayName": resolved.get("displayName"),
-            "userPrincipalName": resolved.get("userPrincipalName"),
+        'root': {
+            'id': resolved.get('id'),
+            'displayName': resolved.get('displayName'),
+            'userPrincipalName': resolved.get('userPrincipalName'),
         },
-        "mode": mode,
-        "total_people": len(people),
-        "max_depth": max(levels, default=0),
-        "hidden": {
-            "disabled": hidden_disabled,
-            "missing_title": hidden_missing_title,
-            "note": "The CLI hides these; this response includes them.",
+        'mode': mode,
+        'total_people': len(people),
+        'max_depth': max(levels, default=0),
+        'hidden': {
+            'disabled': hidden_disabled,
+            'missing_title': hidden_missing_title,
+            'note': 'The CLI hides these; this response includes them.',
         },
-        "tree": tree,
-        "people": people,
+        'tree': tree,
+        'people': people,
     }
 
 
 def _split_by_id(
     left: list[dict[str, Any]], right: list[dict[str, Any]]
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
-    left_by_id = {item["id"]: item for item in left if item.get("id")}
-    right_by_id = {item["id"]: item for item in right if item.get("id")}
+    left_by_id = {item['id']: item for item in left if item.get('id')}
+    right_by_id = {item['id']: item for item in right if item.get('id')}
     shared = [left_by_id[i] for i in left_by_id.keys() & right_by_id.keys()]
     left_only = [left_by_id[i] for i in left_by_id.keys() - right_by_id.keys()]
     right_only = [right_by_id[i] for i in right_by_id.keys() - left_by_id.keys()]
-    key = lambda item: str(item.get("displayName") or "").lower()  # noqa: E731
-    return (
-        sorted(shared, key=key),
-        sorted(left_only, key=key),
-        sorted(right_only, key=key),
-    )
+    key = lambda item: str(item.get('displayName') or '').lower()  # noqa: E731
+    return (sorted(shared, key=key), sorted(left_only, key=key), sorted(right_only, key=key))
 
 
-def compare_users(
-    first_user: str, second_user: str, mode: str = "transitive"
-) -> dict[str, Any]:
+def compare_users(first_user: str, second_user: str, mode: str = 'transitive') -> dict[str, Any]:
     """Compare two people's group membership.
 
     Shows groups they share and groups only one of them has - useful for
@@ -919,26 +793,24 @@ def compare_users(
     """
     first = _resolve_user(first_user)
     second = _resolve_user(second_user)
-    first_groups = fetch_user_groups_json(first["id"], mode)
-    second_groups = fetch_user_groups_json(second["id"], mode)
+    first_groups = fetch_user_groups_json(first['id'], mode)
+    second_groups = fetch_user_groups_json(second['id'], mode)
     shared, first_only, second_only = _split_by_id(first_groups, second_groups)
 
     def label(obj: dict[str, Any]) -> str:
-        return f"{obj.get('displayName')} <{obj.get('userPrincipalName') or obj.get('mail') or obj.get('id')}>"
+        return f'{obj.get("displayName")} <{obj.get("userPrincipalName") or obj.get("mail") or obj.get("id")}>'
 
     return {
-        "mode": mode,
-        "first": {"label": label(first), "count": len(first_groups)},
-        "second": {"label": label(second), "count": len(second_groups)},
-        "shared": shared,
-        "first_only": first_only,
-        "second_only": second_only,
+        'mode': mode,
+        'first': {'label': label(first), 'count': len(first_groups)},
+        'second': {'label': label(second), 'count': len(second_groups)},
+        'shared': shared,
+        'first_only': first_only,
+        'second_only': second_only,
     }
 
 
-def compare_groups(
-    first_group: str, second_group: str, mode: str = "transitive"
-) -> dict[str, Any]:
+def compare_groups(first_group: str, second_group: str, mode: str = 'transitive') -> dict[str, Any]:
     """Compare two groups' membership.
 
     Shows members they share and members only one has - useful for spotting
@@ -951,20 +823,20 @@ def compare_groups(
     """
     first = _resolve_group(first_group)
     second = _resolve_group(second_group)
-    first_members = fetch_group_members_json(first["id"], mode)
-    second_members = fetch_group_members_json(second["id"], mode)
+    first_members = fetch_group_members_json(first['id'], mode)
+    second_members = fetch_group_members_json(second['id'], mode)
     shared, first_only, second_only = _split_by_id(first_members, second_members)
 
     def label(obj: dict[str, Any]) -> str:
-        return f"{obj.get('displayName')} <{obj.get('id')}>"
+        return f'{obj.get("displayName")} <{obj.get("id")}>'
 
     return {
-        "mode": mode,
-        "first": {"label": label(first), "count": len(first_members)},
-        "second": {"label": label(second), "count": len(second_members)},
-        "shared": shared,
-        "first_only": first_only,
-        "second_only": second_only,
+        'mode': mode,
+        'first': {'label': label(first), 'count': len(first_members)},
+        'second': {'label': label(second), 'count': len(second_members)},
+        'shared': shared,
+        'first_only': first_only,
+        'second_only': second_only,
     }
 
 
@@ -978,37 +850,25 @@ def check_auth() -> dict[str, Any]:
     az = az_command()
     try:
         result = subprocess.run(
-            [
-                az,
-                "account",
-                "show",
-                "--query",
-                "{user:user.name,tenant:tenantId}",
-                "-o",
-                "json",
-            ],
+            [az, 'account', 'show', '--query', '{user:user.name,tenant:tenantId}', '-o', 'json'],
             text=True,
             capture_output=True,
             check=False,
         )
     except FileNotFoundError:
-        return {
-            "ok": False,
-            "az_path": az,
-            "error": "Azure CLI not found. Install it or set ENTRA_AZ_PATH.",
-        }
+        return {'ok': False, 'az_path': az, 'error': 'Azure CLI not found. Install it or set ENTRA_AZ_PATH.'}
     if result.returncode != 0:
         return {
-            "ok": False,
-            "az_path": az,
-            "error": (result.stderr or result.stdout).strip(),
-            "fix": "Run `az login` in a terminal, then retry.",
+            'ok': False,
+            'az_path': az,
+            'error': (result.stderr or result.stdout).strip(),
+            'fix': 'Run `az login` in a terminal, then retry.',
         }
     try:
-        account = json.loads(result.stdout or "{}")
+        account = json.loads(result.stdout or '{}')
     except json.JSONDecodeError:
         account = {}
-    return {"ok": True, "az_path": az, "account": account}
+    return {'ok': True, 'az_path': az, 'account': account}
 
 
 # --------------------------------------------------------------------------- #
@@ -1040,13 +900,11 @@ def build_server():
         from fastmcp import FastMCP
         from mcp.types import ToolAnnotations
     except ImportError as exc:  # pragma: no cover
-        sys.stderr.write(
-            "fastmcp is not installed. Install the extra: `uv sync --extra mcp`.\n"
-        )
+        sys.stderr.write('fastmcp is not installed. Install the extra: `uv sync --extra mcp`.\n')
         raise SystemExit(2) from exc
 
     read = ToolAnnotations(read_only_hint=True, open_world_hint=True)
-    mcp = FastMCP("entra")
+    mcp = FastMCP('entra')
     for fn in READ_ONLY_TOOLS:
         mcp.tool(annotations=read)(fn)
     return mcp
@@ -1057,23 +915,23 @@ def main() -> None:
 
 
 __all__ = [
-    "EntraError",
-    "build_server",
-    "check_auth",
-    "compare_groups",
-    "compare_users",
-    "get_group",
-    "get_group_members",
-    "get_manager",
-    "get_reports",
-    "get_user",
-    "get_user_groups",
-    "get_user_owned_groups",
-    "group_audit",
-    "list_groups",
-    "list_users",
-    "main",
-    "search_groups",
-    "search_users",
-    "why_user_in_group",
+    'EntraError',
+    'build_server',
+    'check_auth',
+    'compare_groups',
+    'compare_users',
+    'get_group',
+    'get_group_members',
+    'get_manager',
+    'get_reports',
+    'get_user',
+    'get_user_groups',
+    'get_user_owned_groups',
+    'group_audit',
+    'list_groups',
+    'list_users',
+    'main',
+    'search_groups',
+    'search_users',
+    'why_user_in_group',
 ]

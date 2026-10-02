@@ -48,24 +48,17 @@ def _parse_day(value: str | None) -> datetime | None:
 
 
 def _dump(model: Any) -> dict[str, Any]:
-    return model.model_dump(mode="json")
+    return model.model_dump(mode='json')
 
 
-def _resolve_transcript(
-    client: TeamsClient,
-    subject: str | None,
-    date_str: str | None,
-    thread_id: str | None,
-):
+def _resolve_transcript(client: TeamsClient, subject: str | None, date_str: str | None, thread_id: str | None):
     """Fetch by explicit thread id, else by subject (meetings and calls)."""
     if thread_id:
         return client.get_transcript(
-            thread_id,
-            subject=subject,
-            meeting_date=_parse_day(date_str) if date_str else None,
+            thread_id, subject=subject, meeting_date=_parse_day(date_str) if date_str else None
         )
     if not subject:
-        raise ValueError("Provide a subject or a thread_id.")
+        raise ValueError('Provide a subject or a thread_id.')
     return client.get_transcript_for(subject, on_date=_parse_day(date_str))
 
 
@@ -74,11 +67,7 @@ def _resolve_transcript(
 # --------------------------------------------------------------------------- #
 
 
-def list_meetings(
-    start_date: str | None = None,
-    end_date: str | None = None,
-    limit: int = 25,
-) -> dict[str, Any]:
+def list_meetings(start_date: str | None = None, end_date: str | None = None, limit: int = 25) -> dict[str, Any]:
     """List Teams meetings in a date range.
 
     Args:
@@ -90,7 +79,7 @@ def list_meetings(
         start = _parse_day(start_date) or datetime.now(tz=timezone.utc)
         end = _parse_day(end_date) or (start + timedelta(days=7))
         meetings = client.list_meetings(start=start, end=end, limit=limit)
-        return {"count": len(meetings), "meetings": [_dump(m) for m in meetings]}
+        return {'count': len(meetings), 'meetings': [_dump(m) for m in meetings]}
 
 
 def get_meeting(subject: str, date_str: str | None = None) -> dict[str, Any]:
@@ -104,13 +93,11 @@ def get_meeting(subject: str, date_str: str | None = None) -> dict[str, Any]:
         matches = client.find_meetings(subject, on_date=_parse_day(date_str))
         if not matches:
             raise ResourceNotFound(f"No meetings matched '{subject}'.")
-        return {"count": len(matches), "meetings": [_dump(m) for m in matches]}
+        return {'count': len(matches), 'meetings': [_dump(m) for m in matches]}
 
 
 def get_transcript(
-    subject: str | None = None,
-    date_str: str | None = None,
-    thread_id: str | None = None,
+    subject: str | None = None, date_str: str | None = None, thread_id: str | None = None
 ) -> dict[str, Any]:
     """Fetch a cleaned, speaker-attributed transcript for a meeting or call.
 
@@ -127,18 +114,16 @@ def get_transcript(
     with _client() as client:
         transcript = _resolve_transcript(client, subject, date_str, thread_id)
         return {
-            "meeting_subject": transcript.meeting_subject,
-            "thread_id": transcript.thread_id,
-            "speakers": transcript.speakers,
-            "entry_count": len(transcript.entries),
-            "text": transcript.text,
+            'meeting_subject': transcript.meeting_subject,
+            'thread_id': transcript.thread_id,
+            'speakers': transcript.speakers,
+            'entry_count': len(transcript.entries),
+            'text': transcript.text,
         }
 
 
 def get_transcript_analytics(
-    subject: str | None = None,
-    date_str: str | None = None,
-    thread_id: str | None = None,
+    subject: str | None = None, date_str: str | None = None, thread_id: str | None = None
 ) -> dict[str, Any]:
     """Talk-time and word-count statistics for a meeting or call transcript.
 
@@ -157,10 +142,7 @@ def get_transcript_analytics(
 
 
 def list_calls(
-    days: int = 7,
-    participant: str | None = None,
-    with_transcript: bool | None = None,
-    limit: int = 50,
+    days: int = 7, participant: str | None = None, with_transcript: bool | None = None, limit: int = 50
 ) -> dict[str, Any]:
     """List recent Teams calls, including ad-hoc calls with no calendar entry.
 
@@ -179,13 +161,9 @@ def list_calls(
     since = until - timedelta(days=days) if days else None
     with _client() as client:
         calls = client.list_calls(
-            limit=100,
-            since=since,
-            until=until,
-            participant=participant,
-            has_transcript=with_transcript,
+            limit=100, since=since, until=until, participant=participant, has_transcript=with_transcript
         )
-    return {"count": len(calls), "calls": [_dump(c) for c in calls[:limit]]}
+    return {'count': len(calls), 'calls': [_dump(c) for c in calls[:limit]]}
 
 
 def get_meeting_attachments(subject: str, date_str: str | None = None) -> dict[str, Any]:
@@ -203,10 +181,10 @@ def get_meeting_attachments(subject: str, date_str: str | None = None) -> dict[s
             raise ResourceNotFound(f"No online meeting matched '{subject}'.")
         files = client.get_meeting_files(meeting.thread_id, include_recordings=False)
         return {
-            "meeting_subject": meeting.subject,
-            "thread_id": meeting.thread_id,
-            "count": len(files),
-            "files": [_dump(f) for f in files],
+            'meeting_subject': meeting.subject,
+            'thread_id': meeting.thread_id,
+            'count': len(files),
+            'files': [_dump(f) for f in files],
         }
 
 
@@ -221,7 +199,7 @@ def list_chats(kind: str | None = None, limit: int = 50) -> dict[str, Any]:
         conversations = client.list_conversations(top=limit)
     if kind:
         conversations = [c for c in conversations if c.kind == kind]
-    return {"count": len(conversations), "conversations": [_dump(c) for c in conversations]}
+    return {'count': len(conversations), 'conversations': [_dump(c) for c in conversations]}
 
 
 def get_chat_messages(conversation: str, limit: int = 50) -> dict[str, Any]:
@@ -234,11 +212,7 @@ def get_chat_messages(conversation: str, limit: int = 50) -> dict[str, Any]:
     with _client() as client:
         found, messages = client.get_messages_for(conversation, page_size=limit)
     messages = [m for m in messages if not m.is_system]
-    return {
-        "conversation": _dump(found),
-        "count": len(messages),
-        "messages": [_dump(m) for m in messages],
-    }
+    return {'conversation': _dump(found), 'count': len(messages), 'messages': [_dump(m) for m in messages]}
 
 
 def search_archive(query: str, source: str | None = None, limit: int = 25) -> dict[str, Any]:
@@ -254,7 +228,7 @@ def search_archive(query: str, source: str | None = None, limit: int = 25) -> di
     """
     with Store(Paths.default().db_file) as store:
         hits = store.search(query, sources=[source] if source else None, limit=limit)
-    return {"count": len(hits), "hits": [_dump(h) for h in hits]}
+    return {'count': len(hits), 'hits': [_dump(h) for h in hits]}
 
 
 def get_archive_digest(days: int = 7) -> dict[str, Any]:
@@ -268,18 +242,14 @@ def get_archive_digest(days: int = 7) -> dict[str, Any]:
     with Store(Paths.default().db_file) as store:
         title, sections = build_digest(store, start=start, end=end)
     return {
-        "title": title,
-        "meetings": len(sections),
-        "transcripts": sum(1 for _, t, _a in sections if t),
-        "markdown": render_digest(title=title, sections=sections, include_transcripts=False),
+        'title': title,
+        'meetings': len(sections),
+        'transcripts': sum(1 for _, t, _a in sections if t),
+        'markdown': render_digest(title=title, sections=sections, include_transcripts=False),
     }
 
 
-def sync_archive(
-    days_back: int = 7,
-    days_forward: int = 1,
-    include_calls: bool = True,
-) -> dict[str, Any]:
+def sync_archive(days_back: int = 7, days_forward: int = 1, include_calls: bool = True) -> dict[str, Any]:
     """Mirror recent meetings, transcripts, chats and files into the local archive.
 
     Takes tens of seconds; run it before search_archive or
@@ -292,19 +262,12 @@ def sync_archive(
             calendar). Set False to skip the extra call-history request.
     """
     with _client() as client:
-        report = client.sync(
-            days_back=days_back,
-            days_forward=days_forward,
-            include_calls=include_calls,
-        )
+        report = client.sync(days_back=days_back, days_forward=days_forward, include_calls=include_calls)
     return _dump(report)
 
 
 def save_transcript(
-    path: str,
-    subject: str | None = None,
-    date_str: str | None = None,
-    thread_id: str | None = None,
+    path: str, subject: str | None = None, date_str: str | None = None, thread_id: str | None = None
 ) -> dict[str, Any]:
     """Fetch a transcript and write it to a local markdown file.
 
@@ -317,8 +280,8 @@ def save_transcript(
     """
     with _client() as client:
         transcript = _resolve_transcript(client, subject, date_str, thread_id)
-        Path(path).write_text(to_markdown(transcript), encoding="utf-8")
-        return {"saved_to": path, "entry_count": len(transcript.entries)}
+        Path(path).write_text(to_markdown(transcript), encoding='utf-8')
+        return {'saved_to': path, 'entry_count': len(transcript.entries)}
 
 
 def session_status() -> dict[str, Any]:
@@ -327,7 +290,7 @@ def session_status() -> dict[str, Any]:
         with _client() as client:
             return client.status()
     except AuthRequired as exc:
-        return {"authenticated": False, "error": str(exc), "hint": "Run `teams-browser login`."}
+        return {'authenticated': False, 'error': str(exc), 'hint': 'Run `teams-browser login`.'}
 
 
 _login_process: subprocess.Popen | None = None
@@ -345,23 +308,23 @@ def start_login() -> dict[str, Any]:
     global _login_process
     if _login_process is not None and _login_process.poll() is None:
         return {
-            "started": False,
-            "already_running": True,
-            "hint": "A login window is already open. Complete sign-in there, then call session_status.",
+            'started': False,
+            'already_running': True,
+            'hint': 'A login window is already open. Complete sign-in there, then call session_status.',
         }
     _login_process = subprocess.Popen(
-        [sys.executable, "-m", "teams_browser.cli", "login"],
+        [sys.executable, '-m', 'teams_browser.cli', 'login'],
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         start_new_session=True,
     )
     return {
-        "started": True,
-        "pid": _login_process.pid,
-        "hint": (
+        'started': True,
+        'pid': _login_process.pid,
+        'hint': (
             "A browser window opened on the user's machine for Teams sign-in. "
-            "Ask the user to complete it, then call session_status to confirm."
+            'Ask the user to complete it, then call session_status to confirm.'
         ),
     }
 
@@ -373,13 +336,13 @@ def start_login() -> dict[str, Any]:
 
 def _meetings_markdown(items: list) -> str:
     if not items:
-        return "_No meetings._"
-    lines = ["| When | Subject | Organizer | Transcript |", "| --- | --- | --- | --- |"]
+        return '_No meetings._'
+    lines = ['| When | Subject | Organizer | Transcript |', '| --- | --- | --- | --- |']
     for m in items:
-        when = m.start_time.strftime("%Y-%m-%d %H:%M") if m.start_time else "?"
-        transcript = "yes" if (m.is_online_meeting and m.thread_id) else "-"
-        lines.append(f"| {when} | {m.subject} | {m.organizer_name or ''} | {transcript} |")
-    return "\n".join(lines)
+        when = m.start_time.strftime('%Y-%m-%d %H:%M') if m.start_time else '?'
+        transcript = 'yes' if (m.is_online_meeting and m.thread_id) else '-'
+        lines.append(f'| {when} | {m.subject} | {m.organizer_name or ""} | {transcript} |')
+    return '\n'.join(lines)
 
 
 def resource_meetings_today() -> str:
@@ -393,7 +356,7 @@ def resource_meetings_on(day: str) -> str:
     """Meetings on a given day (YYYY-MM-DD)."""
     start = _parse_day(day)
     if start is None:
-        return f"_Invalid date: {day}_"
+        return f'_Invalid date: {day}_'
     with _client() as client:
         return _meetings_markdown(client.list_meetings(start=start, end=start + timedelta(days=1)))
 
@@ -409,13 +372,11 @@ def resource_recent_transcripts() -> str:
     with Store(Paths.default().db_file) as store:
         rows = store.transcript_index(limit=50)
     if not rows:
-        return "_No transcripts archived yet. Run `sync_archive`._"
-    lines = ["| Date | Meeting | Entries |", "| --- | --- | --- |"]
+        return '_No transcripts archived yet. Run `sync_archive`._'
+    lines = ['| Date | Meeting | Entries |', '| --- | --- | --- |']
     for r in rows:
-        lines.append(
-            f"| {(r['recording_start'] or '')[:10]} | {r['meeting_subject']} | {r['entry_count']} |"
-        )
-    return "\n".join(lines)
+        lines.append(f'| {(r["recording_start"] or "")[:10]} | {r["meeting_subject"]} | {r["entry_count"]} |')
+    return '\n'.join(lines)
 
 
 def resource_recent_chats() -> str:
@@ -423,12 +384,12 @@ def resource_recent_chats() -> str:
     with Store(Paths.default().db_file) as store:
         conversations = store.conversations(limit=50)
     if not conversations:
-        return "_No conversations archived yet. Run `sync_archive`._"
-    lines = ["| Kind | Topic | Last activity |", "| --- | --- | --- |"]
+        return '_No conversations archived yet. Run `sync_archive`._'
+    lines = ['| Kind | Topic | Last activity |', '| --- | --- | --- |']
     for c in conversations:
-        when = c.last_message_at.strftime("%Y-%m-%d %H:%M") if c.last_message_at else "?"
-        lines.append(f"| {c.kind} | {c.topic or c.id[:32]} | {when} |")
-    return "\n".join(lines)
+        when = c.last_message_at.strftime('%Y-%m-%d %H:%M') if c.last_message_at else '?'
+        lines.append(f'| {c.kind} | {c.topic or c.id[:32]} | {when} |')
+    return '\n'.join(lines)
 
 
 # --------------------------------------------------------------------------- #
@@ -438,20 +399,20 @@ def resource_recent_chats() -> str:
 
 def summarise_meeting(subject: str, date_str: str | None = None) -> str:
     """Summarise a meeting into notes, decisions and action items."""
-    when = f" on {date_str}" if date_str else ""
-    args = f"subject={subject!r}" + (f", date_str={date_str!r}" if date_str else "")
+    when = f' on {date_str}' if date_str else ''
+    args = f'subject={subject!r}' + (f', date_str={date_str!r}' if date_str else '')
     return (
-        f"Summarise the Teams meeting matching {subject!r}{when}.\n\n"
-        f"1. Call get_transcript with {args}.\n"
-        "2. Write: a three-sentence overview; decisions made; action items with owners; "
-        "open questions.\n"
-        "3. Attribute decisions and action items to the speaker who made them.\n"
-        "4. Do not invent owners, dates or commitments that are not in the transcript.\n"
-        "If the transcript is unavailable, say so and stop."
+        f'Summarise the Teams meeting matching {subject!r}{when}.\n\n'
+        f'1. Call get_transcript with {args}.\n'
+        '2. Write: a three-sentence overview; decisions made; action items with owners; '
+        'open questions.\n'
+        '3. Attribute decisions and action items to the speaker who made them.\n'
+        '4. Do not invent owners, dates or commitments that are not in the transcript.\n'
+        'If the transcript is unavailable, say so and stop.'
     )
 
 
-def weekly_digest(days: str = "7") -> str:
+def weekly_digest(days: str = '7') -> str:
     """Produce a digest of recent meetings with talk-time highlights."""
     # Accept the window as text and coerce it. Some MCP clients pass command
     # placeholders (e.g. "$1") instead of a number; fall back to 7 rather than
@@ -461,22 +422,22 @@ def weekly_digest(days: str = "7") -> str:
     except (TypeError, ValueError):
         window = 7
     return (
-        f"Build a digest of my Teams meetings from the last {window} days.\n\n"
-        "1. Call get_archive_digest (run sync_archive first if the archive looks stale).\n"
-        "2. Highlight meetings that produced decisions or action items, using "
-        "get_transcript for any that matter.\n"
-        "3. Call out anything that looks like it needed follow-up but had none."
+        f'Build a digest of my Teams meetings from the last {window} days.\n\n'
+        '1. Call get_archive_digest (run sync_archive first if the archive looks stale).\n'
+        '2. Highlight meetings that produced decisions or action items, using '
+        'get_transcript for any that matter.\n'
+        '3. Call out anything that looks like it needed follow-up but had none.'
     )
 
 
 def find_decisions(topic: str) -> str:
     """Find where a topic was discussed and what was decided."""
     return (
-        f"Find where {topic!r} was discussed across my meetings and chats.\n\n"
-        f"1. Call search_archive with query={topic!r}.\n"
-        "2. For transcript hits, pull the surrounding context with get_transcript.\n"
-        "3. Report: what was decided, when, by whom, and what remains open.\n"
-        "Distinguish clearly between discussion and actual decisions."
+        f'Find where {topic!r} was discussed across my meetings and chats.\n\n'
+        f'1. Call search_archive with query={topic!r}.\n'
+        '2. For transcript hits, pull the surrounding context with get_transcript.\n'
+        '3. Report: what was decided, when, by whom, and what remains open.\n'
+        'Distinguish clearly between discussion and actual decisions.'
     )
 
 
@@ -490,19 +451,25 @@ def build_server() -> Any:
         from fastmcp import FastMCP
         from mcp.types import ToolAnnotations
     except ImportError as exc:  # pragma: no cover
-        sys.stderr.write(
-            "fastmcp is not installed. Install the extra: `uv sync --extra mcp`.\n"
-        )
+        sys.stderr.write('fastmcp is not installed. Install the extra: `uv sync --extra mcp`.\n')
         raise SystemExit(2) from exc
 
     read = ToolAnnotations(read_only_hint=True, open_world_hint=True)
     read_local = ToolAnnotations(read_only_hint=True, open_world_hint=False)
     write_local = ToolAnnotations(read_only_hint=False, idempotent_hint=True, open_world_hint=True)
 
-    mcp = FastMCP("teams-browser")
+    mcp = FastMCP('teams-browser')
 
-    for fn in (list_meetings, get_meeting, get_transcript, get_transcript_analytics,
-               get_meeting_attachments, list_chats, get_chat_messages, list_calls):
+    for fn in (
+        list_meetings,
+        get_meeting,
+        get_transcript,
+        get_transcript_analytics,
+        get_meeting_attachments,
+        list_chats,
+        get_chat_messages,
+        list_calls,
+    ):
         mcp.tool(annotations=read)(fn)
     mcp.tool(annotations=read_local)(search_archive)
     mcp.tool(annotations=read_local)(get_archive_digest)
@@ -511,13 +478,11 @@ def build_server() -> Any:
     mcp.tool(annotations=write_local)(save_transcript)
     mcp.tool(annotations=write_local)(start_login)
 
-    mcp.resource("teams://meetings/today", mime_type="text/markdown")(resource_meetings_today)
-    mcp.resource("teams://meetings/{day}", mime_type="text/markdown")(resource_meetings_on)
-    mcp.resource("teams://archive/stats", mime_type="application/json")(resource_archive_stats)
-    mcp.resource("teams://archive/transcripts", mime_type="text/markdown")(
-        resource_recent_transcripts
-    )
-    mcp.resource("teams://archive/chats", mime_type="text/markdown")(resource_recent_chats)
+    mcp.resource('teams://meetings/today', mime_type='text/markdown')(resource_meetings_today)
+    mcp.resource('teams://meetings/{day}', mime_type='text/markdown')(resource_meetings_on)
+    mcp.resource('teams://archive/stats', mime_type='application/json')(resource_archive_stats)
+    mcp.resource('teams://archive/transcripts', mime_type='text/markdown')(resource_recent_transcripts)
+    mcp.resource('teams://archive/chats', mime_type='text/markdown')(resource_recent_chats)
 
     for fn in (summarise_meeting, weekly_digest, find_decisions):
         mcp.prompt()(fn)
@@ -530,20 +495,20 @@ def main() -> None:
 
 
 __all__ = [
-    "list_meetings",
-    "get_meeting",
-    "get_transcript",
-    "get_transcript_analytics",
-    "get_meeting_attachments",
-    "list_chats",
-    "get_chat_messages",
-    "list_calls",
-    "search_archive",
-    "get_archive_digest",
-    "sync_archive",
-    "save_transcript",
-    "session_status",
-    "start_login",
-    "build_server",
-    "main",
+    'list_meetings',
+    'get_meeting',
+    'get_transcript',
+    'get_transcript_analytics',
+    'get_meeting_attachments',
+    'list_chats',
+    'get_chat_messages',
+    'list_calls',
+    'search_archive',
+    'get_archive_digest',
+    'sync_archive',
+    'save_transcript',
+    'session_status',
+    'start_login',
+    'build_server',
+    'main',
 ]

@@ -1,23 +1,13 @@
 from typing import Any
 
-from entra_tool.terminal import (
-    bool_color,
-    cell,
-    clean,
-    display_width,
-    fit,
-    text_color,
-    yn,
-)
+from entra_tool.terminal import bool_color, cell, clean, display_width, fit, text_color, yn
 from entra_tool.terminal_colors import COLORS
 
 
-def format_user_table(
-    rows: list[list[Any]], full_output: bool, name_width_cap: int = 56
-) -> str:
+def format_user_table(rows: list[list[Any]], full_output: bool, name_width_cap: int = 56) -> str:
     formatted = []
     for row in rows:
-        padded = list(row) + [""] * (7 - len(row))
+        padded = list(row) + [''] * (7 - len(row))
         formatted.append(
             [
                 fit(padded[0], name_width_cap, full_output),
@@ -31,33 +21,31 @@ def format_user_table(
         )
 
     widths = [
-        max([display_width("USER")] + [display_width(row[0]) for row in formatted]),
-        max([display_width("UPN")] + [display_width(row[1]) for row in formatted]),
-        max([display_width("MAIL")] + [display_width(row[2]) for row in formatted]),
-        max([display_width("ID")] + [display_width(row[3]) for row in formatted]),
+        max([display_width('USER')] + [display_width(row[0]) for row in formatted]),
+        max([display_width('UPN')] + [display_width(row[1]) for row in formatted]),
+        max([display_width('MAIL')] + [display_width(row[2]) for row in formatted]),
+        max([display_width('ID')] + [display_width(row[3]) for row in formatted]),
         7,
-        max([display_width("MANAGER")] + [display_width(row[5]) for row in formatted]),
-        max(
-            [display_width("MANAGER_ID")] + [display_width(row[6]) for row in formatted]
-        ),
+        max([display_width('MANAGER')] + [display_width(row[5]) for row in formatted]),
+        max([display_width('MANAGER_ID')] + [display_width(row[6]) for row in formatted]),
     ]
     lines = [
-        "  ".join(
+        '  '.join(
             [
-                cell("USER", widths[0], COLORS.bold + COLORS.cyan),
-                cell("UPN", widths[1], COLORS.bold + COLORS.cyan),
-                cell("MAIL", widths[2], COLORS.bold + COLORS.cyan),
-                cell("ID", widths[3], COLORS.bold + COLORS.cyan),
-                cell("ENABLED", widths[4], COLORS.bold + COLORS.cyan),
-                cell("MANAGER", widths[5], COLORS.bold + COLORS.cyan),
-                cell("MANAGER_ID", widths[6], COLORS.bold + COLORS.cyan),
+                cell('USER', widths[0], COLORS.bold + COLORS.cyan),
+                cell('UPN', widths[1], COLORS.bold + COLORS.cyan),
+                cell('MAIL', widths[2], COLORS.bold + COLORS.cyan),
+                cell('ID', widths[3], COLORS.bold + COLORS.cyan),
+                cell('ENABLED', widths[4], COLORS.bold + COLORS.cyan),
+                cell('MANAGER', widths[5], COLORS.bold + COLORS.cyan),
+                cell('MANAGER_ID', widths[6], COLORS.bold + COLORS.cyan),
             ]
         ),
-        "  ".join([cell("-" * width, width, COLORS.dim) for width in widths]),
+        '  '.join([cell('-' * width, width, COLORS.dim) for width in widths]),
     ]
     for user, upn, mail, object_id, enabled, manager, manager_id in formatted:
         lines.append(
-            "  ".join(
+            '  '.join(
                 [
                     cell(user, widths[0]),
                     cell(upn, widths[1], text_color(upn, COLORS.blue)),
@@ -69,4 +57,4 @@ def format_user_table(
                 ]
             )
         )
-    return "\n".join(lines)
+    return '\n'.join(lines)

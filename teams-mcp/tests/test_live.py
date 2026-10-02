@@ -18,8 +18,7 @@ pytestmark = pytest.mark.live
 
 
 @pytest.mark.skipif(
-    os.environ.get("TEAMS_BROWSER_LIVE") != "1",
-    reason="set TEAMS_BROWSER_LIVE=1 and run `teams-browser login` first",
+    os.environ.get('TEAMS_BROWSER_LIVE') != '1', reason='set TEAMS_BROWSER_LIVE=1 and run `teams-browser login` first'
 )
 def test_live_list_meetings():
     with TeamsClient() as client:
@@ -32,31 +31,28 @@ def test_live_list_meetings():
 
 
 @pytest.mark.skipif(
-    os.environ.get("TEAMS_BROWSER_LIVE") != "1",
-    reason="set TEAMS_BROWSER_LIVE=1 and run `teams-browser login` first",
+    os.environ.get('TEAMS_BROWSER_LIVE') != '1', reason='set TEAMS_BROWSER_LIVE=1 and run `teams-browser login` first'
 )
 def test_live_status():
     with TeamsClient() as client:
         status = client.status()
-    assert "tokens" in status
+    assert 'tokens' in status
 
 
 @pytest.mark.skipif(
-    os.environ.get("TEAMS_BROWSER_LIVE") != "1",
-    reason="set TEAMS_BROWSER_LIVE=1 and run `teams-browser login` first",
+    os.environ.get('TEAMS_BROWSER_LIVE') != '1', reason='set TEAMS_BROWSER_LIVE=1 and run `teams-browser login` first'
 )
 def test_live_chats_and_messages():
     with TeamsClient() as client:
         conversations = client.list_conversations(top=5)
-        assert conversations, "expected at least one conversation"
+        assert conversations, 'expected at least one conversation'
         assert all(c.id for c in conversations)
         messages = client.list_messages(conversations[0].id, page_size=5)
         assert isinstance(messages, list)
 
 
 @pytest.mark.skipif(
-    os.environ.get("TEAMS_BROWSER_LIVE") != "1",
-    reason="set TEAMS_BROWSER_LIVE=1 and run `teams-browser login` first",
+    os.environ.get('TEAMS_BROWSER_LIVE') != '1', reason='set TEAMS_BROWSER_LIVE=1 and run `teams-browser login` first'
 )
 def test_live_files_are_classified():
     with TeamsClient() as client:
@@ -66,24 +62,19 @@ def test_live_files_are_classified():
 
 
 @pytest.mark.skipif(
-    os.environ.get("TEAMS_BROWSER_LIVE") != "1",
-    reason="set TEAMS_BROWSER_LIVE=1 and run `teams-browser login` first",
+    os.environ.get('TEAMS_BROWSER_LIVE') != '1', reason='set TEAMS_BROWSER_LIVE=1 and run `teams-browser login` first'
 )
 def test_live_transcript_analytics():
     with TeamsClient() as client:
         meetings = client.list_meetings(
-            start=datetime.now(tz=timezone.utc) - timedelta(days=14),
-            end=datetime.now(tz=timezone.utc),
-            limit=50,
+            start=datetime.now(tz=timezone.utc) - timedelta(days=14), end=datetime.now(tz=timezone.utc), limit=50
         )
         for meeting in meetings:
             if not meeting.thread_id or not meeting.start_time:
                 continue
             try:
                 transcript = client.get_transcript(
-                    meeting.thread_id,
-                    subject=meeting.subject,
-                    meeting_date=meeting.start_time,
+                    meeting.thread_id, subject=meeting.subject, meeting_date=meeting.start_time
                 )
             except Exception:  # noqa: BLE001 - live smoke test: try the next meeting
                 continue
@@ -91,12 +82,11 @@ def test_live_transcript_analytics():
             assert analytics.entry_count == len(transcript.entries)
             assert analytics.speakers
             return
-    pytest.skip("no transcript available to analyse")
+    pytest.skip('no transcript available to analyse')
 
 
 @pytest.mark.skipif(
-    os.environ.get("TEAMS_BROWSER_LIVE") != "1",
-    reason="set TEAMS_BROWSER_LIVE=1 and run `teams-browser login` first",
+    os.environ.get('TEAMS_BROWSER_LIVE') != '1', reason='set TEAMS_BROWSER_LIVE=1 and run `teams-browser login` first'
 )
 def test_live_sync_into_archive(tmp_path):
     from teams_browser.config import Paths
@@ -110,7 +100,7 @@ def test_live_sync_into_archive(tmp_path):
         session_file=default.session_file,
         cache_file=default.cache_file,
         key_file=default.key_file,
-        db_file=tmp_path / "archive.db",
+        db_file=tmp_path / 'archive.db',
     )
     with TeamsClient(paths=paths) as client, Store(paths.db_file) as store:
         report = client.sync(
@@ -123,6 +113,6 @@ def test_live_sync_into_archive(tmp_path):
         )
         assert report.errors == []
         stats = store.stats()
-        assert stats["meetings"] == report.meetings
-        assert stats["messages"] == report.messages
-        assert store.get_state("last_sync") is not None
+        assert stats['meetings'] == report.meetings
+        assert stats['messages'] == report.messages
+        assert store.get_state('last_sync') is not None

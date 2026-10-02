@@ -39,23 +39,23 @@ except ModuleNotFoundError:  # pragma: no cover - py<3.11
     import tomli as tomllib  # type: ignore
 
 REPO = Path(__file__).resolve().parent.parent
-CATALOG = REPO / "catalog"
-GENERATED = REPO / "generated"
+CATALOG = REPO / 'catalog'
+GENERATED = REPO / 'generated'
 
-ENV_REF = re.compile(r"\$\{([A-Za-z0-9_]+)\}")
-OPCODE_ENV_REF = re.compile(r"\{env:([A-Za-z0-9_]+)\}")
+ENV_REF = re.compile(r'\$\{([A-Za-z0-9_]+)\}')
+OPCODE_ENV_REF = re.compile(r'\{env:([A-Za-z0-9_]+)\}')
 
 
 # --------------------------------------------------------------------------- #
 # helpers
 # --------------------------------------------------------------------------- #
 def die(msg: str) -> None:
-    print(f"mcp-sync: error: {msg}", file=sys.stderr)
+    print(f'mcp-sync: error: {msg}', file=sys.stderr)
     raise SystemExit(1)
 
 
 def load_toml(path: Path) -> dict:
-    with open(path, "rb") as fh:
+    with open(path, 'rb') as fh:
         return tomllib.load(fh)
 
 
@@ -75,7 +75,7 @@ def strip_jsonc(text: str) -> str:
             out.append(ch)
             if esc:
                 esc = False
-            elif ch == "\\":
+            elif ch == '\\':
                 esc = True
             elif ch == '"':
                 in_str = False
@@ -86,19 +86,19 @@ def strip_jsonc(text: str) -> str:
             out.append(ch)
             i += 1
             continue
-        if ch == "/" and i + 1 < n and text[i + 1] == "/":
-            while i < n and text[i] not in "\r\n":
+        if ch == '/' and i + 1 < n and text[i + 1] == '/':
+            while i < n and text[i] not in '\r\n':
                 i += 1
             continue
-        if ch == "/" and i + 1 < n and text[i + 1] == "*":
+        if ch == '/' and i + 1 < n and text[i + 1] == '*':
             i += 2
-            while i + 1 < n and not (text[i] == "*" and text[i + 1] == "/"):
+            while i + 1 < n and not (text[i] == '*' and text[i + 1] == '/'):
                 i += 1
             i += 2
             continue
         out.append(ch)
         i += 1
-    return "".join(out)
+    return ''.join(out)
 
 
 def expand(value, ctx: dict):
@@ -123,61 +123,59 @@ def expand(value, ctx: dict):
 
 def opcodeify(value: str) -> str:
     """opencode spells env references ``{env:VAR}`` instead of ``${VAR}``."""
-    return ENV_REF.sub(lambda m: "{env:%s}" % m.group(1), value)
+    return ENV_REF.sub(lambda m: '{env:%s}' % m.group(1), value)
 
 
 # --------------------------------------------------------------------------- #
 # catalog loading
 # --------------------------------------------------------------------------- #
 def build_context() -> dict:
-    paths = load_toml(CATALOG / "paths.toml")
-    ctx = {"HOME": os.path.expanduser("~")}
-    ctx.update(expand(paths.get("vars", {}), ctx))
-    ctx["commands"] = expand(paths.get("commands", {}), ctx)
+    paths = load_toml(CATALOG / 'paths.toml')
+    ctx = {'HOME': os.path.expanduser('~')}
+    ctx.update(expand(paths.get('vars', {}), ctx))
+    ctx['commands'] = expand(paths.get('commands', {}), ctx)
     # Machine-local overrides (untracked). Keeps org-specific values out of the
     # published repo while still resolving locally.
-    local = CATALOG / "local.toml"
+    local = CATALOG / 'local.toml'
     if local.exists():
         data = load_toml(local)
-        ctx.update(expand(data.get("vars", {}), ctx))
-        ctx["commands"].update(expand(data.get("commands", {}), ctx))
+        ctx.update(expand(data.get('vars', {}), ctx))
+        ctx['commands'].update(expand(data.get('commands', {}), ctx))
     return ctx
 
 
 def load_servers(ctx: dict) -> dict:
     servers: dict[str, dict] = {}
-    for path in sorted((CATALOG / "servers").glob("*.toml")):
+    for path in sorted((CATALOG / 'servers').glob('*.toml')):
         raw = load_toml(path)
-        name = raw["name"]
-        kind = raw.get("kind", "local")
+        name = raw['name']
+        kind = raw.get('kind', 'local')
         srv = {
-            "name": name,
-            "kind": kind,
-            "origin": raw.get("origin", "external"),
-            "description": raw.get("description", ""),
-            "clients": list(raw.get("clients", [])),
-            "extra": raw.get("extra", {}),
-            "package": raw.get("package", {}),
+            'name': name,
+            'kind': kind,
+            'origin': raw.get('origin', 'external'),
+            'description': raw.get('description', ''),
+            'clients': list(raw.get('clients', [])),
+            'extra': raw.get('extra', {}),
+            'package': raw.get('package', {}),
         }
-        if kind == "local":
-            launch = raw["launch"]
-            cmd = launch["command"]
-            srv["command"] = ctx["commands"].get(cmd, cmd)
-            srv["args"] = [expand(a, ctx) for a in launch.get("args", [])]
-            srv["env"] = {k: expand(v, ctx) for k, v in raw.get("env", {}).items()}
-            pkg = raw.get("package", {})
-            if pkg.get("manager") == "npm" and pkg.get("name"):
-                ref = pkg.get("ref") or "latest"
+        if kind == 'local':
+            launch = raw['launch']
+            cmd = launch['command']
+            srv['command'] = ctx['commands'].get(cmd, cmd)
+            srv['args'] = [expand(a, ctx) for a in launch.get('args', [])]
+            srv['env'] = {k: expand(v, ctx) for k, v in raw.get('env', {}).items()}
+            pkg = raw.get('package', {})
+            if pkg.get('manager') == 'npm' and pkg.get('name'):
+                ref = pkg.get('ref') or 'latest'
                 token = f'{pkg["name"]}@{ref}'
-                srv["args"] = [a.replace("{{package}}", token) for a in srv["args"]]
-        elif kind == "remote":
-            remote = raw["remote"]
-            srv["url"] = expand(remote["url"], ctx)
-            srv["headers"] = {
-                k: expand(v, ctx) for k, v in remote.get("headers", {}).items()
-            }
+                srv['args'] = [a.replace('{{package}}', token) for a in srv['args']]
+        elif kind == 'remote':
+            remote = raw['remote']
+            srv['url'] = expand(remote['url'], ctx)
+            srv['headers'] = {k: expand(v, ctx) for k, v in remote.get('headers', {}).items()}
         else:
-            die(f"{path.name}: unknown kind {kind!r}")
+            die(f'{path.name}: unknown kind {kind!r}')
         servers[name] = srv
     return servers
 
@@ -186,78 +184,73 @@ def load_servers(ctx: dict) -> dict:
 # per-client renderers
 # --------------------------------------------------------------------------- #
 def r_opencode(srv: dict, cli: dict) -> dict:
-    if srv["kind"] == "local":
-        out = {"type": "local", "command": [srv["command"], *srv["args"]]}
-        if srv["env"]:
-            out["environment"] = {k: opcodeify(v) for k, v in srv["env"].items()}
+    if srv['kind'] == 'local':
+        out = {'type': 'local', 'command': [srv['command'], *srv['args']]}
+        if srv['env']:
+            out['environment'] = {k: opcodeify(v) for k, v in srv['env'].items()}
         return out
-    out = {"type": "remote", "url": srv["url"]}
-    headers = {k: opcodeify(v) for k, v in srv["headers"].items()}
+    out = {'type': 'remote', 'url': srv['url']}
+    headers = {k: opcodeify(v) for k, v in srv['headers'].items()}
     if headers:
-        out["headers"] = headers
+        out['headers'] = headers
     return out
 
 
 def r_claude_code(srv: dict, cli: dict) -> dict:
-    if srv["kind"] == "local":
-        return {
-            "type": "stdio",
-            "command": srv["command"],
-            "args": srv["args"],
-            "env": dict(srv["env"]),
-        }
-    out = {"type": "http", "url": srv["url"]}
-    if srv["headers"]:
-        out["headers"] = srv["headers"]
+    if srv['kind'] == 'local':
+        return {'type': 'stdio', 'command': srv['command'], 'args': srv['args'], 'env': dict(srv['env'])}
+    out = {'type': 'http', 'url': srv['url']}
+    if srv['headers']:
+        out['headers'] = srv['headers']
     return out
 
 
 def r_claude_desktop(srv: dict, cli: dict) -> dict:
-    if srv["kind"] == "local":
-        out = {"command": srv["command"], "args": srv["args"]}
-        env = dict(srv["env"])
-        if cli.get("inject_path"):
-            env.setdefault("PATH", cli["inject_path"])
+    if srv['kind'] == 'local':
+        out = {'command': srv['command'], 'args': srv['args']}
+        env = dict(srv['env'])
+        if cli.get('inject_path'):
+            env.setdefault('PATH', cli['inject_path'])
         if env:
-            out["env"] = env
+            out['env'] = env
         return out
-    out = {"type": "http", "url": srv["url"]}
-    if srv["headers"]:
-        out["headers"] = srv["headers"]
+    out = {'type': 'http', 'url': srv['url']}
+    if srv['headers']:
+        out['headers'] = srv['headers']
     return out
 
 
 def r_vscode(srv: dict, cli: dict) -> dict:
-    if srv["kind"] == "local":
-        out = {"type": "stdio", "command": srv["command"], "args": srv["args"]}
-        if srv["env"]:
-            out["env"] = srv["env"]
+    if srv['kind'] == 'local':
+        out = {'type': 'stdio', 'command': srv['command'], 'args': srv['args']}
+        if srv['env']:
+            out['env'] = srv['env']
         return out
-    out = {"type": "http", "url": srv["url"]}
-    if srv["headers"]:
-        out["headers"] = srv["headers"]
+    out = {'type': 'http', 'url': srv['url']}
+    if srv['headers']:
+        out['headers'] = srv['headers']
     return out
 
 
 def r_codex(srv: dict, cli: dict) -> dict:
-    if srv["kind"] == "local":
-        return {"command": srv["command"], "args": srv["args"], "env": dict(srv["env"])}
-    return {"url": srv["url"]}
+    if srv['kind'] == 'local':
+        return {'command': srv['command'], 'args': srv['args'], 'env': dict(srv['env'])}
+    return {'url': srv['url']}
 
 
 RENDERERS = {
-    "opencode": r_opencode,
-    "claude-code": r_claude_code,
-    "claude-desktop": r_claude_desktop,
-    "vscode": r_vscode,
-    "codex": r_codex,
+    'opencode': r_opencode,
+    'claude-code': r_claude_code,
+    'claude-desktop': r_claude_desktop,
+    'vscode': r_vscode,
+    'codex': r_codex,
 }
 CLIENTS = {}  # populated in main()
 
 
 def render(srv: dict, cli: dict, client: str) -> dict:
-    out = RENDERERS[cli["style"]](srv, cli)
-    out.update(srv.get("extra", {}).get(client, {}))
+    out = RENDERERS[cli['style']](srv, cli)
+    out.update(srv.get('extra', {}).get(client, {}))
     return out
 
 
@@ -273,23 +266,23 @@ def semantic_diff(existing: dict, desired: dict, retired: list[str]):
 
 def report(client: str, path: Path, added, changed, removed) -> bool:
     dirty = bool(added or changed or removed)
-    label = "apply" if not DRY_RUN else "dry-run"
-    print(f"[{client}] {path}  ({label})")
+    label = 'apply' if not DRY_RUN else 'dry-run'
+    print(f'[{client}] {path}  ({label})')
     if not dirty:
-        print("  no changes")
+        print('  no changes')
         return False
     for n in added:
-        print(f"  + {n}")
+        print(f'  + {n}')
     for n in changed:
-        print(f"  ~ {n}")
+        print(f'  ~ {n}')
     for n in removed:
-        print(f"  - {n}")
+        print(f'  - {n}')
     return True
 
 
 def write_json(path: Path, doc: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n")
+    path.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + '\n')
 
 
 def deep_get(doc: dict, keys: list[str]) -> dict:
@@ -300,12 +293,12 @@ def deep_get(doc: dict, keys: list[str]) -> dict:
 
 
 def sync_json_client(client: str, cli: dict, desired: dict, retired: list) -> bool:
-    target = Path(os.path.expanduser(cli["path"]))
+    target = Path(os.path.expanduser(cli['path']))
     if target.exists():
         doc = json.loads(strip_jsonc(target.read_text()))
     else:
         doc = {}
-    container = deep_get(doc, cli["container"])
+    container = deep_get(doc, cli['container'])
     added, changed, removed = semantic_diff(container, desired, retired)
     dirty = report(client, target, added, changed, removed)
     if DRY_RUN or not dirty:
@@ -319,43 +312,43 @@ def sync_json_client(client: str, cli: dict, desired: dict, retired: list) -> bo
 
 def sync_whole_file_client(client: str, cli: dict, desired: dict, retired: list) -> bool:
     """Pure-MCP client: render to generated/ for dotter to symlink."""
-    target = Path(os.path.expanduser(cli["path"]))
+    target = Path(os.path.expanduser(cli['path']))
     if target.exists():
         doc = json.loads(strip_jsonc(target.read_text()))
     else:
         doc = {}
-    container = deep_get(doc, cli["container"])
+    container = deep_get(doc, cli['container'])
     added, changed, removed = semantic_diff(container, desired, retired)
     dirty = report(client, target, added, changed, removed)
-    print(f"    -> generated/{client}.json (dotter symlinks this to the target)")
+    print(f'    -> generated/{client}.json (dotter symlinks this to the target)')
     if DRY_RUN:
         return dirty
     for name in retired:
         container.pop(name, None)
     container.update(desired)
-    write_json(GENERATED / f"{client}.json", doc)
+    write_json(GENERATED / f'{client}.json', doc)
     return dirty
 
 
 def sync_codex(client: str, cli: dict, desired: dict, retired: list) -> bool:
-    target = Path(os.path.expanduser(cli["path"]))
+    target = Path(os.path.expanduser(cli['path']))
     try:
         import tomlkit
     except ModuleNotFoundError:
-        die("codex client needs tomlkit; run via bin/mcp-sync (uv provides it)")
+        die('codex client needs tomlkit; run via bin/mcp-sync (uv provides it)')
     doc = tomlkit.parse(target.read_text()) if target.exists() else tomlkit.document()
-    table = doc.get("mcp_servers")
+    table = doc.get('mcp_servers')
     if table is None:
         table = tomlkit.table()
-        doc["mcp_servers"] = table
+        doc['mcp_servers'] = table
 
     existing = {}
     for name in table:
         entry = table[name]
         existing[name] = {
-            "command": entry.get("command"),
-            "args": list(entry.get("args", [])),
-            "env": dict(entry.get("env", {})),
+            'command': entry.get('command'),
+            'args': list(entry.get('args', [])),
+            'env': dict(entry.get('env', {})),
         }
     added, changed, removed = semantic_diff(existing, desired, retired)
     dirty = report(client, target, added, changed, removed)
@@ -366,41 +359,37 @@ def sync_codex(client: str, cli: dict, desired: dict, retired: list) -> bool:
         if name in table:
             del table[name]
     for name, srv in desired.items():
-        if "command" not in srv:
+        if 'command' not in srv:
             continue  # remote servers are not managed in Codex here
         if name in table:
             entry = table[name]
         else:
             entry = tomlkit.table()
             table[name] = entry
-        entry["command"] = srv["command"]
-        entry["args"] = srv["args"]
-        if srv["env"]:
+        entry['command'] = srv['command']
+        entry['args'] = srv['args']
+        if srv['env']:
             env = tomlkit.table()
-            for k, v in srv["env"].items():
+            for k, v in srv['env'].items():
                 env[k] = v
-            entry["env"] = env
-        elif "env" in entry:
-            del entry["env"]
+            entry['env'] = env
+        elif 'env' in entry:
+            del entry['env']
     target.write_text(tomlkit.dumps(doc))
     return dirty
 
 
-SYNCERS = {
-    "json": sync_json_client,
-    "whole_file": sync_whole_file_client,
-    "codex": sync_codex,
-}
+SYNCERS = {'json': sync_json_client, 'whole_file': sync_whole_file_client, 'codex': sync_codex}
 
 
 def client_kind(cli: dict) -> str:
-    if cli.get("whole_file"):
-        return "whole_file"
-    if cli["format"] == "toml":
-        return "codex"
-    if cli["format"] in ("json", "jsonc"):
-        return "json"
-    die(f"unsupported format {cli['format']!r}")
+    if cli.get('whole_file'):
+        return 'whole_file'
+    if cli['format'] == 'toml':
+        return 'codex'
+    if cli['format'] in ('json', 'jsonc'):
+        return 'json'
+    die(f'unsupported format {cli["format"]!r}')
 
 
 # --------------------------------------------------------------------------- #
@@ -411,38 +400,34 @@ DRY_RUN = False
 
 def main() -> int:
     global DRY_RUN
-    ap = argparse.ArgumentParser(description="Sync the MCP catalog into agent configs.")
-    ap.add_argument("--dry-run", action="store_true", help="show changes, write nothing")
-    ap.add_argument("--client", action="append", help="limit to a client (repeatable)")
+    ap = argparse.ArgumentParser(description='Sync the MCP catalog into agent configs.')
+    ap.add_argument('--dry-run', action='store_true', help='show changes, write nothing')
+    ap.add_argument('--client', action='append', help='limit to a client (repeatable)')
     args = ap.parse_args()
     DRY_RUN = args.dry_run
 
     ctx = build_context()
     servers = load_servers(ctx)
-    CLIENTS.update(load_toml(CATALOG / "clients.toml"))
-    retired = load_toml(CATALOG / "retired.toml").get("servers", [])
+    CLIENTS.update(load_toml(CATALOG / 'clients.toml'))
+    retired = load_toml(CATALOG / 'retired.toml').get('servers', [])
 
     selected = args.client or list(CLIENTS)
     unknown = [c for c in selected if c not in CLIENTS]
     if unknown:
-        die(f"unknown client(s): {', '.join(unknown)}")
+        die(f'unknown client(s): {", ".join(unknown)}')
 
     dirty_any = False
     for client in selected:
         cli = CLIENTS[client]
-        desired = {
-            name: render(srv, cli, client)
-            for name, srv in servers.items()
-            if client in srv["clients"]
-        }
+        desired = {name: render(srv, cli, client) for name, srv in servers.items() if client in srv['clients']}
         dirty_any |= SYNCERS[client_kind(cli)](client, cli, desired, retired)
     print()
     if DRY_RUN:
-        print("dry-run complete - nothing written")
+        print('dry-run complete - nothing written')
     else:
-        print("done" if dirty_any else "already in sync")
+        print('done' if dirty_any else 'already in sync')
     return 0
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     raise SystemExit(main())

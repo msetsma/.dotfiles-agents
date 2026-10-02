@@ -16,11 +16,7 @@ from ..models import Meeting, Transcript
 
 class MeetingProvider(Protocol):
     def list_meetings(
-        self,
-        *,
-        start: datetime | None = None,
-        end: datetime | None = None,
-        limit: int = 50,
+        self, *, start: datetime | None = None, end: datetime | None = None, limit: int = 50
     ) -> list[Meeting]: ...
 
     def find_meetings(
@@ -34,9 +30,5 @@ class MeetingProvider(Protocol):
     ) -> list[Meeting]: ...
 
     def get_transcript(
-        self,
-        thread_id: str,
-        *,
-        subject: str | None = None,
-        meeting_date: datetime | None = None,
+        self, thread_id: str, *, subject: str | None = None, meeting_date: datetime | None = None
     ) -> Transcript: ...

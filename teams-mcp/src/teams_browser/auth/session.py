@@ -18,7 +18,7 @@ from ..config import APP_NAME, TEAMS_ORIGINS, Paths
 from ..errors import AuthRequired
 
 _KEYRING_SERVICE = APP_NAME
-_KEYRING_USER = "session-key"
+_KEYRING_USER = 'session-key'
 
 
 def _load_or_create_key(paths: Paths) -> bytes:
@@ -71,7 +71,7 @@ SessionState = dict[str, Any]
 def save_session(state: SessionState, paths: Paths | None = None) -> None:
     paths = paths or Paths.default()
     paths.ensure()
-    payload = json.dumps(state).encode("utf-8")
+    payload = json.dumps(state).encode('utf-8')
     paths.session_file.write_bytes(encrypt(payload, paths))
     try:
         os.chmod(paths.session_file, 0o600)
@@ -87,8 +87,7 @@ def load_session(paths: Paths | None = None) -> SessionState | None:
         raw = decrypt(paths.session_file.read_bytes(), paths)
     except (InvalidToken, ValueError):
         raise AuthRequired(
-            "Stored session could not be decrypted (key changed or file corrupt). "
-            "Run `teams-browser login` again."
+            'Stored session could not be decrypted (key changed or file corrupt). Run `teams-browser login` again.'
         )
     return json.loads(raw)
 
@@ -112,32 +111,32 @@ def get_teams_origin(state: SessionState) -> dict[str, Any] | None:
     favour one that actually holds a Substrate token (new Teams stores search
     tokens on ``teams.cloud.microsoft``).
     """
-    origins = state.get("origins") or []
+    origins = state.get('origins') or []
     if not origins:
         return None
 
     def has_substrate(origin: dict[str, Any]) -> bool:
-        for item in origin.get("localStorage") or []:
-            name = item.get("name", "")
-            if "SubstrateSearch" in name:
+        for item in origin.get('localStorage') or []:
+            name = item.get('name', '')
+            if 'SubstrateSearch' in name:
                 return True
-            value = item.get("value", "")
-            if isinstance(value, str) and "SubstrateSearch" in value and value.startswith("{"):
+            value = item.get('value', '')
+            if isinstance(value, str) and 'SubstrateSearch' in value and value.startswith('{'):
                 return True
         return False
 
     for origin in origins:
-        if origin.get("origin") in TEAMS_ORIGINS and has_substrate(origin):
+        if origin.get('origin') in TEAMS_ORIGINS and has_substrate(origin):
             return origin
 
     for known in TEAMS_ORIGINS:
         for origin in origins:
-            if origin.get("origin") == known:
+            if origin.get('origin') == known:
                 return origin
 
     for origin in origins:
-        url = origin.get("origin", "")
-        if "teams.microsoft" in url or "teams.cloud" in url:
+        url = origin.get('origin', '')
+        if 'teams.microsoft' in url or 'teams.cloud' in url:
             return origin
 
     return None
@@ -145,14 +144,14 @@ def get_teams_origin(state: SessionState) -> dict[str, Any] | None:
 
 def local_storage(state: SessionState) -> list[dict[str, str]]:
     origin = get_teams_origin(state)
-    return list(origin.get("localStorage", [])) if origin else []
+    return list(origin.get('localStorage', [])) if origin else []
 
 
 def cookies(state: SessionState) -> list[dict[str, Any]]:
-    return list(state.get("cookies") or [])
+    return list(state.get('cookies') or [])
 
 
 def b64url_decode(data: str) -> bytes:
     """Decode a base64url segment, restoring padding."""
-    padding = "=" * (-len(data) % 4)
+    padding = '=' * (-len(data) % 4)
     return base64.urlsafe_b64decode(data + padding)

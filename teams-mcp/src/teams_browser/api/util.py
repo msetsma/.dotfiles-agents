@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 
-_FRACTION = re.compile(r"(\.\d{6})\d+")
+_FRACTION = re.compile(r'(\.\d{6})\d+')
 
 
 def parse_dt(value: object) -> datetime | None:
@@ -17,7 +17,7 @@ def parse_dt(value: object) -> datetime | None:
     """
     if not isinstance(value, str) or not value.strip():
         return None
-    text = _FRACTION.sub(r"\1", value.strip().replace("Z", "+00:00"))
+    text = _FRACTION.sub(r'\1', value.strip().replace('Z', '+00:00'))
     try:
         return datetime.fromisoformat(text)
     except ValueError:
@@ -25,7 +25,7 @@ def parse_dt(value: object) -> datetime | None:
 
 
 def iso_utc(dt: datetime) -> str:
-    return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+    return dt.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
 
 
 def from_epoch_ms(value: object) -> datetime | None:

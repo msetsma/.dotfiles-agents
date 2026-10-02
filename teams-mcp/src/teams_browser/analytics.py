@@ -10,21 +10,15 @@ from __future__ import annotations
 import re
 from datetime import datetime
 
-from .models import (
-    Meeting,
-    SpeakerStat,
-    Transcript,
-    TranscriptAnalytics,
-    TranscriptEntry,
-)
+from .models import Meeting, SpeakerStat, Transcript, TranscriptAnalytics, TranscriptEntry
 
-_TIMECODE = re.compile(r"^(?:(\d+):)?(\d{1,2}):(\d{1,2})(?:\.(\d+))?$")
+_TIMECODE = re.compile(r'^(?:(\d+):)?(\d{1,2}):(\d{1,2})(?:\.(\d+))?$')
 _WORD = re.compile(r"[A-Za-z0-9']+")
 
 
 def to_seconds(value: str | float | int | None) -> float | None:
     """Convert a timecode (``HH:MM:SS.fffffff``) or millisecond value to seconds."""
-    if value is None or value == "":
+    if value is None or value == '':
         return None
     if isinstance(value, (int, float)):
         return float(value) / 1000.0
@@ -37,7 +31,7 @@ def to_seconds(value: str | float | int | None) -> float | None:
     hours = int(match.group(1) or 0)
     minutes = int(match.group(2))
     seconds = int(match.group(3))
-    fraction = float("0." + (match.group(4) or "0").ljust(3, "0")[:3])
+    fraction = float('0.' + (match.group(4) or '0').ljust(3, '0')[:3])
     return hours * 3600 + minutes * 60 + seconds + fraction
 
 
@@ -46,8 +40,8 @@ def format_seconds(total: float) -> str:
     minutes, seconds = divmod(int(round(total)), 60)
     hours, minutes = divmod(minutes, 60)
     if hours:
-        return f"{hours}h{minutes:02d}m"
-    return f"{minutes}m{seconds:02d}s"
+        return f'{hours}h{minutes:02d}m'
+    return f'{minutes}m{seconds:02d}s'
 
 
 def merge_consecutive(entries: list[TranscriptEntry]) -> list[TranscriptEntry]:
@@ -59,18 +53,15 @@ def merge_consecutive(entries: list[TranscriptEntry]) -> list[TranscriptEntry]:
             continue
         if merged and merged[-1].speaker == entry.speaker:
             prev = merged[-1]
-            prev.text = f"{prev.text} {text}".strip()
+            prev.text = f'{prev.text} {text}'.strip()
             prev.end = entry.end or prev.end
             continue
-        merged.append(entry.model_copy(update={"text": text}))
+        merged.append(entry.model_copy(update={'text': text}))
     return merged
 
 
 def slice_entries(
-    entries: list[TranscriptEntry],
-    *,
-    start: str | float | None = None,
-    end: str | float | None = None,
+    entries: list[TranscriptEntry], *, start: str | float | None = None, end: str | float | None = None
 ) -> list[TranscriptEntry]:
     """Keep entries overlapping the ``[start, end]`` window (timecodes or seconds)."""
     lower = to_seconds(start)
@@ -100,7 +91,7 @@ def speaker_stats(entries: list[TranscriptEntry]) -> tuple[list[SpeakerStat], fl
 
     cleaned = merge_consecutive(entries)
     for index, entry in enumerate(cleaned):
-        speaker = entry.speaker or "Unknown"
+        speaker = entry.speaker or 'Unknown'
         if speaker not in order:
             order.append(speaker)
         turns[speaker] = turns.get(speaker, 0) + 1
@@ -156,22 +147,22 @@ def _recording_span(transcript: Transcript) -> float:
 
 def render_analytics(analytics: TranscriptAnalytics) -> str:
     lines = [
-        f"# {analytics.meeting_subject or 'Meeting'} - transcript analytics",
-        "",
-        f"- **Duration:** {format_seconds(analytics.duration_seconds)}",
-        f"- **Entries:** {analytics.entry_count}",
-        f"- **Words:** {analytics.word_count}",
-        f"- **Speakers:** {len(analytics.speakers)}",
-        "",
-        "| Speaker | Talk time | Share | Turns | Words |",
-        "| --- | --- | --- | --- | --- |",
+        f'# {analytics.meeting_subject or "Meeting"} - transcript analytics',
+        '',
+        f'- **Duration:** {format_seconds(analytics.duration_seconds)}',
+        f'- **Entries:** {analytics.entry_count}',
+        f'- **Words:** {analytics.word_count}',
+        f'- **Speakers:** {len(analytics.speakers)}',
+        '',
+        '| Speaker | Talk time | Share | Turns | Words |',
+        '| --- | --- | --- | --- | --- |',
     ]
     for stat in analytics.speakers:
         lines.append(
-            f"| {stat.speaker} | {format_seconds(stat.talk_seconds)} | "
-            f"{stat.share * 100:.0f}% | {stat.turns} | {stat.words} |"
+            f'| {stat.speaker} | {format_seconds(stat.talk_seconds)} | '
+            f'{stat.share * 100:.0f}% | {stat.turns} | {stat.words} |'
         )
-    return "\n".join(lines) + "\n"
+    return '\n'.join(lines) + '\n'
 
 
 def render_digest(
@@ -180,46 +171,44 @@ def render_digest(
     sections: list[tuple[Meeting, Transcript | None, TranscriptAnalytics | None]],
     include_transcripts: bool = True,
 ) -> str:
-    lines = [f"# {title}", ""]
+    lines = [f'# {title}', '']
     for meeting, transcript, analytics in sections:
-        when = meeting.start_time.strftime("%a %d %b %Y %H:%M") if meeting.start_time else "unknown"
-        lines.append(f"## {meeting.subject or 'Untitled meeting'}")
-        lines.append("")
-        lines.append(f"- **When:** {when}")
+        when = meeting.start_time.strftime('%a %d %b %Y %H:%M') if meeting.start_time else 'unknown'
+        lines.append(f'## {meeting.subject or "Untitled meeting"}')
+        lines.append('')
+        lines.append(f'- **When:** {when}')
         if meeting.organizer_name:
-            lines.append(f"- **Organizer:** {meeting.organizer_name}")
+            lines.append(f'- **Organizer:** {meeting.organizer_name}')
         if transcript is None:
-            lines.append("- **Transcript:** not available")
-            lines.append("")
+            lines.append('- **Transcript:** not available')
+            lines.append('')
             continue
-        lines.append(f"- **Speakers:** {', '.join(transcript.speakers) or 'unknown'}")
+        lines.append(f'- **Speakers:** {", ".join(transcript.speakers) or "unknown"}')
         if analytics:
-            lines.append(f"- **Talk time:** {format_seconds(analytics.duration_seconds)}")
-            lines.append(f"- **Words:** {analytics.word_count}")
-        lines.append("")
+            lines.append(f'- **Talk time:** {format_seconds(analytics.duration_seconds)}')
+            lines.append(f'- **Words:** {analytics.word_count}')
+        lines.append('')
         if analytics and analytics.speakers:
-            lines.append("| Speaker | Talk time | Share |")
-            lines.append("| --- | --- | --- |")
+            lines.append('| Speaker | Talk time | Share |')
+            lines.append('| --- | --- | --- |')
             for stat in analytics.speakers:
-                lines.append(
-                    f"| {stat.speaker} | {format_seconds(stat.talk_seconds)} | {stat.share * 100:.0f}% |"
-                )
-            lines.append("")
+                lines.append(f'| {stat.speaker} | {format_seconds(stat.talk_seconds)} | {stat.share * 100:.0f}% |')
+            lines.append('')
         if include_transcripts:
-            lines.append("<details><summary>Transcript</summary>")
-            lines.append("")
+            lines.append('<details><summary>Transcript</summary>')
+            lines.append('')
             lines.append(transcript.text)
-            lines.append("")
-            lines.append("</details>")
-            lines.append("")
-    return "\n".join(lines)
+            lines.append('')
+            lines.append('</details>')
+            lines.append('')
+    return '\n'.join(lines)
 
 
 def window_label(start: datetime | None, end: datetime | None) -> str:
     if not start:
-        return "all time"
+        return 'all time'
     if not end:
-        return start.strftime("%d %b %Y")
+        return start.strftime('%d %b %Y')
     if start.date() == end.date():
-        return start.strftime("%d %b %Y")
-    return f"{start.strftime('%d %b %Y')} - {end.strftime('%d %b %Y')}"
+        return start.strftime('%d %b %Y')
+    return f'{start.strftime("%d %b %Y")} - {end.strftime("%d %b %Y")}'

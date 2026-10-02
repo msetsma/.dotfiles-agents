@@ -6,37 +6,29 @@ from entra_tool.terminal import clean, sorted_rows
 
 def compare_subject_label(subject: CompareSubject) -> str:
     detail = clean(subject.detail)
-    if detail == "-":
+    if detail == '-':
         return clean(subject.name)
-    return f"{clean(subject.name)} <{detail}>"
+    return f'{clean(subject.name)} <{detail}>'
 
 
-def rows_excluding_object_id(
-    rows: list[list[Any]], id_index: int, object_id: str
-) -> list[list[Any]]:
+def rows_excluding_object_id(rows: list[list[Any]], id_index: int, object_id: str) -> list[list[Any]]:
     if not object_id:
         return rows
-    return [
-        row
-        for row in rows
-        if clean((list(row) + [""] * (id_index + 1))[id_index]) != object_id
-    ]
+    return [row for row in rows if clean((list(row) + [''] * (id_index + 1))[id_index]) != object_id]
 
 
 def row_map_by_object_id(rows: list[list[Any]], id_index: int) -> dict[str, list[Any]]:
     result: dict[str, list[Any]] = {}
     for row in rows:
-        padded = list(row) + [""] * (id_index + 1)
+        padded = list(row) + [''] * (id_index + 1)
         object_id = clean(padded[id_index])
-        if object_id != "-":
+        if object_id != '-':
             result[object_id] = row
     return result
 
 
 def rows_for_ids(ids: set[str], row_map: dict[str, list[Any]]) -> list[list[Any]]:
-    return sorted_rows(
-        [row_map[object_id] for object_id in ids if object_id in row_map]
-    )
+    return sorted_rows([row_map[object_id] for object_id in ids if object_id in row_map])
 
 
 def compare_rows_by_object_id(
@@ -60,7 +52,7 @@ def dedupe_rows_by_object_id(rows: list[list[Any]], id_index: int) -> list[list[
     seen: set[str] = set()
     unique_rows = []
     for row in rows:
-        padded = list(row) + [""] * (id_index + 1)
+        padded = list(row) + [''] * (id_index + 1)
         object_id = clean(padded[id_index])
         if object_id in seen:
             continue

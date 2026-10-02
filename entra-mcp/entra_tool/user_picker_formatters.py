@@ -6,11 +6,11 @@ from entra_tool.terminal_colors import COLORS
 
 
 def format_user_picker_rows(rows: list[list[Any]]) -> str:
-    headers = ["USER", "UPN", "MAIL", "ID", "ENABLED"]
+    headers = ['USER', 'UPN', 'MAIL', 'ID', 'ENABLED']
     widths = [42, 40, 40, 36, 7]
     picker_rows = []
     for row in sorted_rows(rows):
-        padded = list(row) + [""] * (5 - len(row))
+        padded = list(row) + [''] * (5 - len(row))
         name = fit(padded[0], 42)
         upn = fit(padded[1], 40)
         mail = fit(padded[2], 40)
@@ -32,11 +32,11 @@ def format_user_picker_rows(rows: list[list[Any]]) -> str:
 
 
 def format_search_user_picker_rows(rows: list[list[Any]]) -> str:
-    headers = ["USER", "UPN", "MAIL", "TITLE", "DEPT", "TYPE", "ENABLED"]
+    headers = ['USER', 'UPN', 'MAIL', 'TITLE', 'DEPT', 'TYPE', 'ENABLED']
     widths = [34, 42, 42, 28, 24, 10, 7]
     picker_rows = []
     for row in sorted_rows(rows):
-        padded = list(row) + [""] * (10 - len(row))
+        padded = list(row) + [''] * (10 - len(row))
         name = fit(padded[0], 34)
         upn = fit(padded[1], 42)
         mail = fit(padded[2], 42)
