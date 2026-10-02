@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Ruff autofix + format across every Python project. Usage: bin/mcp-fmt
+set -euo pipefail
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+RUFF="${RUFF:-/opt/homebrew/bin/ruff}"
+
+cd "$DIR"
+"$RUFF" check --fix .
+exec "$RUFF" format .

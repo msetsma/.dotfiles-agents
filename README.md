@@ -122,6 +122,13 @@ dotter -v --force        # first run only: replace the real VS Code mcp.json
 The very first deploy needs `--force` because VS Code's `mcp.json` already
 exists as a real file; dotter will refuse to replace it otherwise.
 
+Lint and format Python directly — no cargo task needed:
+
+```sh
+bin/mcp-lint          # ruff check across all projects, report only
+bin/mcp-fmt           # ruff check --fix + ruff format
+```
+
 ## Keeping up to date
 
 Versions are **not** baked into the launch args. Each external server has a
