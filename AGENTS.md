@@ -6,11 +6,11 @@ is registered with the local agent software.
 
 ## The one rule
 
-**When you create or change an MCP server, update
-[`catalog/servers/<name>.toml`](catalog/servers/) and the Inventory table in
-[`README.md`](README.md).** The catalog is the single source of truth for every
-server this machine runs (custom *and* third-party); the README table is the
-human index. No catalog entry, no server.
+**When you create or change a resource, update its catalog entry and the
+Inventory table in [`README.md`](README.md).** The catalog is the single source of
+truth for everything this machine's agents load — MCP servers (custom *and*
+third-party), skills, and hooks; the README table is the human index. No catalog
+entry, no resource.
 
 Then run `cargo make sync` (or just `dotter`) to push the catalog into every
 agent — see [README.md](README.md) for the merge-vs-symlink model and
@@ -30,7 +30,7 @@ README is the detail.
 
 - **One server = one directory**, self-contained (`pyproject.toml`, `README.md`,
   `src/` or `server.py`, `tests/`).
-- **Python + `uv`.** `requires-python = ">=3.11"`. Run via
+- **Python + `uv`.** `requires-python = ">=3.14"`. Run via
   `uv run --directory <dir> ...`, so no global install is needed. (Exception:
   `entra-mcp` is uv-tool-installed because it also ships a daily-use CLI — see
   the launch commands below.)
@@ -50,6 +50,20 @@ README is the detail.
 | `entra-mcp` | `entra-mcp/` | Entra ID org structure + access analysis: people search, group membership, reporting trees, manager lookup, membership comparison. Azure CLI delegated session, no app registration. Also ships the `entra` CLI. | `entra-mcp` (console script, uv tool) |
 
 Tool-level detail lives in each directory's `README.md`. Don't duplicate it here.
+
+## Skills & hooks
+
+Alongside servers, the catalog owns two more kinds:
+
+- **Skills** — `catalog/skills/<name>.toml` (definition) plus
+  `catalog/skills/<name>/SKILL.md` (content), symlinked into each listed client's
+  skills directory. Never hand-edit a client's skills dir; edit the catalog.
+- **Hooks** — `catalog/hooks/<name>.toml`, merged additively into each listed
+  client's hook map (Claude Code, Codex). See
+  [`catalog/hooks/example-hook.toml`](catalog/hooks/) for the shape.
+
+`catalog/clients.toml` declares a `[<client>.<kind>]` block for each kind a
+client supports; a kind with no block is skipped for that client.
 
 ## Registering a server with the local agents
 

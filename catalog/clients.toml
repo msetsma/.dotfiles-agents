@@ -1,39 +1,69 @@
-# Where each agent keeps its MCP servers, and how it spells them.
+# Where each agent keeps each *kind* of resource, and how it spells them.
 #
-#   format      = how the file is parsed/written
-#   container   = key path to the MCP server map
-#   style       = renderer that speaks this agent's dialect
-#   whole_file  = pure-MCP config (rendered to generated/ and dotter-symlinked)
-#   inject_path = PATH to add to every server's env (GUI apps need it)
+# One block per (client, kind). Kinds the repo knows about:
+#
+#   [<client>.mcp]      MCP servers
+#       format      = how the file is parsed/written (json / jsonc / toml)
+#       container   = key path to the server map
+#       style       = renderer that speaks this agent's dialect
+#       whole_file  = pure-MCP config (rendered to generated/ and dotter-symlinked)
+#       inject_path = PATH to add to every server's env (GUI apps need it)
+#
+#   [<client>.skills]   agent skills
+#       path        = directory holding one folder per skill
+#
+#   [<client>.hooks]    event hooks
+#       format      = json
+#       container   = key path to the event -> hook-list map
+#       style       = hook renderer (claude-code / codex)
 
-[opencode]
+[opencode.mcp]
 path      = "~/.config/opencode/opencode.jsonc"
 format    = "jsonc"
 container = ["mcp", "servers"]
 style     = "opencode"
 
-[claude-code]
+# opencode also loads ~/.claude/skills (its "Claude-compatible" global path), so
+# it inherits Claude Code's skills. Add [opencode.skills] only if you want
+# skills in opencode's own directory instead.
+
+[claude-code.mcp]
 path      = "~/.claude.json"
 format    = "json"
 container = ["mcpServers"]
 style     = "claude-code"
 
-[claude-desktop]
+[claude-code.skills]
+path = "~/.claude/skills"
+
+[claude-code.hooks]
+path      = "~/.claude/settings.json"
+format    = "json"
+container = ["hooks"]
+style     = "claude-code"
+
+[claude-desktop.mcp]
 path        = "~/Library/Application Support/Claude/claude_desktop_config.json"
 format      = "json"
 container   = ["mcpServers"]
 style       = "claude-desktop"
 inject_path = "/Users/msetsma/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
-[vscode]
+[vscode.mcp]
 path       = "~/Library/Application Support/Code/User/mcp.json"
 format     = "json"
 container  = ["servers"]
 style      = "vscode"
 whole_file = true
 
-[codex]
+[codex.mcp]
 path      = "~/.codex/config.toml"
 format    = "toml"
 container = ["mcp_servers"]
+style     = "codex"
+
+[codex.hooks]
+path      = "~/.codex/hooks.json"
+format    = "json"
+container = ["hooks"]
 style     = "codex"

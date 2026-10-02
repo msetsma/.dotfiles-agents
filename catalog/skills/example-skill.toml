@@ -1,0 +1,3 @@
+name        = "example-skill"
+description = "Placeholder skill proving the catalog-driven skills pipeline. Safe to delete."
+clients     = ["claude-code"]

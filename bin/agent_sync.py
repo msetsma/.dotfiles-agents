@@ -1,21 +1,27 @@
 #!/usr/bin/env python3
-"""agent-sync - materialise the MCP catalog into every agent's config.
+"""agent-sync - materialise the agent catalog into every client's config.
 
 Single source of truth
 ----------------------
   catalog/servers/*.toml   one file per MCP server (custom + third-party)
-  catalog/clients.toml     where each agent keeps its MCP config
+  catalog/skills/*.toml    one file per skill (content in catalog/skills/<name>/)
+  catalog/hooks/*.toml     one file per event hook
+  catalog/clients.toml     where each agent keeps each kind, and how it spells it
   catalog/paths.toml       machine-specific command paths + variables
-  catalog/retired.toml     servers to scrub from every client
+  catalog/retired.toml     resources to scrub from every client
 
 Behaviour
 ---------
-* Clients flagged ``whole_file = true`` (pure-MCP configs, e.g. VS Code) are
-  rendered to ``generated/<client>.<ext>``. Dotter then symlinks that file to
-  the real target, so the repo owns it outright.
-* Every other client is *merged* in place: only the MCP subtree is rewritten.
-  Everything else in the file is preserved. Codex keeps its per-tool tables
-  (e.g. ``[mcp_servers.databricks.tools.*]``); only command/args/env change.
+Each client declares one block per *kind* it supports. Three strategies:
+
+* ``merge``     rewrite a subtree of a shared config in place, leaving every
+                other key alone (MCP maps; hook event maps).
+* ``symlink``   link each catalog item into a client directory (skills).
+* ``whole_file`` pure config rendered to ``generated/<client>.<ext>`` for dotter
+                to symlink, so the repo owns the target outright (VS Code).
+
+Codex keeps its per-tool tables (``[mcp_servers.databricks.tools.*]``); only the
+managed keys change.
 
 Usage
 -----
@@ -181,8 +187,45 @@ def load_servers(ctx: dict) -> dict:
     return servers
 
 
+def load_skills(ctx: dict) -> dict:
+    """Each ``catalog/skills/<name>.toml`` points at ``catalog/skills/<name>/``."""
+    skills: dict[str, dict] = {}
+    for path in sorted((CATALOG / 'skills').glob('*.toml')):
+        raw = load_toml(path)
+        name = raw['name']
+        source = CATALOG / 'skills' / name
+        if not (source / 'SKILL.md').is_file():
+            die(f'{path.name}: missing {source.relative_to(REPO)}/SKILL.md')
+        skills[name] = {
+            'name': name,
+            'description': raw.get('description', ''),
+            'clients': list(raw.get('clients', [])),
+            'dir': source,
+        }
+    return skills
+
+
+def load_hooks(ctx: dict) -> dict:
+    hooks: dict[str, dict] = {}
+    for path in sorted((CATALOG / 'hooks').glob('*.toml')):
+        raw = load_toml(path)
+        name = raw['name']
+        command = raw['command']
+        hooks[name] = {
+            'name': name,
+            'description': raw.get('description', ''),
+            'event': raw['event'],
+            'matcher': raw.get('matcher', ''),
+            'clients': list(raw.get('clients', [])),
+            'command': expand(command['run'], ctx),
+            'timeout': command.get('timeout'),
+            'status_message': command.get('statusMessage'),
+        }
+    return hooks
+
+
 # --------------------------------------------------------------------------- #
-# per-client renderers
+# per-client mcp renderers
 # --------------------------------------------------------------------------- #
 def r_opencode(srv: dict, cli: dict) -> dict:
     if srv['kind'] == 'local':
@@ -246,13 +289,34 @@ RENDERERS = {
     'vscode': r_vscode,
     'codex': r_codex,
 }
-CLIENTS = {}  # populated in main()
 
 
 def render(srv: dict, cli: dict, client: str) -> dict:
     out = RENDERERS[cli['style']](srv, cli)
     out.update(srv.get('extra', {}).get(client, {}))
     return out
+
+
+# --------------------------------------------------------------------------- #
+# per-client hook renderers
+# --------------------------------------------------------------------------- #
+def r_hook_claude_code(hook: dict) -> dict:
+    cmd = {'type': 'command', 'command': hook['command']}
+    if hook['timeout'] is not None:
+        cmd['timeout'] = hook['timeout']
+    if hook['status_message']:
+        cmd['statusMessage'] = hook['status_message']
+    return {'matcher': hook['matcher'], 'hooks': [cmd]}
+
+
+def r_hook_codex(hook: dict) -> dict:
+    cmd = {'type': 'command', 'command': hook['command']}
+    if hook['timeout'] is not None:
+        cmd['timeout'] = hook['timeout']
+    return {'matcher': hook['matcher'], 'hooks': [cmd]}
+
+
+HOOK_RENDERERS = {'claude-code': r_hook_claude_code, 'codex': r_hook_codex}
 
 
 # --------------------------------------------------------------------------- #
@@ -265,10 +329,10 @@ def semantic_diff(existing: dict, desired: dict, retired: list[str]):
     return sorted(added), sorted(changed), sorted(removed)
 
 
-def report(client: str, path: Path, added, changed, removed) -> bool:
+def report(client: str, path: Path, added, changed, removed, kind: str = 'mcp') -> bool:
     dirty = bool(added or changed or removed)
     label = 'apply' if not DRY_RUN else 'dry-run'
-    print(f'[{client}] {path}  ({label})')
+    print(f'[{client}] {kind}: {path}  ({label})')
     if not dirty:
         print('  no changes')
         return False
@@ -293,7 +357,7 @@ def deep_get(doc: dict, keys: list[str]) -> dict:
     return node
 
 
-def sync_json_client(client: str, cli: dict, desired: dict, retired: list) -> bool:
+def sync_json_mcp(client: str, cli: dict, desired: dict, retired: list) -> bool:
     target = Path(os.path.expanduser(cli['path']))
     if target.exists():
         doc = json.loads(strip_jsonc(target.read_text()))
@@ -311,7 +375,7 @@ def sync_json_client(client: str, cli: dict, desired: dict, retired: list) -> bo
     return dirty
 
 
-def sync_whole_file_client(client: str, cli: dict, desired: dict, retired: list) -> bool:
+def sync_whole_file_mcp(client: str, cli: dict, desired: dict, retired: list) -> bool:
     """Pure-MCP client: render to generated/ for dotter to symlink."""
     target = Path(os.path.expanduser(cli['path']))
     if target.exists():
@@ -331,7 +395,7 @@ def sync_whole_file_client(client: str, cli: dict, desired: dict, retired: list)
     return dirty
 
 
-def sync_codex(client: str, cli: dict, desired: dict, retired: list) -> bool:
+def sync_codex_mcp(client: str, cli: dict, desired: dict, retired: list) -> bool:
     target = Path(os.path.expanduser(cli['path']))
     try:
         import tomlkit
@@ -380,10 +444,10 @@ def sync_codex(client: str, cli: dict, desired: dict, retired: list) -> bool:
     return dirty
 
 
-SYNCERS = {'json': sync_json_client, 'whole_file': sync_whole_file_client, 'codex': sync_codex}
+MCP_SYNCERS = {'json': sync_json_mcp, 'whole_file': sync_whole_file_mcp, 'codex': sync_codex_mcp}
 
 
-def client_kind(cli: dict) -> str:
+def mcp_client_kind(cli: dict) -> str:
     if cli.get('whole_file'):
         return 'whole_file'
     if cli['format'] == 'toml':
@@ -394,34 +458,154 @@ def client_kind(cli: dict) -> str:
 
 
 # --------------------------------------------------------------------------- #
+# skills (symlink strategy)
+# --------------------------------------------------------------------------- #
+def sync_skills(client: str, cli: dict, skills: dict, retired: list) -> bool:
+    base = Path(os.path.expanduser(cli['path']))
+    manage_root = (CATALOG / 'skills').resolve()
+    desired = {n: s for n, s in skills.items() if client in s['clients'] and n not in retired}
+
+    # Only touch symlinks that point back into our catalog/skills/<name>/.
+    existing: dict[str, str] = {}
+    if base.is_dir():
+        for entry in base.iterdir():
+            if entry.is_symlink():
+                resolved = os.path.realpath(entry)
+                if resolved == str(manage_root) or resolved.startswith(str(manage_root) + os.sep):
+                    existing[entry.name] = resolved
+
+    added = sorted(n for n in desired if n not in existing)
+    changed = sorted(n for n in desired if n in existing and existing[n] != str(desired[n]['dir'].resolve()))
+    removed = sorted(n for n in existing if n not in desired)
+    dirty = report(client, base, added, changed, removed, kind='skills')
+    if DRY_RUN or not dirty:
+        return dirty
+
+    base.mkdir(parents=True, exist_ok=True)
+    for name in removed + changed:
+        (base / name).unlink()
+    for name in added + changed:
+        (base / name).symlink_to(desired[name]['dir'])
+    return dirty
+
+
+# --------------------------------------------------------------------------- #
+# hooks (additive merge into a shared event map)
+# --------------------------------------------------------------------------- #
+def _canon(obj) -> str:
+    return json.dumps(obj, sort_keys=True)
+
+
+def sync_hooks(client: str, cli: dict, hooks: dict, retired_commands: list) -> bool:
+    if cli['style'] not in HOOK_RENDERERS:
+        print(f'[{client}] hooks: style {cli["style"]!r} not supported yet; skipping')
+        return False
+    renderer = HOOK_RENDERERS[cli['style']]
+
+    target = Path(os.path.expanduser(cli['path']))
+    desired: dict[str, list] = {}
+    label: dict[str, str] = {}
+    managed_keys: set[str] = set()
+    for hook in hooks.values():
+        if client not in hook['clients']:
+            continue
+        group = renderer(hook)
+        key = _canon(group)
+        desired.setdefault(hook['event'], []).append(group)
+        managed_keys.add(key)
+        label[key] = f'{hook["name"]} @ {hook["event"]}'
+
+    if target.exists():
+        doc = json.loads(strip_jsonc(target.read_text()))
+    else:
+        doc = {}
+    container = deep_get(doc, cli['container'])
+
+    # Existing events, minus any group the catalog owns (so re-sync and
+    # retirement are idempotent) and minus explicitly retired commands.
+    scrubbed: dict[str, list] = {}
+    removed_labels: list[str] = []
+    scrubbed_retired: set = set()
+    for event, groups in container.items():
+        kept = []
+        for group in groups:
+            key = _canon(group)
+            cmds = [h.get('command', '') for h in group.get('hooks', [])]
+            if key in managed_keys:
+                continue
+            if any(cmd in retired_commands for cmd in cmds):
+                removed_labels.append(label.get(key, f'retired @ {event}'))
+                scrubbed_retired.add((event, key))
+                continue
+            kept.append(group)
+        if kept:
+            scrubbed[event] = kept
+
+    merged = {event: list(groups) for event, groups in scrubbed.items()}
+    for event, groups in desired.items():
+        merged.setdefault(event, []).extend(groups)
+
+    old_keys = {(e, _canon(g)) for e, gs in container.items() for g in gs}
+    new_keys = {(e, _canon(g)) for e, gs in merged.items() for g in gs}
+    added_names = sorted(label.get(k[1], k[0]) for k in new_keys - old_keys)
+    removed_names = sorted(removed_labels + [label.get(k[1], k[0]) for k in (old_keys - new_keys) - scrubbed_retired])
+    changed = []
+    dirty = report(client, target, added_names, changed, removed_names, kind='hooks')
+    if DRY_RUN or not dirty:
+        return dirty
+
+    container.clear()
+    container.update(merged)
+    write_json(target, doc)
+    return dirty
+
+
+# --------------------------------------------------------------------------- #
 # main
 # --------------------------------------------------------------------------- #
 DRY_RUN = False
 
 
+def sync_client(client: str, kinds: dict, catalogs: dict, retired: dict) -> bool:
+    dirty = False
+    if 'mcp' in kinds:
+        cli = kinds['mcp']
+        servers = catalogs['servers']
+        desired = {n: render(s, cli, client) for n, s in servers.items() if client in s['clients']}
+        dirty |= MCP_SYNCERS[mcp_client_kind(cli)](client, cli, desired, retired['servers'])
+    if 'skills' in kinds:
+        dirty |= sync_skills(client, kinds['skills'], catalogs['skills'], retired['skills'])
+    if 'hooks' in kinds:
+        dirty |= sync_hooks(client, kinds['hooks'], catalogs['hooks'], retired['hook_commands'])
+    return dirty
+
+
 def main() -> int:
     global DRY_RUN
-    ap = argparse.ArgumentParser(description='Sync the MCP catalog into agent configs.')
+    ap = argparse.ArgumentParser(description='Sync the agent catalog into client configs.')
     ap.add_argument('--dry-run', action='store_true', help='show changes, write nothing')
     ap.add_argument('--client', action='append', help='limit to a client (repeatable)')
     args = ap.parse_args()
     DRY_RUN = args.dry_run
 
     ctx = build_context()
-    servers = load_servers(ctx)
-    CLIENTS.update(load_toml(CATALOG / 'clients.toml'))
-    retired = load_toml(CATALOG / 'retired.toml').get('servers', [])
+    catalogs = {'servers': load_servers(ctx), 'skills': load_skills(ctx), 'hooks': load_hooks(ctx)}
+    clients = load_toml(CATALOG / 'clients.toml')
+    raw_retired = load_toml(CATALOG / 'retired.toml')
+    retired = {
+        'servers': raw_retired.get('servers', []),
+        'skills': raw_retired.get('skills', []),
+        'hook_commands': raw_retired.get('hook_commands', []),
+    }
 
-    selected = args.client or list(CLIENTS)
-    unknown = [c for c in selected if c not in CLIENTS]
+    selected = args.client or list(clients)
+    unknown = [c for c in selected if c not in clients]
     if unknown:
         die(f'unknown client(s): {", ".join(unknown)}')
 
     dirty_any = False
     for client in selected:
-        cli = CLIENTS[client]
-        desired = {name: render(srv, cli, client) for name, srv in servers.items() if client in srv['clients']}
-        dirty_any |= SYNCERS[client_kind(cli)](client, cli, desired, retired)
+        dirty_any |= sync_client(client, clients[client], catalogs, retired)
     print()
     if DRY_RUN:
         print('dry-run complete - nothing written')

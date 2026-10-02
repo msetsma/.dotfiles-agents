@@ -1,7 +1,14 @@
-# Servers that are no longer wanted.
+# Resources that are no longer wanted.
 #
-# agent-sync deletes these keys from every client it manages. Names are kept here
+# agent-sync scrubs these from every client it manages. Names are kept here
 # even after the local files are clean, so a stale config on another machine
 # gets scrubbed on its next sync too.
+#
+#   servers       MCP server names
+#   skills        skill names (symlinks are removed)
+#   hook_commands exact shell commands of retired hooks (scrubbed from the
+#                 managed event maps)
 
-servers = ["notion"]
+servers       = ["notion"]
+skills        = []
+hook_commands = []

@@ -1,0 +1,22 @@
+# Event hook template.
+#
+# `clients = []` keeps it inert: nothing is deployed until you add a client.
+# Supported clients are the ones with a `[<client>.hooks]` block in
+# catalog/clients.toml and a matching hook renderer (claude-code, codex).
+#
+#   event    SessionStart | UserPromptSubmit | PreToolUse | PostToolUse | Stop | ...
+#   matcher  tool/trigger pattern; "" means always
+#   command  shell command (${AGENT_HOME} and other catalog vars expand)
+#
+# The repo owns the hook entries it defines: on each sync it removes the entries
+# it previously wrote for this client and rewrites them, leaving unmanaged hooks
+# in the same file untouched.
+
+name        = "example-hook"
+description = "No-op SessionStart hook; copy this to build a real one."
+event       = "SessionStart"
+matcher     = "*"
+clients     = []
+
+[command]
+run = "true"

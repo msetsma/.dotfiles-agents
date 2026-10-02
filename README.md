@@ -1,9 +1,10 @@
-# MCP servers & agent configs
+# Agent configs: MCP servers, skills & hooks
 
-One repo for every MCP server this machine uses — the **custom** ones that live
-here, and the **third-party** ones pulled in from `npx`, uv tools, and desktop
-apps. Everything is declared once in [`catalog/`](catalog/) and pushed into each
-agent by one command.
+One repo for everything this machine's coding agents load — MCP servers (the
+**custom** ones that live here, and **third-party** ones pulled in from `npx`,
+uv tools, and desktop apps), **skills**, and **hooks**. Every resource is
+declared once in [`catalog/`](catalog/) and pushed into each agent by one
+command.
 
 Modeled on [`~/.dotfiles`](../.dotfiles): **dotter** deploys files, **cargo-make**
 runs tasks, per-host packages live in `.dotter/`.
@@ -16,15 +17,17 @@ runs tasks, per-host packages live in `.dotter/`.
 .agentdots/
 ├── catalog/                 # single source of truth
 │   ├── servers/*.toml       #   one file per MCP server
-│   ├── clients.toml         #   where each agent keeps its MCP config
+│   ├── skills/<name>.toml   #   one file per skill (content in <name>/)
+│   ├── hooks/<name>.toml    #   one file per event hook
+│   ├── clients.toml         #   where each agent keeps each kind
 │   ├── paths.toml           #   machine-specific command paths + ${VARS}
-│   └── retired.toml         #   servers to scrub from every client
+│   └── retired.toml         #   resources to scrub from every client
 ├── bin/
-│   ├── agent-sync             #   wrapper (uv + tomlkit)
-│   ├── agent_sync.py          #   the sync engine
-│   ├── agent-update           #   update checker/applier
+│   ├── agent-sync           #   wrapper (uv + tomlkit)
+│   ├── agent_sync.py        #   the sync engine
+│   ├── agent-update         #   update checker/applier
 │   └── agent_update.py
-├── generated/               # rendered pure-MCP configs (gitignored)
+├── generated/               # rendered pure-config files (gitignored)
 ├── .dotter/                 # dotter packages + pre-deploy hook
 ├── m365-local-mcp/          # custom servers (own projects)
 ├── teams-mcp/
@@ -36,35 +39,85 @@ runs tasks, per-host packages live in `.dotter/`.
 
 ```
 catalog/servers/*.toml ─┐
-catalog/clients.toml  ──┤  bin/agent-sync
+catalog/skills/       ──┤
+catalog/hooks/*.toml  ──┤  bin/agent-sync
+catalog/clients.toml  ──┤
 catalog/paths.toml    ──┤
 catalog/retired.toml  ──┘
         │
-        ├── merge  ──▶ ~/.claude.json                    Claude Code      (shared file)
-        ├── merge  ──▶ .../Claude/claude_desktop_config.json   Claude Desktop (shared file)
-        ├── merge  ──▶ ~/.config/opencode/opencode.jsonc opencode         (shared file)
-        ├── merge  ──▶ ~/.codex/config.toml              Codex            (shared file)
-        └── render ──▶ generated/vscode.json ──dotter──▶ VS Code mcp.json (pure file)
+        ├── merge   ──▶ ~/.claude.json                    Claude Code     (mcp)
+        ├── merge   ──▶ ~/.claude/settings.json           Claude Code     (hooks)
+        ├── merge   ──▶ ~/.codex/config.toml              Codex           (mcp)
+        ├── merge   ──▶ ~/.codex/hooks.json               Codex           (hooks)
+        ├── merge   ──▶ .../Claude/claude_desktop_config.json  Claude Desktop (mcp)
+        ├── merge   ──▶ ~/.config/opencode/opencode.jsonc opencode        (mcp)
+        ├── symlink ──▶ ~/.claude/skills/                 Claude Code     (skills)
+        ├── symlink ──▶ ~/.config/opencode/skills/        opencode        (skills)
+        └── render  ──▶ generated/vscode.json ──dotter──▶ VS Code mcp.json (pure)
 ```
 
-* **Shared files** (they also hold state and non-MCP settings) are *merged*:
-  only the MCP block is rewritten; everything else is left alone. Codex keeps
-  its per-tool tables (`[mcp_servers.databricks.tools.*]`), and the servers
-  Codex ships itself (`node_repl`, `computer-use`) are never touched.
-* **Pure files** (config that is nothing but MCP) are rendered to `generated/`
-  and symlinked into place by dotter, so the repo owns them outright.
+* A client declares one `[<client>.<kind>]` block per kind it supports; a kind
+  with no block is skipped for that client.
+* **Shared files** (they also hold state and non-resource settings) are
+  *merged*: only the managed subtree is rewritten; everything else is left
+  alone. Codex keeps its per-tool tables (`[mcp_servers.databricks.tools.*]`),
+  and the servers Codex ships itself (`node_repl`, `computer-use`) are never
+  touched.
+* **Pure files** (config that is nothing but one kind) are rendered to
+  `generated/` and symlinked into place by dotter, so the repo owns them.
 * `.dotter/pre_deploy.sh` runs `bin/agent-sync`, so a single `dotter` run keeps
   every agent in sync.
 
 ## Clients
 
-| Client | File | Format | Handling |
+| Client | Kind | Location | Handling |
 |---|---|---|---|
-| opencode | `~/.config/opencode/opencode.jsonc` | JSONC | merge |
-| Claude Code | `~/.claude.json` → `mcpServers` | JSON | merge |
-| Claude Desktop | `~/Library/Application Support/Claude/claude_desktop_config.json` | JSON | merge |
-| Codex | `~/.codex/config.toml` → `[mcp_servers]` | TOML | merge |
-| VS Code | `~/Library/Application Support/Code/User/mcp.json` | JSON | dotter symlink |
+| opencode | mcp | `~/.config/opencode/opencode.jsonc` | merge |
+| Claude Code | mcp | `~/.claude.json` → `mcpServers` | merge |
+| Claude Code | skills | `~/.claude/skills/` | symlink |
+| Claude Code | hooks | `~/.claude/settings.json` → `hooks` | merge |
+| Claude Desktop | mcp | `~/Library/Application Support/Claude/claude_desktop_config.json` | merge |
+| Codex | mcp | `~/.codex/config.toml` → `[mcp_servers]` | merge |
+| Codex | hooks | `~/.codex/hooks.json` → `hooks` | merge |
+| VS Code | mcp | `~/Library/Application Support/Code/User/mcp.json` | dotter symlink |
+
+## Skills
+
+A skill is a folder (`SKILL.md` + any assets) with a sibling TOML that says who
+gets it:
+
+```
+catalog/skills/example-skill.toml     # clients = [...]
+catalog/skills/example-skill/SKILL.md # content
+```
+
+`agent-sync` symlinks `catalog/skills/<name>/` into each listed client's skills
+directory. It only touches symlinks that point back into this repo, so your own
+skills are never disturbed. Drop a client from `clients`, or retire the skill in
+`catalog/retired.toml`, and the link is cleaned up on the next sync.
+
+Only Claude Code has a `[claude-code.skills]` block: opencode reads
+`~/.claude/skills/` too (its documented Claude-compatible path), so it inherits
+the same skills without a second copy. Add `[opencode.skills]` only if you want
+skills in opencode's own directory.
+
+## Hooks
+
+```
+catalog/hooks/<name>.toml
+```
+
+Declares `event`, `matcher`, the shell `command`, and which `clients` receive it.
+Claude Code and Codex use a near-identical hook shape, so one definition covers
+both.
+
+Hooks are **additive**: on each sync `agent-sync` removes the group it previously
+wrote for a client and appends the current one, leaving any hook it doesn't
+manage in the same file untouched. Retire a hook by adding its exact command to
+`hook_commands` in `catalog/retired.toml`.
+
+`catalog/hooks/example-hook.toml` ships inert (`clients = []`) — add a client to
+enable it.
 
 ## Inventory
 
@@ -172,9 +225,11 @@ m365-local     source   local source (always current)
 > local [`databricks-mcp/`](databricks-mcp/) uv project. Bumping its tag never
 > rewrites an agent config. `~/.ai-dev-kit` may still exist for its *skills*.
 
-## Adding or changing a server
+## Adding or changing a resource
 
-1. Add/edit `catalog/servers/<name>.toml` (set `clients = [...]`).
-2. To retire one, add its name to `catalog/retired.toml`.
-3. `cargo make agent-check`, then `cargo make sync`.
-4. Add a row to the Inventory table above. **That's the rule.**
+1. **Server**: add/edit `catalog/servers/<name>.toml` (set `clients = [...]`).
+2. **Skill**: add `catalog/skills/<name>.toml` + `catalog/skills/<name>/SKILL.md`.
+3. **Hook**: add `catalog/hooks/<name>.toml`.
+4. **Retire**: add the name (or, for hooks, the command) to `catalog/retired.toml`.
+5. `cargo make agent-check`, then `cargo make sync`.
+6. New server? Add a row to the Inventory table above. **That's the rule.**
