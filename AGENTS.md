@@ -12,7 +12,7 @@ truth for everything this machine's agents load — MCP servers (custom *and*
 third-party), skills, and hooks; the README table is the human index. No catalog
 entry, no resource.
 
-Then run `cargo make sync` (or just `dotter`) to push the catalog into every
+Then run `cargo make sync` to push the catalog into every
 agent — see [README.md](README.md) for the merge-vs-symlink model and
 [`bin/agent_sync.py`](bin/agent_sync.py) for the engine. Don't hand-edit the agent
 config files (`~/.claude.json`, `~/.config/opencode/opencode.jsonc`,

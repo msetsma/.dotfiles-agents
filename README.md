@@ -6,8 +6,8 @@ uv tools, and desktop apps), **skills**, and **hooks**. Every resource is
 declared once in [`catalog/`](catalog/) and pushed into each agent by one
 command.
 
-Modeled on [`~/.dotfiles`](../.dotfiles): **dotter** deploys files, **cargo-make**
-runs tasks, per-host packages live in `.dotter/`.
+Modeled on [`~/.dotfiles`](../.dotfiles): **cargo-make** runs the sync and update
+tasks; the catalog is the source of truth.
 
 ---
 
@@ -27,7 +27,6 @@ runs tasks, per-host packages live in `.dotter/`.
 │   ├── agent_sync.py        #   the sync engine
 │   ├── agent-update         #   update checker/applier
 │   └── agent_update.py
-├── .dotter/                 # dotter packages + pre-deploy hook
 └── mcp/                     # MCP server projects
     ├── m365-local-mcp/      #   custom (own project)
     ├── teams-mcp/           #   custom (own project)
@@ -62,8 +61,8 @@ catalog/retired.toml  ──┘
   alone. Codex keeps its per-tool tables (`[mcp_servers.databricks.tools.*]`),
   and the servers Codex ships itself (`node_repl`, `computer-use`) are never
   touched.
-* `.dotter/pre_deploy.sh` runs `bin/agent-sync`, so a single `dotter` run keeps
-  every agent in sync.
+* **Skills** are symlinked per item; **hooks** merge additively. Both are done
+  by `bin/agent-sync` directly - there is no second deployment tool.
 
 ## Clients
 
@@ -158,14 +157,8 @@ untracked `catalog/local.toml` — copy `catalog/local.toml.example` and fill it
 
 ```sh
 cargo make agent-check   # dry-run: show what would change
-cargo make agent-sync    # merge the catalog into every agent (no dotter)
-cargo make sync          # full sync: dotter runs agent-sync, then deploys
-```
-
-Or drive dotter directly (it runs the pre-deploy sync, then deploys):
-
-```sh
-dotter -v
+cargo make agent-sync    # render + merge the catalog into every agent
+cargo make sync          # same as agent-sync (kept as the friendly name)
 ```
 
 ## Keeping up to date

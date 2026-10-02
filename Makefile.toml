@@ -1,17 +1,16 @@
 # ==============================================================================
-# Makefile.toml - MCP config management (cargo-make), mirroring ~/.dotfiles
+# Makefile.toml - agent config management (cargo-make)
 # ==============================================================================
-#   cargo make sync        # render + merge catalog, then dotter deploy
+#   cargo make sync          # render + merge the catalog into every agent
 #   cargo make agent-check   # dry-run: show what would change
-#   cargo make dotfiles    # deploy dotter-managed files only
 # ==============================================================================
 
 [tasks.sync]
-description = "Full sync: dotter runs bin/agent-sync (pre-deploy) then deploys pure-MCP files"
-dependencies = ["dotfiles"]
+description = "Render + merge the catalog into every agent"
+dependencies = ["agent-sync"]
 
 [tasks.agent-sync]
-description = "Render + merge the catalog into every agent config (no dotter)"
+description = "Render + merge the catalog into every agent config"
 script = ["bin/agent-sync"]
 
 [tasks.agent-check]
@@ -25,7 +24,3 @@ script = ["bin/agent-update"]
 [tasks.agent-update]
 description = "Apply available MCP + runtime updates, then re-sync configs"
 script = ["bin/agent-update --apply"]
-
-[tasks.dotfiles]
-description = "Deploy dotter-managed (pure-MCP) configs"
-script = ["dotter -v"]

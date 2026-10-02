@@ -2,11 +2,6 @@
 # .agentdots - single .gitignore for the whole repo (all sub-projects included)
 # =============================================================================
 
-# dotter runtime state
-.dotter/cache.toml
-.dotter/cache/
-.dotter/local.toml
-
 # machine-local catalog values (copy catalog/local.toml.example)
 catalog/local.toml
 
