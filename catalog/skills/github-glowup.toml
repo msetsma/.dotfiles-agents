@@ -1,0 +1,3 @@
+name        = "github-glowup"
+description = "Audit a GitHub repo and suggest/apply quality-of-life improvements: README presentation (GFM alerts, Mermaid, collapsibles, TOC, footnotes, dark-mode images), badges, .github/ health files and automation, repo settings/topics, and signed commits. Tailors advice to solo / team / large-OSS repos."
+clients     = ["claude-code"]

@@ -90,8 +90,10 @@ catalog/instructions/<name>.toml # + <name>.md
 - **Hooks** — merged additively: the previously managed group is replaced, unmanaged hooks in the same file are left alone. Retire one by adding its exact command to `hook_commands` in `catalog/retired.toml`.
 - **Instructions** — per-client (tool vocabularies differ), wrapped in a `<!-- dotfiles-agents:begin/end -->` block; text outside the markers survives.
 
-`catalog/skills/example-skill` and `catalog/hooks/example-hook.toml` ship inert
-(`clients = []`) as templates.
+`catalog/skills/github-glowup/` is a real skill (audits a GitHub repo for
+quality-of-life improvements); `catalog/skills/example-skill/` is the placeholder
+that proves the pipeline, and `catalog/hooks/example-hook.toml` ships inert
+(`clients = []`) as a hook template.
 
 ## Inventory
 
