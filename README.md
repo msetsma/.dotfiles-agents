@@ -1,5 +1,7 @@
 # Agent configs: MCP servers, skills, plugins, hooks & instructions
 
+[![License: Apache-2.0](https://img.shields.io/github/license/msetsma/.dotfiles-agents?style=flat-square)](https://github.com/msetsma/.dotfiles-agents/blob/main/LICENSE) [![Last commit](https://img.shields.io/github/last-commit/msetsma/.dotfiles-agents?style=flat-square)](https://github.com/msetsma/.dotfiles-agents/commits/main)
+
 One repo for everything this machine's coding agents load: MCP servers (custom
 ones that live here, plus third-party ones from `npx`, uv tools, and desktop
 apps), skills, plugins, hooks, and per-tool instructions. Every resource is
@@ -34,10 +36,12 @@ tasks; the catalog is the source of truth.
 
 ## How it works
 
-```
-catalog/  ──▶  bin/agent-sync  ──┬─ merge   ──▶  MCP + hooks in each client's shared config
-                                 ├─ symlink ──▶  skills/ and plugins/ dirs
-                                 └─ block   ──▶  the client's global AGENTS.md
+```mermaid
+flowchart LR
+  C[catalog/] --> S[bin/agent-sync]
+  S -- merge --> M[MCP + hooks in shared client configs]
+  S -- symlink --> P[skills/ and plugins/ dirs]
+  S -- block --> I[global AGENTS.md]
 ```
 
 `catalog/` is the single source of truth. `bin/agent-sync` renders it into each
@@ -94,6 +98,14 @@ catalog/instructions/<name>.toml # + <name>.md
 Full table of what this repo manages. `custom` = source lives in this repo;
 `external` = pulled from elsewhere (npx / uv tool / app).
 
+> [!NOTE]
+> Claude Code also has a **project-scoped** `playwright` under
+> `~/docs/Analytics.wiki` that this repo does not manage (project config, not
+> user config).
+
+<details>
+<summary>Show the table</summary>
+
 | Server          | Origin   | Launch                                                                  | Clients                                      |
 |-----------------|----------|-------------------------------------------------------------------------|----------------------------------------------|
 | `m365-local`    | custom   | `uv run --directory ~/.dotfiles-agents/mcp/m365-local-mcp server.py`    | opencode, Claude Code, Claude Desktop        |
@@ -108,9 +120,7 @@ Full table of what this repo manages. `custom` = source lives in this repo;
 | `iMCP`          | external | `/Applications/iMCP.app/…/imcp-server`                                  | opencode, Claude Code, Claude Desktop, Codex |
 | `playwright`    | external | `npx @playwright/mcp@latest`                                            | opencode                                     |
 
-> Claude Code also has a **project-scoped** `playwright` under
-> `~/docs/Analytics.wiki` that this repo does not manage (project config, not
-> user config).
+</details>
 
 ## Secrets
 
@@ -119,6 +129,7 @@ your environment or the agent's config. `paths.toml` holds command paths and
 non-secret env only. Machine-specific, non-secret values go in the untracked
 `catalog/local.toml` (copy `catalog/local.toml.example`).
 
+> [!WARNING]
 > Two live tokens were found inline in the old configs while building this — a
 > Notion token (`ntn_…`) and a GitHub token (`gho_…`). The Notion server was
 > retired and the GitHub token replaced by the env reference. **Rotate both.**
