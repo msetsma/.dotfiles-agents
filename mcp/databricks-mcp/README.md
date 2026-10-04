@@ -27,7 +27,7 @@ dependencies = [
 ## Run
 
 ```sh
-uv run --project ~/.agentdots/mcp/databricks-mcp databricks-mcp
+uv run --project ~/.dotfiles-agents/mcp/databricks-mcp databricks-mcp
 ```
 
 ## Update

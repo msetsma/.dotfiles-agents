@@ -637,8 +637,8 @@ def sync_hooks(client: str, cli: dict, hooks: dict, retired_commands: list) -> b
 # Clients read a single global instruction file (opencode: AGENTS.md, Claude
 # Code: CLAUDE.md, Codex: AGENTS.md). There is no subtree to key into, so the
 # catalog owns one delimited region and everything outside it is left alone.
-INSTR_BEGIN = '<!-- agentdots:begin (managed by agent-sync; edit catalog/instructions/ instead) -->'
-INSTR_END = '<!-- agentdots:end -->'
+INSTR_BEGIN = '<!-- dotfiles-agents:begin (managed by agent-sync; edit catalog/instructions/ instead) -->'
+INSTR_END = '<!-- dotfiles-agents:end -->'
 INSTR_REGION = re.compile(re.escape(INSTR_BEGIN) + r'.*?' + re.escape(INSTR_END), re.DOTALL)
 INSTR_NAMES = re.compile(r'<!-- instructions: (.*?) -->', re.DOTALL)
 

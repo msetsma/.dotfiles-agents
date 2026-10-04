@@ -17,7 +17,7 @@
 // re-prompting while the report changes, then hand the last report back and stop.
 import { spawnSync } from "node:child_process"
 
-const HOOK = `${process.env.HOME}/.agentdots/bin/clean-python`
+const HOOK = `${process.env.HOME}/.dotfiles-agents/bin/clean-python`
 const MAX_PROMPTS = 3
 
 function digest(text: string): string {
@@ -27,7 +27,7 @@ function digest(text: string): string {
 }
 
 export default {
-  id: "agentdots.python-clean",
+  id: "dotfiles-agents.python-clean",
   async setup(ctx: any) {
     const cwd = ctx.location?.directory
 

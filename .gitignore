@@ -1,5 +1,5 @@
 # =============================================================================
-# .agentdots - single .gitignore for the whole repo (all sub-projects included)
+# .dotfiles-agents - single .gitignore for the whole repo (all sub-projects included)
 # =============================================================================
 
 # machine-local catalog values (copy catalog/local.toml.example)

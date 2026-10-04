@@ -15,4 +15,4 @@ entra-mcp      = "/Users/msetsma/.local/bin/entra-mcp"
 imcp           = "/Applications/iMCP.app/Contents/MacOS/imcp-server"
 
 [vars]
-AGENT_HOME = "~/.agentdots"
+AGENT_HOME = "~/.dotfiles-agents"

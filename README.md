@@ -14,7 +14,7 @@ tasks; the catalog is the source of truth.
 ## Layout
 
 ```
-.agentdots/
+.dotfiles-agents/
 ├── catalog/                 # single source of truth
 │   ├── mcp/*.toml           #   one file per MCP server
 │   ├── skills/<name>.toml   #   one file per skill (content in <name>/)
@@ -177,10 +177,10 @@ inert), Claude Code loads `~/.claude/CLAUDE.md`, and Codex loads
 delimited block in that file:
 
 ```md
-<!-- agentdots:begin (managed by agent-sync; edit catalog/instructions/ instead) -->
+<!-- dotfiles-agents:begin (managed by agent-sync; edit catalog/instructions/ instead) -->
 <!-- instructions: <names> -->
 ...content...
-<!-- agentdots:end -->
+<!-- dotfiles-agents:end -->
 ```
 
 Everything outside the markers is left untouched, so your own notes survive. A
@@ -200,12 +200,12 @@ Full table of what this repo manages. `custom` = source lives in this repo;
 
 | Server | Origin | Launch | Clients |
 |---|---|---|---|
-| `m365-local` | custom | `uv run --directory ~/.agentdots/mcp/m365-local-mcp server.py` | opencode, Claude Code, Claude Desktop |
-| `teams-browser` | custom | `uv run --directory ~/.agentdots/mcp/teams-mcp teams-browser-mcp` | opencode, Claude Code, Claude Desktop |
+| `m365-local` | custom | `uv run --directory ~/.dotfiles-agents/mcp/m365-local-mcp server.py` | opencode, Claude Code, Claude Desktop |
+| `teams-browser` | custom | `uv run --directory ~/.dotfiles-agents/mcp/teams-mcp teams-browser-mcp` | opencode, Claude Code, Claude Desktop |
 | `entra-mcp` | custom | `entra-mcp` (uv tool) | opencode, Claude Code, Claude Desktop, Codex |
 | `obscura` | external | `~/.local/bin/obscura mcp --stealth` | opencode, Claude Code, Claude Desktop |
 | `apple-mail` | external | `apple-mail-mcp` (uv tool) | opencode |
-| `databricks` | external | `uv run --project ~/.agentdots/mcp/databricks-mcp databricks-mcp` | opencode, Claude Code, Claude Desktop, Codex |
+| `databricks` | external | `uv run --project ~/.dotfiles-agents/mcp/databricks-mcp databricks-mcp` | opencode, Claude Code, Claude Desktop, Codex |
 | `azure` | external | `npx @azure/mcp@3.0.0-beta.29 server start` | opencode, Claude Code, Claude Desktop |
 | `azure-devops` | external | `npx @azure-devops/mcp ${ADO_ORG}` | opencode, Claude Code, Claude Desktop |
 | `github` | external | remote `api.githubcopilot.com/mcp/` | opencode, Claude Code |
