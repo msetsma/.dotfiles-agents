@@ -2,14 +2,9 @@
 
 [![License: Apache-2.0](https://img.shields.io/github/license/msetsma/.dotfiles-agents?style=flat-square)](https://github.com/msetsma/.dotfiles-agents/blob/main/LICENSE) [![Last commit](https://img.shields.io/github/last-commit/msetsma/.dotfiles-agents?style=flat-square)](https://github.com/msetsma/.dotfiles-agents/commits/main)
 
-One repo for everything this machine's coding agents load: MCP servers (custom
-ones that live here, plus third-party ones from `npx`, uv tools, and desktop
-apps), skills, plugins, hooks, and per-tool instructions. Every resource is
-declared once in [`catalog/`](catalog/) and pushed into each agent by one
-command.
-
-Modeled on [`~/.dotfiles`](../.dotfiles): **cargo-make** runs the sync and update
-tasks; the catalog is the source of truth.
+A catalog-driven config for coding agents. MCP servers (custom and third-party),
+skills, plugins, hooks, and per-tool instructions are declared once in
+[`catalog/`](catalog/) and synced into each agent by one command.
 
 ---
 
@@ -70,12 +65,7 @@ no block is skipped.
 | Codex          | mcp          | `~/.codex/config.toml` → `[mcp_servers]`                          | merge    |
 | Codex          | hooks        | `~/.codex/hooks.json` → `hooks`                                   | merge    |
 
-Notes:
-
-- Shared files also hold non-resource settings; only the managed subtree is touched.
-- Codex's own per-tool tables and built-in servers (`node_repl`, `computer-use`) are never touched.
-- Skills link once, for Claude Code; opencode reads `~/.claude/skills/` (its Claude-compatible path) and inherits them. Add `[opencode.skills]` for a separate copy.
-- Removing a `[<client>.skills]` block stops managing that directory; existing links are left behind.
+opencode has no `skills` row — it inherits `~/.claude/skills/`.
 
 ## Resource kinds
 
@@ -86,24 +76,17 @@ catalog/hooks/<name>.toml        # event + matcher + command
 catalog/instructions/<name>.toml # + <name>.md
 ```
 
-- **Skills / plugins** — symlinked per item; `agent-sync` only touches links that point back into this repo. opencode auto-discovers direct `.ts` files, so plugins need no `opencode.jsonc` entry.
-- **Hooks** — merged additively: the previously managed group is replaced, unmanaged hooks in the same file are left alone. Retire one by adding its exact command to `hook_commands` in `catalog/retired.toml`.
-- **Instructions** — per-client (tool vocabularies differ), wrapped in a `<!-- dotfiles-agents:begin/end -->` block; text outside the markers survives.
+- **Skills / plugins** — symlinked per item.
+- **Hooks** — merged additively; retire one via `hook_commands` in `catalog/retired.toml`.
+- **Instructions** — per-client, wrapped in a `<!-- dotfiles-agents:begin/end -->` block.
 
-`catalog/skills/github-glowup/` is a real skill (audits a GitHub repo for
-quality-of-life improvements); `catalog/skills/example-skill/` is the placeholder
-that proves the pipeline, and `catalog/hooks/example-hook.toml` ships inert
-(`clients = []`) as a hook template.
+`catalog/skills/github-glowup/` is a real skill; `example-skill/` and
+`hooks/example-hook.toml` are templates.
 
 ## Inventory
 
 Full table of what this repo manages. `custom` = source lives in this repo;
 `external` = pulled from elsewhere (npx / uv tool / app).
-
-> [!NOTE]
-> Claude Code also has a **project-scoped** `playwright` under
-> `~/docs/Analytics.wiki` that this repo does not manage (project config, not
-> user config).
 
 <details>
 <summary>Show the table</summary>
@@ -126,32 +109,24 @@ Full table of what this repo manages. `custom` = source lives in this repo;
 
 ## Secrets
 
-**No secrets live here.** `github` references `${GITHUB_TOKEN}` — supply it in
-your environment or the agent's config. `paths.toml` holds command paths and
-non-secret env only. Machine-specific, non-secret values go in the untracked
-`catalog/local.toml` (copy `catalog/local.toml.example`).
-
-> [!WARNING]
-> Two live tokens were found inline in the old configs while building this — a
-> Notion token (`ntn_…`) and a GitHub token (`gho_…`). The Notion server was
-> retired and the GitHub token replaced by the env reference. **Rotate both.**
+**No secrets live here** — `github` uses `${GITHUB_TOKEN}`; machine-specific
+values live in the untracked `catalog/local.toml` (`catalog/local.toml.example`).
 
 ## Usage
 
 ```sh
-cargo make agent-check   # dry-run: show what would change
-cargo make sync          # render + merge the catalog into every agent
+make agent-check   # dry-run
+make sync          # render + merge into every agent
 ```
 
 ## Keeping up to date
 
 External servers carry a `[package]` block; launch args use a `{{package}}`
-placeholder resolved at render time, so npm servers float at `@latest` and need
-no maintenance.
+placeholder resolved at render time.
 
 ```sh
-cargo make agent-outdated   # report only
-cargo make agent-update     # apply updates, then re-sync if a pin changed
+make agent-outdated   # report
+make agent-update     # apply, then re-sync
 ```
 
 | manager             | how it updates                                                    |
@@ -163,15 +138,11 @@ cargo make agent-update     # apply updates, then re-sync if a pin changed
 | `source`            | always current (runs from a working tree)                         |
 | `manual` / `remote` | a binary/app or hosted endpoint — nothing to do                   |
 
-`databricks` runs from the local [`mcp/databricks-mcp/`](mcp/databricks-mcp/) uv
-project (ai-dev-kit's MCP isn't on PyPI); bumping its pin never rewrites an agent
-config.
-
 ## Adding or changing a resource
 
 1. **Server** — add/edit `catalog/mcp/<name>.toml` (set `clients = [...]`).
 2. **Skill** — add `catalog/skills/<name>.toml` + `catalog/skills/<name>/SKILL.md`.
 3. **Hook** — add `catalog/hooks/<name>.toml`.
 4. **Retire** — add the name (or, for hooks, the command) to `catalog/retired.toml`.
-5. `cargo make agent-check`, then `cargo make sync`.
-6. New server? Add a row to the Inventory table above. **That's the rule.**
+5. `make agent-check`, then `make sync`.
+6. New server? Add a row to the Inventory table above.

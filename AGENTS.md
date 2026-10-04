@@ -8,19 +8,19 @@ is registered with the local agent software.
 
 **When you create or change a resource, update its catalog entry and the
 Inventory table in [`README.md`](README.md).** The catalog is the single source of
-truth for everything this machine's agents load — MCP servers (custom *and*
+truth for everything the agents load — MCP servers (custom *and*
 third-party), skills, plugins, hooks, and instructions; the README table is the
 human index. No catalog entry, no resource.
 
-Then run `cargo make sync` to push the catalog into every
+Then run `make sync` to push the catalog into every
 agent — see [README.md](README.md) for the merge-vs-symlink model and
 [`bin/agent_sync.py`](bin/agent_sync.py) for the engine. Don't hand-edit the agent
 config files (`~/.claude.json`, `~/.config/opencode/opencode.jsonc`,
 `~/.codex/config.toml`, the Claude Desktop config); edit the catalog instead.
 
-External servers carry a `[package]` block; run `cargo make agent-outdated` to see
-newer npm/uv/git versions and `cargo make agent-update` to apply them. Prefer
-`ref = "latest"` (float) unless you need a specific version.
+External servers carry a `[package]` block; `make agent-outdated` reports newer
+npm/uv/git versions, `make agent-update` applies them. Prefer `ref = "latest"`
+(float) unless you need a specific version.
 
 Also keep the server's own `README.md` (the deep docs) and `pyproject.toml`
 `description` in sync — `README.md` at the root is the summary, the server
@@ -72,26 +72,18 @@ Alongside servers, the catalog owns four more kinds:
   outside it survive. Instructions are deliberately per-client — each tool's
   vocabulary and agent names differ.
 
-The `python-clean` gate is the worked example: it deploys as a Claude Code hook
-(`catalog/hooks/python-clean.toml`) and an opencode plugin
-(`catalog/plugins/python-clean.ts`), both calling the shared `bin/clean-python`,
-which auto-fixes + formats with ruff and hands anything unfixable back to the
-model (suppressions are ignored). It resolves ruff's config from the git project
-root, falling back to the global config, and an off-topic file the user agrees
-to skip can be waived across both clients.
+The `python-clean` gate is the worked example: a Claude Code hook plus an
+opencode plugin over `bin/clean-python`.
 
 `catalog/clients.toml` declares a `[<client>.<kind>]` block for each kind a
 client supports; a kind with no block is skipped for that client.
 
 ## Registering a server with the local agents
 
-> **Config is catalog-driven now.** Registration below is handled by
-> `catalog/mcp/*.toml` + `bin/agent-sync`; the manual snippets are kept as a
-> reference / fallback for a machine that doesn't have this repo. Prefer editing
-> the catalog.
+> The snippets below are a fallback for a machine without this repo; prefer the
+> catalog.
 
-Installed on this machine: **opencode**, **Claude Code**, **Claude Desktop**,
-**Codex**. (No Cursor.)
+Configured clients: **opencode**, **Claude Code**, **Claude Desktop**, **Codex**.
 
 Always use an **absolute path to `uv`** (`/opt/homebrew/bin/uv`) in GUI apps —
 they don't inherit your shell `PATH`. Replace the command/args with the new
@@ -110,15 +102,11 @@ Launch commands:
 /opt/homebrew/bin/uv run --directory /Users/msetsma/.dotfiles-agents/mcp/entra-mcp --extra mcp entra-mcp
 ```
 
-`entra-mcp` is the one exception to "no global install is needed" above: it also
-ships a daily-use `entra` CLI, so both commands come from a uv tool install.
+`entra-mcp` also ships a daily-use `entra` CLI, so it's a uv tool install:
 
 ```sh
 uv tool install --editable ~/.dotfiles-agents/mcp/entra-mcp --with fastmcp   # provides `entra` and `entra-mcp`
 ```
-
-Registered clients point straight at `/Users/msetsma/.local/bin/entra-mcp`. It
-needs no `PATH` — `entra_tool/graph.py` falls back to absolute `az` locations.
 
 ### opencode
 
@@ -198,8 +186,4 @@ snippets above.
 
 ## Path convention
 
-Everything points at `~/.dotfiles-agents/...`. The Claude Desktop config and Claude Code
-were migrated off the old `~/dev/...` paths (`~/dev/m365-local-mcp`,
-`~/dev/mcp-teams`) — those directories no longer exist. When you copy a snippet
-from a sub-project README or an old client config, check for `~/dev/` and
-rewrite it to `~/.dotfiles-agents/`.
+Everything points at `~/.dotfiles-agents/...`.

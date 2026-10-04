@@ -33,8 +33,8 @@ uv run --project ~/.dotfiles-agents/mcp/databricks-mcp databricks-mcp
 ## Update
 
 ```sh
-cargo make agent-outdated   # shows: databricks  uv-project  v0.2.0 -> v0.2.x
-cargo make agent-update     # rewrites the tag above, re-locks, re-syncs
+make agent-outdated   # shows: databricks  uv-project  v0.2.0 -> v0.2.x
+make agent-update     # rewrites the tag above, re-locks, re-syncs
 ```
 
 Because the catalog launches via `--project` (the tag lives here, not in the
