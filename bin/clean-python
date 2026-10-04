@@ -5,19 +5,32 @@
 # the model has to fix it. Suppressions (`# noqa`) are deliberately ignored on
 # the final pass: the only accepted resolution is a real fix.
 #
-# Three ways in, so a single implementation serves every client:
-#   clean-python <path>      explicit file (used by the opencode plugin)
-#   ... | clean-python       Claude Code PostToolUse JSON on stdin
-#   clean-python --stop-check Claude Code Stop JSON on stdin
+# Config: the gate resolves ruff's config explicitly from the *git project root*
+# (ruff.toml, .ruff.toml, or a pyproject.toml with a [tool.ruff] section). When
+# the project root has no such file the global ruff config is used; when that is
+# absent too, ruff's built-in defaults apply. Resolving it explicitly keeps a
+# stray config in a parent directory from silently changing the rules.
+#
+# Four ways in, so a single implementation serves every client:
+#   clean-python <path>          explicit file (used by the opencode plugin)
+#   ... | clean-python           Claude Code PostToolUse JSON on stdin
+#   clean-python --stop-check    Claude Code Stop JSON on stdin
+#   clean-python --waive <path>  record a user-approved "off-topic" skip
+#
+# Tests also probe config resolution through an internal `--config-for <path>`
+# mode, which just prints the config path this gate would use.
 #
 # Exit 0: clean / auto-fixed / not a Python file / no pending residue (no-op).
 # Exit 2: something auto-fix could not resolve -> report on stderr. For
 #         --stop-check, exit 2 also refuses the Stop hook, forcing another turn.
 #
-# The opencode plugin injects its own follow-up prompt when this exits 2. Claude
-# Code has no such hook, so PostToolUse records every still-broken file in a
-# per-session state file and the Stop hook re-checks them before the turn may
-# end. A file is dropped once it passes, or after MAX_BLOCKS refused stops, so a
+# The opencode plugin injects its own follow-up prompt when this exits 2, and
+# its python_clean_skip tool calls `--waive` once the user approves skipping an
+# off-topic file. Claude Code has no such tool, so PostToolUse records every
+# still-broken file in a per-session state file and the Stop hook re-checks them
+# before the turn may end. A waiver is keyed by the file's current findings, so
+# it sticks across turns but expires as soon as the code changes. A file is
+# dropped once it passes, is waived, or after MAX_BLOCKS refused stops, so a
 # problem the agent cannot fix cannot trap the session forever.
 set -uo pipefail
 
@@ -25,7 +38,7 @@ MAX_BLOCKS=3
 state_dir="${TMPDIR:-/tmp}/clean-python"
 
 # --------------------------------------------------------------------------- #
-# ruff + reporting helpers
+# ruff + config resolution
 # --------------------------------------------------------------------------- #
 ruff_for() {
     # Print the ruff binary to use for $1: project venv first, then $RUFF, then PATH.
@@ -40,6 +53,79 @@ ruff_for() {
         return
     fi
     command -v ruff || true
+}
+
+project_root_for() {
+    # Git project root for $1, or the file's own directory outside a repo.
+    local target="$1" dir root
+    if dir="$(cd "$(dirname "$target")" 2>/dev/null && pwd)"; then :; else dir="$(dirname "$target")"; fi
+    root="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null || true)"
+    printf '%s' "${root:-$dir}"
+}
+
+project_config_for() {
+    # Print the project-level ruff config for $1 when the git root has one.
+    local target="$1" root candidate
+    root="$(project_root_for "$target")"
+    for candidate in "$root/ruff.toml" "$root/.ruff.toml"; do
+        if [[ -f "$candidate" ]]; then
+            printf '%s' "$candidate"
+            return 0
+        fi
+    done
+    candidate="$root/pyproject.toml"
+    if [[ -f "$candidate" ]] && grep -q '^\[tool\.ruff' "$candidate" 2>/dev/null; then
+        printf '%s' "$candidate"
+        return 0
+    fi
+    return 1
+}
+
+global_config() {
+    # Ruff's user-level config, the fallback when the project root has none.
+    local cfg="${XDG_CONFIG_HOME:-$HOME/.config}/ruff/ruff.toml"
+    [[ -f "$cfg" ]] && printf '%s' "$cfg"
+}
+
+config_for() {
+    # Single config path for $1: project root first, then the global config.
+    local cfg
+    cfg="$(project_config_for "$1" || true)"
+    [[ -n "$cfg" ]] || cfg="$(global_config || true)"
+    printf '%s' "$cfg"
+}
+
+ruff_run() {
+    # Run ruff for $1 with $ruff_bin from the file's own directory, so its
+    # report is cwd-independent (ruff prints paths relative to its cwd). The
+    # remaining arguments are the ruff subcommand + flags. Config is pinned to
+    # the project root when present, else the global config, else --isolated
+    # (built-in defaults) so a stray config can never leak in.
+    local target="$1"
+    shift
+    local dir base cfg
+    dir="$(dirname "$target")"
+    base="$(basename "$target")"
+    cfg="$(config_for "$target")"
+    if [[ -n "$cfg" ]]; then
+        (cd "$dir" && "$ruff_bin" "$@" --config "$cfg" "$base" 2>&1)
+    else
+        (cd "$dir" && "$ruff_bin" "$@" --isolated "$base" 2>&1)
+    fi
+}
+
+check_report() {
+    # Run ruff on $1 with $ruff_bin; set RUFF_REPORT, return ruff's exit status.
+    # Note: ruff prints "All checks passed!" on a clean run, so callers must test
+    # the exit status, not whether RUFF_REPORT is empty.
+    RUFF_REPORT="$(ruff_run "$1" check --ignore-noqa --output-format concise)"
+    return $?
+}
+
+fix_and_format() {
+    # Auto-fix + format $1, using $ruff_bin and its resolved config.
+    ruff_run "$1" check --fix --quiet >/dev/null 2>&1 || true
+    ruff_run "$1" format --quiet >/dev/null 2>&1 || true
 }
 
 is_python() {
@@ -64,6 +150,61 @@ record_pending() {
     printf '0\t%s\n' "$2" >>"$sf"
 }
 
+digest() {
+    printf '%s' "$1" | shasum -a 256 | awk '{print $1}'
+}
+
+abs_path() {
+    local dir
+    if dir="$(cd "$(dirname "$1")" 2>/dev/null && pwd -P)"; then
+        printf '%s/%s' "$dir" "$(basename "$1")"
+    else
+        printf '%s' "$1"
+    fi
+}
+
+waiver_file() {
+    # One waiver per absolute path; contents are the findings digest it covers.
+    printf '%s/waived-%s' "$state_dir" "$(digest "$(abs_path "$1")")"
+}
+
+is_waived() {
+    # $1 file, $2 its current findings. True when a waiver matches that digest.
+    local wf
+    wf="$(waiver_file "$1")"
+    [[ -f "$wf" ]] || return 1
+    [[ "$(cat "$wf" 2>/dev/null)" == "$(digest "$2")" ]]
+}
+
+# --------------------------------------------------------------------------- #
+# Probe mode: print the ruff config this gate would resolve for a path (tests)
+# --------------------------------------------------------------------------- #
+if [[ "${1:-}" == "--config-for" ]]; then
+    config_for "${2:-}"
+    exit 0
+fi
+
+# --------------------------------------------------------------------------- #
+# Waive mode: record a user-approved skip for one file's current findings
+# --------------------------------------------------------------------------- #
+if [[ "${1:-}" == "--waive" ]]; then
+    target="${2:-}"
+    [[ -n "$target" && -f "$target" ]] || exit 0
+    is_python "$target" || exit 0
+    target="$(abs_path "$target")"
+    ruff_bin="$(ruff_for "$target")"
+    [[ -n "$ruff_bin" ]] || exit 0
+    if check_report "$target"; then
+        echo "clean-python: $(basename "$target") is already clean; nothing to waive." >&2
+        exit 0
+    fi
+    report="$RUFF_REPORT"
+    mkdir -p "$state_dir" || exit 0
+    digest "$report" >"$(waiver_file "$target")"
+    echo "clean-python: waived $(basename "$target") for its current findings." >&2
+    exit 0
+fi
+
 # --------------------------------------------------------------------------- #
 # Stop mode: refuse to finish while Python written this session still fails
 # --------------------------------------------------------------------------- #
@@ -83,18 +224,25 @@ except Exception:
     [[ -f "$sf" ]] || exit 0
 
     pending=""
-    report=""
+    findings=""
     while IFS=$'\t' read -r count path; do
         [[ -n "$path" && -f "$path" ]] || continue
+        path="$(abs_path "$path")"
         ruff_bin="$(ruff_for "$path")"
         [[ -n "$ruff_bin" ]] || continue
-        if "$ruff_bin" check --ignore-noqa --output-format concise "$path" >/dev/null 2>&1; then
-            continue # clean -> drop
+        report=""
+        if check_report "$path"; then
+            rm -f "$(waiver_file "$path")"
+            continue # clean -> drop, and clear any stale waiver
+        fi
+        report="$RUFF_REPORT"
+        if is_waived "$path" "$report"; then
+            continue # user approved skipping this off-topic file
         fi
         count=$((count + 1))
         if [[ "$count" -le "$MAX_BLOCKS" ]]; then
             pending+="${count}"$'\t'"${path}"$'\n'
-            report+="$("$ruff_bin" check --ignore-noqa --output-format concise "$path" 2>&1)"$'\n'
+            findings+="$report"$'\n'
         fi
     done <"$sf"
 
@@ -103,8 +251,10 @@ except Exception:
         {
             echo "clean-python: Python you wrote still has ruff findings that auto-fix could not resolve."
             echo
-            printf '%s' "$report"
+            printf '%s' "$findings"
             echo "Fix the code itself. Suppression (# noqa) is ignored on this check."
+            echo "If the file is off-topic, ask the user for permission and then skip it with:"
+            echo "  $0 --waive <file>"
         } >&2
         exit 2
     fi
@@ -141,6 +291,7 @@ fi
 [[ -n "$target" ]] || exit 0
 is_python "$target" || exit 0
 [[ -f "$target" ]] || exit 0
+target="$(abs_path "$target")"
 
 ruff_bin="$(ruff_for "$target")"
 if [[ -z "$ruff_bin" ]]; then
@@ -151,10 +302,15 @@ fi
 # --------------------------------------------------------------------------- #
 # fix what we can, then verify with suppressions ignored
 # --------------------------------------------------------------------------- #
-"$ruff_bin" check --fix --quiet "$target" >/dev/null 2>&1 || true
-"$ruff_bin" format --quiet "$target" >/dev/null 2>&1 || true
+fix_and_format "$target"
 
-if report="$("$ruff_bin" check --ignore-noqa --output-format concise "$target" 2>&1)"; then
+if check_report "$target"; then
+    rm -f "$(waiver_file "$target")"
+    exit 0
+fi
+report="$RUFF_REPORT"
+
+if is_waived "$target" "$report"; then
     exit 0
 fi
 
@@ -170,5 +326,6 @@ fi
     echo "$report"
     echo
     echo "Fix the code itself. Suppression (# noqa) is ignored on this check."
+    echo "If this file is off-topic, ask the user for permission to skip it."
 } >&2
 exit 2

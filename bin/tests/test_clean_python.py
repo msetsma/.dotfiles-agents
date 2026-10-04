@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 import textwrap
@@ -241,3 +242,125 @@ def test_stop_drops_deleted_file(project: Path) -> None:
     path.unlink()
     result = run_stop({'session_id': session}, env=tmp_env(project))
     assert result.returncode == 0, result.stderr
+
+
+# --------------------------------------------------------------------------- #
+# config resolution: project root first, global fallback, no leakage
+# --------------------------------------------------------------------------- #
+@pytest.fixture
+def git_project() -> Iterator[Path]:
+    """A throwaway git repo with no ruff config of its own."""
+    with tempfile.TemporaryDirectory(prefix='clean-python-git-') as tmp:
+        root = Path(tmp)
+        git = shutil.which('git')
+        assert git is not None
+        subprocess.run([git, 'init', '-q'], cwd=root, check=True)
+        yield root.resolve()
+
+
+def config_for(path: Path, env: dict[str, str] | None = None) -> str:
+    result = subprocess.run(
+        [str(CLEAN_PYTHON), '--config-for', str(path)], capture_output=True, text=True, check=False, env=env
+    )
+    assert result.returncode == 0, result.stderr
+    return result.stdout.strip()
+
+
+def isolated_env(root: Path) -> dict[str, str]:
+    # No global ruff config: XDG_CONFIG_HOME points at an empty tree.
+    return {**os.environ, 'XDG_CONFIG_HOME': str(root)}
+
+
+def test_project_config_is_the_git_root(project: Path) -> None:
+    path = write(project, 'a.py', 'x = 1\n')
+    assert config_for(path) == str(project / 'ruff.toml')
+
+
+def test_git_root_ruff_toml_is_used(git_project: Path) -> None:
+    (git_project / 'ruff.toml').write_text(RUFF_TOML)
+    path = write(git_project, 'a.py', 'x = 1\n')
+    assert config_for(path) == str(git_project / 'ruff.toml')
+
+
+def test_git_root_pyproject_with_tool_ruff_is_used(git_project: Path) -> None:
+    (git_project / 'pyproject.toml').write_text('[project]\nname = "x"\n\n[tool.ruff]\nline-length = 88\n')
+    path = write(git_project, 'a.py', 'x = 1\n')
+    assert config_for(path) == str(git_project / 'pyproject.toml')
+
+
+def test_pyproject_without_tool_ruff_falls_back_to_global(git_project: Path, tmp_path: Path) -> None:
+    (git_project / 'pyproject.toml').write_text('[project]\nname = "x"\n')
+    global_cfg = tmp_path / 'ruff' / 'ruff.toml'
+    global_cfg.parent.mkdir(parents=True)
+    global_cfg.write_text(RUFF_TOML)
+    path = write(git_project, 'a.py', 'x = 1\n')
+    assert config_for(path, env=isolated_env(tmp_path)) == str(global_cfg)
+
+
+def test_nested_config_is_ignored(git_project: Path, tmp_path: Path) -> None:
+    sub = git_project / 'pkg'
+    sub.mkdir()
+    (sub / 'ruff.toml').write_text(RUFF_TOML)
+    path = write(sub, 'a.py', 'x = 1\n')
+    # Only the git root is considered, so a config in a subdirectory is not used.
+    assert config_for(path, env=isolated_env(tmp_path)) == ''
+
+
+def test_no_config_anywhere_resolves_to_nothing(git_project: Path, tmp_path: Path) -> None:
+    path = write(git_project, 'a.py', 'x = 1\n')
+    assert config_for(path, env=isolated_env(tmp_path)) == ''
+
+
+# --------------------------------------------------------------------------- #
+# off-topic waivers
+# --------------------------------------------------------------------------- #
+def test_waive_suppresses_residue(project: Path) -> None:
+    path = write(project, 'unused.py', 'import os\n')
+    assert run_path(str(path)).returncode == 2
+    assert run_path('--waive', str(path), env=tmp_env(project)).returncode == 0
+    assert run_path(str(path), env=tmp_env(project)).returncode == 0
+
+
+def test_waiver_matches_across_path_spellings(project: Path) -> None:
+    path = write(project, 'unused.py', 'import os\n')
+    # Waive by absolute path, then address the same file relatively: the waiver
+    # must still match because the gate normalises the path before hashing.
+    assert run_path('--waive', str(path), env=tmp_env(project)).returncode == 0
+    result = subprocess.run(
+        [str(CLEAN_PYTHON), 'unused.py'], cwd=project, capture_output=True, text=True, check=False, env=tmp_env(project)
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_waive_on_clean_file_is_a_noop(project: Path) -> None:
+    path = write(project, 'clean.py', 'x = 1\n')
+    assert run_path('--waive', str(path), env=tmp_env(project)).returncode == 0
+    state = project / 'clean-python'
+    assert not state.exists() or not list(state.glob('waived-*'))
+
+
+def test_waiver_expires_when_findings_change(project: Path) -> None:
+    path = write(project, 'unused.py', 'import os\n')
+    run_path('--waive', str(path), env=tmp_env(project))
+    assert run_path(str(path), env=tmp_env(project)).returncode == 0
+    path.write_text('import sys\n')
+    assert run_path(str(path), env=tmp_env(project)).returncode == 2
+
+
+def test_waive_releases_stop(project: Path) -> None:
+    session = 'sess-waive'
+    path = write(project, 'broken.py', 'import os\n')
+    run_stdin({'tool_input': {'file_path': str(path)}, 'session_id': session}, env=tmp_env(project))
+    run_path('--waive', str(path), env=tmp_env(project))
+    result = run_stop({'session_id': session}, env=tmp_env(project))
+    assert result.returncode == 0, result.stderr
+    assert not pending_file(project, session).exists()
+
+
+def test_fixing_clears_stale_waiver(project: Path) -> None:
+    path = write(project, 'unused.py', 'import os\n')
+    run_path('--waive', str(path), env=tmp_env(project))
+    path.write_text('x = 1\n')
+    assert run_path(str(path), env=tmp_env(project)).returncode == 0
+    state = project / 'clean-python'
+    assert not list(state.glob('waived-*'))

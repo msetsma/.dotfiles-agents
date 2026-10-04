@@ -76,7 +76,9 @@ The `python-clean` gate is the worked example: it deploys as a Claude Code hook
 (`catalog/hooks/python-clean.toml`) and an opencode plugin
 (`catalog/plugins/python-clean.ts`), both calling the shared `bin/clean-python`,
 which auto-fixes + formats with ruff and hands anything unfixable back to the
-model (suppressions are ignored).
+model (suppressions are ignored). It resolves ruff's config from the git project
+root, falling back to the global config, and an off-topic file the user agrees
+to skip can be waived across both clients.
 
 `catalog/clients.toml` declares a `[<client>.<kind>]` block for each kind a
 client supports; a kind with no block is skipped for that client.

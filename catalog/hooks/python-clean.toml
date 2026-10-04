@@ -3,6 +3,11 @@
 # to fix. Suppressions (`# noqa`) are ignored on the final pass, so the only
 # accepted resolution is a real fix.
 #
+# Ruff's config is resolved from the git project root (ruff.toml, .ruff.toml, or
+# a pyproject.toml with [tool.ruff]), falling back to the global ruff config.
+# `clean-python --waive <file>` records a user-approved off-topic skip, which
+# both this hook and the Stop hook then honour.
+#
 # Files that are still broken are recorded for the companion python-clean-stop
 # hook, which refuses to end the turn until they pass.
 #

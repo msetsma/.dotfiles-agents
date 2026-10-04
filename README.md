@@ -77,6 +77,9 @@ catalog/retired.toml  ──┘
   **enforced**: the opencode plugin injects its own follow-up prompt, and Claude
   Code's `python-clean-stop` Stop hook refuses to end the turn until the file
   passes (released after a few refusals so an unfixable finding cannot trap it).
+  The gate resolves ruff's config from the git project root (falling back to the
+  global config), and a file the user agrees is off-topic can be waived, which
+  both clients then honour.
 
 ## Clients
 
@@ -132,7 +135,10 @@ plugins directory. opencode auto-discovers direct `.ts` files under
 runs `bin/clean-python` on every `.py`/`.pyi` file the agent writes. It appends
 the findings to the tool result *and*, when residue remains, injects a session
 prompt so the agent must fix it. A per-file counter in plugin storage stops an
-unfixable finding from looping.
+unfixable finding from looping. Two tools back the escape hatches: when the user
+approves skipping an off-topic file the agent calls `python_clean_skip` (records
+a waiver keyed to the current findings), and `python_clean_refactor` hands the
+fix to a fresh child session so the ruff noise stays out of the main one.
 
 ## Hooks
 
@@ -159,8 +165,9 @@ fix) and records any still-broken file under `$TMPDIR/clean-python/`.
 `catalog/hooks/python-clean-stop.toml` is a `Stop` hook running
 `bin/clean-python --stop-check`: it re-checks those files and exits 2 while
 residue remains, so the turn cannot end on broken Python. A file is released
-once it is clean, or after three refused stops, so an unfixable finding cannot
-trap the session.
+once it is clean, is waived (`bin/clean-python --waive <file>`, which the agent
+runs after the user approves an off-topic skip), or after three refused stops,
+so an unfixable finding cannot trap the session.
 
 ## Instructions
 
