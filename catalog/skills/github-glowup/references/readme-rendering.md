@@ -115,6 +115,15 @@ Use only a language identifier after the fence for syntax highlighting. GitHub d
 - **OSS projects:** a hero GIF/video, screenshots, and domain-appropriate diagrams.
 - Keep media small and prefer relative paths to files in an `assets/` directory.
 
+## README prose
+
+Write for the reader's repo, not the author's machine:
+
+- No `this machine` / `my setup` framing.
+- No history or migration notes: `modeled on`, `migrated from`, `previously`, `was …`.
+- No personal or business context — internal hosts, employer or product systems, private paths.
+- Terse over exhaustive; let code, tables, and diagrams carry the detail.
+
 ## Sources
 
 - https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax

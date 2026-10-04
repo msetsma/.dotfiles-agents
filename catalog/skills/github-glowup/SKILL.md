@@ -36,6 +36,10 @@ repo and a large multi-user library need different things.
   wrong or empty data. On a mismatch, fall back to local-only inspection, flag it
   in the report, and suggest `gh auth switch` (or `GH_TOKEN`) as the fix.
 - Prefer **dynamic, zero-maintenance** badges; flag stale or broken ones.
+- **Write prose for the reader, not the author's machine.** No `this machine` /
+  `my setup` framing, no history or migration notes (`modeled on`, `migrated
+  from`, `previously`), and no personal or business context. Keep it terse; let
+  code and tables carry the detail.
 
 ## Modes
 
