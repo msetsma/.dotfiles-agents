@@ -1,10 +1,10 @@
 # Agent configs: MCP servers, skills, plugins, hooks & instructions
 
-One repo for everything this machine's coding agents load — MCP servers (the
-**custom** ones that live here, and **third-party** ones pulled in from `npx`,
-uv tools, and desktop apps), **skills**, **plugins**, **hooks**, and per-tool
-**instructions**. Every resource is declared once in [`catalog/`](catalog/) and
-pushed into each agent by one command.
+One repo for everything this machine's coding agents load: MCP servers (custom
+ones that live here, plus third-party ones from `npx`, uv tools, and desktop
+apps), skills, plugins, hooks, and per-tool instructions. Every resource is
+declared once in [`catalog/`](catalog/) and pushed into each agent by one
+command.
 
 Modeled on [`~/.dotfiles`](../.dotfiles): **cargo-make** runs the sync and update
 tasks; the catalog is the source of truth.
@@ -15,209 +15,98 @@ tasks; the catalog is the source of truth.
 
 ```
 .dotfiles-agents/
-├── catalog/                 # single source of truth
-│   ├── mcp/*.toml           #   one file per MCP server
-│   ├── skills/<name>.toml   #   one file per skill (content in <name>/)
-│   ├── plugins/<name>.toml  #   one file per plugin (content in <name>.ts)
-│   ├── hooks/<name>.toml    #   one file per event hook
-│   ├── instructions/*.toml  #   one per instruction overlay (content in <name>.md)
-│   ├── clients.toml         #   where each agent keeps each kind
-│   ├── paths.toml           #   machine-specific command paths + ${VARS}
-│   └── retired.toml         #   resources to scrub from every client
-├── bin/
-│   ├── agent-sync           #   wrapper (uv + tomlkit)
-│   ├── agent_sync.py        #   the sync engine
-│   ├── clean-python         #   ruff gate behind the python-clean hook/plugin
-│   ├── agent-update         #   update checker/applier
-│   └── agent_update.py
-└── mcp/                     # MCP server projects
-    ├── m365-local-mcp/      #   custom (own project)
-    ├── teams-mcp/           #   custom (own project)
-    ├── databricks-mcp/      #   uv project pinning ai-dev-kit's MCP from git
-    └── entra-mcp/           #   custom (own project; also ships the `entra` CLI)
+├── catalog/                # single source of truth — one file per resource
+│   ├── mcp/*.toml          # MCP servers (custom + third-party)
+│   ├── skills/<name>.toml  # skills (content in <name>/SKILL.md)
+│   ├── plugins/<name>.toml # opencode plugins (content in <name>.ts)
+│   ├── hooks/<name>.toml   # Claude Code / Codex event hooks
+│   ├── instructions/*.toml # per-tool prompts (content in <name>.md)
+│   ├── clients.toml        # where each agent keeps each kind
+│   ├── paths.toml          # machine paths + ${VARS}
+│   └── retired.toml        # resources to scrub from every client
+├── bin/                    # agent-sync, agent-update, clean-python
+└── mcp/                    # MCP server projects
+    ├── m365-local-mcp/     # custom
+    ├── teams-mcp/          # custom
+    ├── databricks-mcp/     # pins ai-dev-kit's MCP from git
+    └── entra-mcp/          # custom; also ships the `entra` CLI
 ```
 
 ## How it works
 
 ```
-catalog/mcp/*.toml ─┐
-catalog/skills/       ──┤
-catalog/plugins/      ──┤
-catalog/hooks/*.toml  ──┤  bin/agent-sync
-catalog/instructions/ ──┤
-catalog/clients.toml  ──┤
-catalog/paths.toml    ──┤
-catalog/retired.toml  ──┘
-        │
-        ├── merge   ──▶ ~/.claude.json                    Claude Code     (mcp)
-        ├── merge   ──▶ ~/.claude/settings.json           Claude Code     (hooks)
-        ├── merge   ──▶ ~/.codex/config.toml              Codex           (mcp)
-        ├── merge   ──▶ ~/.codex/hooks.json               Codex           (hooks)
-        ├── merge   ──▶ .../Claude/claude_desktop_config.json  Claude Desktop (mcp)
-        ├── merge   ──▶ ~/.config/opencode/opencode.jsonc opencode        (mcp)
-        ├── symlink ──▶ ~/.claude/skills/                 Claude Code     (skills)
-        ├── symlink ──▶ ~/.config/opencode/plugins/       opencode        (plugins)
-        └── block   ──▶ ~/.config/opencode/AGENTS.md      opencode        (instructions)
+catalog/  ──▶  bin/agent-sync  ──┬─ merge   ──▶  MCP + hooks in each client's shared config
+                                 ├─ symlink ──▶  skills/ and plugins/ dirs
+                                 └─ block   ──▶  the client's global AGENTS.md
 ```
 
-* A client declares one `[<client>.<kind>]` block per kind it supports; a kind
-  with no block is skipped for that client.
-* **Shared files** (they also hold state and non-resource settings) are
-  *merged*: only the managed subtree is rewritten; everything else is left
-  alone. Codex keeps its per-tool tables (`[mcp_servers.databricks.tools.*]`),
-  and the servers Codex ships itself (`node_repl`, `computer-use`) are never
-  touched.
-* **Skills** and **plugins** are symlinked per item; **hooks** merge additively;
-  **instructions** rewrite a marked block inside the client's global file. All
-  four are done by `bin/agent-sync` directly - there is no second deployment
-  tool.
-* The `python-clean` hook (Claude Code) and plugin (opencode) both call
-  `bin/clean-python`, so agent-written Python is auto-fixed and formatted, and
-  anything auto-fix cannot resolve is handed back to the model and then
-  **enforced**: the opencode plugin injects its own follow-up prompt, and Claude
-  Code's `python-clean-stop` Stop hook refuses to end the turn until the file
-  passes (released after a few refusals so an unfixable finding cannot trap it).
-  The gate resolves ruff's config from the git project root (falling back to the
-  global config), and a file the user agrees is off-topic can be waived, which
-  both clients then honour.
+`catalog/` is the single source of truth. `bin/agent-sync` renders it into each
+client with one of three strategies:
+
+| Strategy    | Used for           | Behaviour                                                          |
+|-------------|--------------------|--------------------------------------------------------------------|
+| **merge**   | MCP servers, hooks | rewrite only the managed subtree; leave the rest of the file alone |
+| **symlink** | skills, plugins    | link one item per file/dir into the client's directory             |
+| **block**   | instructions       | replace one marked region in the client's global file              |
+
+A client declares one `[<client>.<kind>]` block per kind it supports; a kind with
+no block is skipped.
 
 ## Clients
 
-| Client | Kind | Location | Handling |
-|---|---|---|---|
-| opencode | mcp | `~/.config/opencode/opencode.jsonc` | merge |
-| opencode | plugins | `~/.config/opencode/plugins/` | symlink |
-| opencode | instructions | `~/.config/opencode/AGENTS.md` | managed block |
-| Claude Code | mcp | `~/.claude.json` → `mcpServers` | merge |
-| Claude Code | skills | `~/.claude/skills/` | symlink |
-| Claude Code | hooks | `~/.claude/settings.json` → `hooks` | merge |
-| Claude Desktop | mcp | `~/Library/Application Support/Claude/claude_desktop_config.json` | merge |
-| Codex | mcp | `~/.codex/config.toml` → `[mcp_servers]` | merge |
-| Codex | hooks | `~/.codex/hooks.json` → `hooks` | merge |
+| Client         | Kind         | Location                                                          | Handling |
+|----------------|--------------|-------------------------------------------------------------------|----------|
+| opencode       | mcp          | `~/.config/opencode/opencode.jsonc`                               | merge    |
+| opencode       | plugins      | `~/.config/opencode/plugins/`                                     | symlink  |
+| opencode       | instructions | `~/.config/opencode/AGENTS.md`                                    | block    |
+| Claude Code    | mcp          | `~/.claude.json` → `mcpServers`                                   | merge    |
+| Claude Code    | skills       | `~/.claude/skills/`                                               | symlink  |
+| Claude Code    | hooks        | `~/.claude/settings.json` → `hooks`                               | merge    |
+| Claude Desktop | mcp          | `~/Library/Application Support/Claude/claude_desktop_config.json` | merge    |
+| Codex          | mcp          | `~/.codex/config.toml` → `[mcp_servers]`                          | merge    |
+| Codex          | hooks        | `~/.codex/hooks.json` → `hooks`                                   | merge    |
 
-## Skills
+Notes:
 
-A skill is a folder (`SKILL.md` + any assets) with a sibling TOML that says who
-gets it:
+- Shared files also hold non-resource settings; only the managed subtree is touched.
+- Codex's own per-tool tables and built-in servers (`node_repl`, `computer-use`) are never touched.
+- Skills link once, for Claude Code; opencode reads `~/.claude/skills/` (its Claude-compatible path) and inherits them. Add `[opencode.skills]` for a separate copy.
+- Removing a `[<client>.skills]` block stops managing that directory; existing links are left behind.
 
-```
-catalog/skills/example-skill.toml     # clients = [...]
-catalog/skills/example-skill/SKILL.md # content
-```
-
-`agent-sync` symlinks `catalog/skills/<name>/` into each listed client's skills
-directory. It only touches symlinks that point back into this repo, so your own
-skills are never disturbed. Drop a client from `clients`, or retire the skill in
-`catalog/retired.toml`, and the link is cleaned up on the next sync.
-
-Only Claude Code has a `[claude-code.skills]` block: opencode reads
-`~/.claude/skills/` too (its documented Claude-compatible path), so it inherits
-the same skills without a second copy. Add `[opencode.skills]` only if you want
-skills in opencode's own directory.
-
-> Removing a client's `[<client>.skills]` block stops managing that directory, so
-> links already placed there are left behind — delete them by hand.
-
-## Plugins
-
-opencode hooks are plugins, not a JSON event map, so they get their own kind:
+## Resource kinds
 
 ```
-catalog/plugins/<name>.toml   # clients = [...]
-catalog/plugins/<name>.ts     # the plugin itself
+catalog/skills/<name>.toml       # + <name>/SKILL.md
+catalog/plugins/<name>.toml      # + <name>.ts
+catalog/hooks/<name>.toml        # event + matcher + command
+catalog/instructions/<name>.toml # + <name>.md
 ```
 
-`agent-sync` symlinks `catalog/plugins/<name>.ts` into each listed client's
-plugins directory. opencode auto-discovers direct `.ts` files under
-`~/.config/opencode/plugins/`, so no `opencode.jsonc` entry is needed.
+- **Skills / plugins** — symlinked per item; `agent-sync` only touches links that point back into this repo. opencode auto-discovers direct `.ts` files, so plugins need no `opencode.jsonc` entry.
+- **Hooks** — merged additively: the previously managed group is replaced, unmanaged hooks in the same file are left alone. Retire one by adding its exact command to `hook_commands` in `catalog/retired.toml`.
+- **Instructions** — per-client (tool vocabularies differ), wrapped in a `<!-- dotfiles-agents:begin/end -->` block; text outside the markers survives.
 
-`catalog/plugins/python-clean.ts` registers a `tool.execute.after` hook that
-runs `bin/clean-python` on every `.py`/`.pyi` file the agent writes. It appends
-the findings to the tool result *and*, when residue remains, injects a session
-prompt so the agent must fix it. A per-file counter in plugin storage stops an
-unfixable finding from looping. Two tools back the escape hatches: when the user
-approves skipping an off-topic file the agent calls `python_clean_skip` (records
-a waiver keyed to the current findings), and `python_clean_refactor` hands the
-fix to a fresh child session so the ruff noise stays out of the main one.
-
-## Hooks
-
-```
-catalog/hooks/<name>.toml
-```
-
-Declares `event`, `matcher`, the shell `command`, and which `clients` receive it.
-Claude Code and Codex use a near-identical hook shape, so one definition covers
-both.
-
-Hooks are **additive**: on each sync `agent-sync` removes the group it previously
-wrote for a client and appends the current one, leaving any hook it doesn't
-manage in the same file untouched. Retire a hook by adding its exact command to
-`hook_commands` in `catalog/retired.toml`.
-
-`catalog/hooks/example-hook.toml` ships inert (`clients = []`) — add a client to
-enable it.
-
-The Claude Code side of the Python gate is two hooks. `catalog/hooks/python-clean.toml`
-is a `PostToolUse` hook on `Write|Edit|MultiEdit` that runs `bin/clean-python`
-(its final ruff pass uses `--ignore-noqa`, so a suppression is never an accepted
-fix) and records any still-broken file under `$TMPDIR/clean-python/`.
-`catalog/hooks/python-clean-stop.toml` is a `Stop` hook running
-`bin/clean-python --stop-check`: it re-checks those files and exits 2 while
-residue remains, so the turn cannot end on broken Python. A file is released
-once it is clean, is waived (`bin/clean-python --waive <file>`, which the agent
-runs after the user approves an off-topic skip), or after three refused stops,
-so an unfixable finding cannot trap the session.
-
-## Instructions
-
-Per-tool guidance lives here, never hand-written into a client's global file:
-
-```
-catalog/instructions/<name>.toml   # clients = [...]
-catalog/instructions/<name>.md     # content
-```
-
-opencode V2 loads a single global `AGENTS.md` (its `instructions` config array is
-inert), Claude Code loads `~/.claude/CLAUDE.md`, and Codex loads
-`~/.codex/AGENTS.md`. So `agent-sync` merges each client's instructions into one
-delimited block in that file:
-
-```md
-<!-- dotfiles-agents:begin (managed by agent-sync; edit catalog/instructions/ instead) -->
-<!-- instructions: <names> -->
-...content...
-<!-- dotfiles-agents:end -->
-```
-
-Everything outside the markers is left untouched, so your own notes survive. A
-file that is already an exact unmanaged copy of the block is wrapped in place
-rather than duplicated, and a client with no instructions gets its block removed.
-Content is per-client on purpose — opencode's tool vocabulary and subagent names
-differ from Claude Code's and Codex's, so they don't share a prompt.
-
-`catalog/instructions/opencode-delegation.md` is the worked example: opencode's
-"fan out by default" guidance, delivered only to opencode via
-`[opencode.instructions]` in `catalog/clients.toml`.
+`catalog/skills/example-skill` and `catalog/hooks/example-hook.toml` ship inert
+(`clients = []`) as templates.
 
 ## Inventory
 
 Full table of what this repo manages. `custom` = source lives in this repo;
 `external` = pulled from elsewhere (npx / uv tool / app).
 
-| Server | Origin | Launch | Clients |
-|---|---|---|---|
-| `m365-local` | custom | `uv run --directory ~/.dotfiles-agents/mcp/m365-local-mcp server.py` | opencode, Claude Code, Claude Desktop |
-| `teams-browser` | custom | `uv run --directory ~/.dotfiles-agents/mcp/teams-mcp teams-browser-mcp` | opencode, Claude Code, Claude Desktop |
-| `entra-mcp` | custom | `entra-mcp` (uv tool) | opencode, Claude Code, Claude Desktop, Codex |
-| `obscura` | external | `~/.local/bin/obscura mcp --stealth` | opencode, Claude Code, Claude Desktop |
-| `apple-mail` | external | `apple-mail-mcp` (uv tool) | opencode |
-| `databricks` | external | `uv run --project ~/.dotfiles-agents/mcp/databricks-mcp databricks-mcp` | opencode, Claude Code, Claude Desktop, Codex |
-| `azure` | external | `npx @azure/mcp@3.0.0-beta.29 server start` | opencode, Claude Code, Claude Desktop |
-| `azure-devops` | external | `npx @azure-devops/mcp ${ADO_ORG}` | opencode, Claude Code, Claude Desktop |
-| `github` | external | remote `api.githubcopilot.com/mcp/` | opencode, Claude Code |
-| `iMCP` | external | `/Applications/iMCP.app/…/imcp-server` | opencode, Claude Code, Claude Desktop, Codex |
-| `playwright` | external | `npx @playwright/mcp@latest` | opencode |
+| Server          | Origin   | Launch                                                                  | Clients                                      |
+|-----------------|----------|-------------------------------------------------------------------------|----------------------------------------------|
+| `m365-local`    | custom   | `uv run --directory ~/.dotfiles-agents/mcp/m365-local-mcp server.py`    | opencode, Claude Code, Claude Desktop        |
+| `teams-browser` | custom   | `uv run --directory ~/.dotfiles-agents/mcp/teams-mcp teams-browser-mcp` | opencode, Claude Code, Claude Desktop        |
+| `entra-mcp`     | custom   | `entra-mcp` (uv tool)                                                   | opencode, Claude Code, Claude Desktop, Codex |
+| `obscura`       | external | `~/.local/bin/obscura mcp --stealth`                                    | opencode, Claude Code, Claude Desktop        |
+| `apple-mail`    | external | `apple-mail-mcp` (uv tool)                                              | opencode                                     |
+| `databricks`    | external | `uv run --project ~/.dotfiles-agents/mcp/databricks-mcp databricks-mcp` | opencode, Claude Code, Claude Desktop, Codex |
+| `azure`         | external | `npx @azure/mcp@3.0.0-beta.29 server start`                             | opencode, Claude Code, Claude Desktop        |
+| `azure-devops`  | external | `npx @azure-devops/mcp ${ADO_ORG}`                                      | opencode, Claude Code, Claude Desktop        |
+| `github`        | external | remote `api.githubcopilot.com/mcp/`                                     | opencode, Claude Code                        |
+| `iMCP`          | external | `/Applications/iMCP.app/…/imcp-server`                                  | opencode, Claude Code, Claude Desktop, Codex |
+| `playwright`    | external | `npx @playwright/mcp@latest`                                            | opencode                                     |
 
 > Claude Code also has a **project-scoped** `playwright` under
 > `~/docs/Analytics.wiki` that this repo does not manage (project config, not
@@ -225,80 +114,51 @@ Full table of what this repo manages. `custom` = source lives in this repo;
 
 ## Secrets
 
-**No secrets live here.** `github` references `${GITHUB_TOKEN}`; supply it in
-your environment or the agent's own config. `paths.toml` holds only command
-paths and non-secret env (`EMAIL_MCP_READ_ONLY`, `DATABRICKS_CONFIG_PROFILE`).
+**No secrets live here.** `github` references `${GITHUB_TOKEN}` — supply it in
+your environment or the agent's config. `paths.toml` holds command paths and
+non-secret env only. Machine-specific, non-secret values go in the untracked
+`catalog/local.toml` (copy `catalog/local.toml.example`).
 
-Machine-specific, non-secret values (like your Azure DevOps org) live in the
-untracked `catalog/local.toml` — copy `catalog/local.toml.example` and fill it in.
-
-> Two live tokens were found inline in the old configs while building this:
-> a Notion token (`ntn_…`) and a GitHub token (`gho_…`). The Notion server was
-> retired and the GitHub token replaced by the env reference — **rotate both**.
+> Two live tokens were found inline in the old configs while building this — a
+> Notion token (`ntn_…`) and a GitHub token (`gho_…`). The Notion server was
+> retired and the GitHub token replaced by the env reference. **Rotate both.**
 
 ## Usage
 
 ```sh
 cargo make agent-check   # dry-run: show what would change
-cargo make agent-sync    # render + merge the catalog into every agent
-cargo make sync          # same as agent-sync (kept as the friendly name)
+cargo make sync          # render + merge the catalog into every agent
 ```
 
 ## Keeping up to date
 
-Versions are **not** baked into the launch args. Each external server has a
-`[package]` block and the args use a `{{package}}` placeholder that the sync
-engine resolves at render time:
-
-```toml
-[launch]
-command = "npx"
-args    = ["-y", "{{package}}", "server", "start"]
-
-[package]
-manager = "npm"
-name    = "@azure/mcp"
-ref     = "latest"     # a dist-tag = float; a concrete version = pinned
-```
-
-Third-party npm servers float at `@latest`, so they need no maintenance at all —
-`npx` pulls the newest on every launch. One command reports and applies
-everything else:
+External servers carry a `[package]` block; launch args use a `{{package}}`
+placeholder resolved at render time, so npm servers float at `@latest` and need
+no maintenance.
 
 ```sh
 cargo make agent-outdated   # report only
-cargo make agent-update     # apply available updates, then re-sync if a pin changed
+cargo make agent-update     # apply updates, then re-sync if a pin changed
 ```
 
-| manager | check | apply |
-|---|---|---|
-| `npm` | `npm view <pkg> dist-tags.<ref>` | bump the `ref` if pinned; floats left alone |
-| `uv-tool` | `uv tool list --outdated` | `uv tool upgrade <tool>` |
-| `uv-project` | latest git tag of the project's repo | rewrite the pinned tag in `mcp/databricks-mcp/pyproject.toml` + re-lock |
-| `git` | behind-count vs upstream, or latest tag | `git pull --ff-only`; tag-pinned / no-upstream are reported as manual |
-| `source` | runs from a working tree | nothing — always current |
-| `manual` / `remote` | – | a binary/app or a hosted endpoint |
+| manager             | how it updates                                                    |
+|---------------------|-------------------------------------------------------------------|
+| `npm`               | bump the pinned `ref`; floating tags left alone                   |
+| `uv-tool`           | `uv tool upgrade <tool>`                                          |
+| `uv-project`        | bump the pinned git tag + re-lock                                 |
+| `git`               | `git pull --ff-only`; tag-pinned / no-upstream reported as manual |
+| `source`            | always current (runs from a working tree)                         |
+| `manual` / `remote` | a binary/app or hosted endpoint — nothing to do                   |
 
-Example report:
-
-```
-SERVER         MANAGER  STATUS
-apple-mail     uv-tool  1.7.0 -> 1.8.2
-azure          npm      floating @latest (now 3.0.0-beta.49)
-databricks     uv-project  v0.2.0 (up to date)
-m365-local     source   local source (always current)
-```
-
-> `databricks` is a special case: Databricks' ai-dev-kit MCP isn't published to
-> PyPI (`databricks-tools-core` has no release), so it's run from git via the
-> local [`databricks-mcp/`](mcp/databricks-mcp/) uv project. Bumping its tag never
-> rewrites an agent config. `~/.ai-dev-kit` may still exist for its *skills*.
+`databricks` runs from the local [`mcp/databricks-mcp/`](mcp/databricks-mcp/) uv
+project (ai-dev-kit's MCP isn't on PyPI); bumping its pin never rewrites an agent
+config.
 
 ## Adding or changing a resource
 
-1. **Server**: add/edit `catalog/mcp/<name>.toml` (set `clients = [...]`).
-2. **Skill**: add `catalog/skills/<name>.toml` + `catalog/skills/<name>/SKILL.md`.
-3. **Hook**: add `catalog/hooks/<name>.toml`.
-4. **Retire**: add the name (or, for hooks, the command) to `catalog/retired.toml`.
+1. **Server** — add/edit `catalog/mcp/<name>.toml` (set `clients = [...]`).
+2. **Skill** — add `catalog/skills/<name>.toml` + `catalog/skills/<name>/SKILL.md`.
+3. **Hook** — add `catalog/hooks/<name>.toml`.
+4. **Retire** — add the name (or, for hooks, the command) to `catalog/retired.toml`.
 5. `cargo make agent-check`, then `cargo make sync`.
 6. New server? Add a row to the Inventory table above. **That's the rule.**
