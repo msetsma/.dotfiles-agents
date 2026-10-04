@@ -8,6 +8,17 @@ skills, plugins, hooks, and per-tool instructions are declared once in
 
 ---
 
+## Usage
+
+```sh
+git clone git@github.com:msetsma/.dotfiles-agents.git
+cd .dotfiles-agents
+
+make              # list targets (same as `make help`)
+make agent-check  # dry-run
+make sync         # render + merge into every agent
+```
+
 ## Layout
 
 ```
@@ -111,13 +122,6 @@ Full table of what this repo manages. `custom` = source lives in this repo;
 
 **No secrets live here** — `github` uses `${GITHUB_TOKEN}`; machine-specific
 values live in the untracked `catalog/local.toml` (`catalog/local.toml.example`).
-
-## Usage
-
-```sh
-make agent-check   # dry-run
-make sync          # render + merge into every agent
-```
 
 ## Keeping up to date
 
