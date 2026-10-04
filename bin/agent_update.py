@@ -220,7 +220,7 @@ def main() -> int:
     if not args.apply:
         print()
         if catalog_bumps or uv_upgrades or git_pulls or git_manual:
-            print('run `cargo make agent-update` (or agent-update --apply) to apply')
+            print('run `make agent-update` (or agent-update --apply) to apply')
         else:
             print('everything is current')
         return 0

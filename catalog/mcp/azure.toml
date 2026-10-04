@@ -9,7 +9,7 @@ command = "npx"
 args    = ["-y", "{{package}}", "server", "start"]
 
 # Floats at the npm `latest` dist-tag - no version to bump by hand.
-# `cargo make agent-outdated` reports what upstream is today.
+# `make agent-outdated` reports what upstream is today.
 [package]
 manager = "npm"
 name    = "@azure/mcp"
