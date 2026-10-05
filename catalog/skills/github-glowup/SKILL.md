@@ -40,6 +40,9 @@ repo and a large multi-user library need different things.
   `my setup` framing, no history or migration notes (`modeled on`, `migrated
   from`, `previously`), and no personal or business context. Keep it terse; let
   code and tables carry the detail.
+- **No em- or en-dash characters (U+2014 / U+2013).** Use a colon, comma,
+  semicolon, or parentheses, and a plain hyphen for ranges (`3-6`). Applies to
+  prose, code comments, and commit messages alike.
 
 ## Modes
 

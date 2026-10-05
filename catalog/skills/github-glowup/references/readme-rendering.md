@@ -122,6 +122,7 @@ Write for the reader's repo, not the author's machine:
 - No `this machine` / `my setup` framing.
 - No history or migration notes: `modeled on`, `migrated from`, `previously`, `was …`.
 - No personal or business context: internal hosts, employer or product systems, private paths.
+- No em- or en-dash characters (U+2014 / U+2013); use a colon, comma, semicolon, or parentheses, and a plain hyphen for ranges (`3-6`).
 - Terse over exhaustive; let code, tables, and diagrams carry the detail.
 
 ## Sources
