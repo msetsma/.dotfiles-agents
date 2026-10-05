@@ -7,7 +7,7 @@ description: "Audit a GitHub repository and improve its quality-of-life extras: 
 
 Audit a repo that lives on GitHub and raise its quality-of-life: better README
 presentation, relevant badges, health files and automation, repo settings, and
-commit signing. **Tailor everything to the repo's audience** — a solo personal
+commit signing. **Tailor everything to the repo's audience**: a solo personal
 repo and a large multi-user library need different things.
 
 ## Contract
@@ -28,11 +28,11 @@ repo and a large multi-user library need different things.
   suggestion through it. State the assumption and let the user override.
 - **Separate "files I can add" from "settings you click."** Social preview,
   topics, description, Discussions, Pages, rulesets, vigilant mode, and
-  uploading a signing key are UI-only — present them as click-paths, not edits.
-- **`gh` is optional — and must be account-checked.** Before trusting any `gh`
+  uploading a signing key are UI-only; present them as click-paths, not edits.
+- **`gh` is optional, but must be account-checked.** Before trusting any `gh`
   output, confirm the active account matches the remote owner (or can at least
-  see the repo). A `gh` session authenticated as a *different* account — e.g. a
-  work login against a personal repo — 404s on private repos and silently returns
+  see the repo). A `gh` session authenticated as a *different* account (e.g. a
+  work login against a personal repo) 404s on private repos and silently returns
   wrong or empty data. On a mismatch, fall back to local-only inspection, flag it
   in the report, and suggest `gh auth switch` (or `GH_TOKEN`) as the fix.
 - Prefer **dynamic, zero-maintenance** badges; flag stale or broken ones.
@@ -43,16 +43,16 @@ repo and a large multi-user library need different things.
 
 ## Modes
 
-- **quick-wins** — high impact, low effort only: description + topics, README
-  presentation fixes, 3–6 badges, LICENSE, `.gitignore`, and (if public)
+- **quick-wins**: high impact, low effort only: description + topics, README
+  presentation fixes, 3-6 badges, LICENSE, `.gitignore`, and (if public)
   `SECURITY.md`. Sensible default for a personal repo.
-- **full-audit** — everything, gated by audience: health files, issue/PR
+- **full-audit**: everything, gated by audience: health files, issue/PR
   templates, Dependabot, CI/release workflows, rulesets, Pages, signing.
 
 ## Workflow
 
 **0. Detect.** Is it a git repo with a GitHub remote? Parse `owner/repo`; note
-public/private. Then test whether `gh` is usable **for this repo** — the active
+public/private. Then test whether `gh` is usable **for this repo**: the active
 account must match the remote owner (or be able to see the repo):
 
 ```sh
@@ -77,21 +77,21 @@ gh api repos/{owner}/{repo}/rulesets
 gh api repos/{owner}/{repo}/releases
 ```
 
-**2. Classify the audience** — solo / small-team / large-OSS. Signals: private vs
+**2. Classify the audience**: solo / small-team / large-OSS. Signals: private vs
 public, stars and contributors, LICENSE, package manifests and lockfiles, README
 depth, whether issues/PRs are used. See `references/audience-and-checklist.md`.
 
-**3. Build the report** — grouped and audience-gated, each item = *what / why /
+**3. Build the report**: grouped and audience-gated, each item = *what / why /
 exact snippet or click-path / target file / effort*, marking ✅ present and ⚠️
 broken. Template in `references/report-format.md`.
 
-**4. Ask** — present the report, then a structured multi-select of what to apply,
+**4. Ask**: present the report, then a structured multi-select of what to apply,
 with a "quick wins" preset. Split file-doable vs UI-only.
 
 **5. Apply** only the selected file-based items; validate relative links (and
 `bin/tests` if the repo has it). Report the UI-only items as a checklist.
 
-**6. Confirm** — summarize what changed and what is left for the user to click.
+**6. Confirm**: summarize what changed and what is left for the user to click.
 
 ## References
 

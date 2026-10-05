@@ -2,7 +2,7 @@
 
 Turns a group's members, its nested groups, and its owners into the counts and
 short samples a reviewer actually wants: disabled accounts, guests, people with
-no title, nested groups, and whether anyone owns the thing. Pure — the Graph
+no title, nested groups, and whether anyone owns the thing. Pure: the Graph
 I/O happens before this, so it is trivial to test.
 """
 
@@ -63,7 +63,7 @@ def summarize_group_audit(
     if nested_groups:
         findings.append(f'{len(nested_groups)} nested group(s).')
     if not owners:
-        findings.append('No owners — nobody can manage this group.')
+        findings.append('No owners: nobody can manage this group.')
 
     return {
         'total_users': len(members),

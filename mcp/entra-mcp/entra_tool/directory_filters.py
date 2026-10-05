@@ -1,7 +1,7 @@
 """Structured filters over the cached directory rows.
 
 Search answers "who matches this string", ranked best-first. These answer "who
-is in this exact set", complete and unranked — a department, a title, account
+is in this exact set", complete and unranked: a department, a title, account
 state. Both read the same local cache, so a filter costs no Graph calls.
 """
 
@@ -39,7 +39,7 @@ def _flag_matches(record: dict[str, Any], field: str, expected: bool) -> bool:
 
 
 def sort_by_display_name(records: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Stable, human-ordered listing — search ranks by score, a list does not."""
+    """Stable, human-ordered listing: search ranks by score, a list does not."""
     return sorted(records, key=lambda record: _normalize(record.get('displayName')))
 
 

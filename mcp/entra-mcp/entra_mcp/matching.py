@@ -134,7 +134,7 @@ def typo_word_score(token: str, text: str) -> float | None:
     """Closest word in ``text`` to a misspelling of ``token``, or None.
 
     Two stages: a cheap shared-letter gate, then a real sequence comparison.
-    The gate alone is not enough — it cannot tell an anagram from a match, so
+    The gate alone is not enough: it cannot tell an anagram from a match, so
     "Setmsa" scored identically against "Setsma" and "MASSET". Comparing
     sequences is what separates a transposition from unrelated letters.
     """
@@ -216,7 +216,7 @@ def search_records(
 
     The typo pass always runs. It is cheaper than the fuzzy pass (~75ms vs
     ~115ms over 42k names) and keeping near-misses out is the floor's job, not
-    its own — so `loose` can surface a typo even when a strong but wrong match
+    its own, so `loose` can surface a typo even when a strong but wrong match
     already exists.
 
     ``strictness`` sets the floor as a fraction of the best score found, which

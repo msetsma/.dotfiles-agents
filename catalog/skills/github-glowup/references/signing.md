@@ -2,7 +2,7 @@
 
 How GitHub decides whether a commit is "Verified", and how to configure signing.
 
-There is **no separate "signed" badge** — the signature state *is* the verification badge.
+There is **no separate "signed" badge**: the signature state *is* the verification badge.
 
 ## Badge states
 
@@ -25,7 +25,7 @@ With vigilant mode **on**:
 ### How verification works
 
 - Verification happens **at push time**. GitHub stores a persistent, **immutable** record of the result.
-- The record survives key rotation, revocation, and expiry — old commits stay Verified.
+- The record survives key rotation, revocation, and expiry; old commits stay Verified.
 - The record is reused across the repo network, so a commit pushed to one fork is recognized elsewhere.
 - Admins can **require signed commits** on a protected branch.
 - **Rebase-and-merge strips signatures** (GitHub can't sign on your behalf). Rebase locally and push instead.
@@ -89,7 +89,7 @@ git config --local gpg.format x509
 git config --local commit.gpgsign true
 ```
 
-**GitHub shows gitsign commits as Unverified** — the Sigstore root is not in GitHub's trust root. Verify locally with `gitsign verify`.
+**GitHub shows gitsign commits as Unverified**: the Sigstore root is not in GitHub's trust root. Verify locally with `gitsign verify`.
 
 ## Adding a key to GitHub
 
@@ -116,7 +116,7 @@ Only enable it if you sign *everything* and the committer email is verified. Wit
 
 ## Retroactively signing history
 
-You cannot retro-verify without rewriting history — the record is made at push time.
+You cannot retro-verify without rewriting history; the record is made at push time.
 
 ```sh
 # preserve author date; changes committer date and SHAs

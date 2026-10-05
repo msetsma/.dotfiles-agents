@@ -1,14 +1,14 @@
 """Walk the group-containment chain between a person and a group.
 
 Graph reports effective membership (`transitiveMemberOf`) but never the route.
-The route is a containment chain — the person is a member of a group, that
+The route is a containment chain: the person is a member of a group, that
 group is a member of another, and so on up to the target.
 
 This finds it with a bidirectional breadth-first search: one frontier climbs
 from the person (parent groups), the other descends from the target (child
 groups), and each wave expands whichever frontier is smaller. A person is
 often directly in 40+ groups while a target holds only a handful, so the
-search usually meets after expanding the target side — a couple of waves
+search usually meets after expanding the target side, a couple of waves
 instead of fanning out across everything the person belongs to.
 
 The Graph I/O is injected as batch fetchers so this stays pure and testable:
@@ -60,7 +60,7 @@ def find_containment_path(
 
     ``path_ids`` runs from the person to the target, each entry a member of the
     next. ``display_names`` maps every group encountered to its name. None means
-    no path was found — either there is none, or ``max_nodes`` was reached
+    no path was found: either there is none, or ``max_nodes`` was reached
     before the frontiers met; the caller decides how to report that.
     """
     if user_id == target_group_id:

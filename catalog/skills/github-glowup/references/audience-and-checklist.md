@@ -8,20 +8,20 @@ GitHub's **Community Standards** page (Insights → Community Standards) works o
 
 Scored items and what actually counts:
 
-- **Description** — non-empty repository description.
-- **README** — a recognized README, resolved in order: `.github/` → root → `docs/`.
-- **Code of conduct** — `CODE_OF_CONDUCT.md` in root, `docs/`, or `.github/`; may be supplied by an account default.
-- **Contributing** — `CONTRIBUTING.md` in root, `docs/`, or `.github/`.
-- **License** — `LICENSE` / `LICENSE.txt` / `LICENSE.md` / `LICENSE.rst` at root, matched by Licensee to an SPDX ID. **Cannot** be supplied by an account default.
-- **Security policy** — `SECURITY.md` in root, `docs/`, or `.github/`.
-- **Issue templates** — `.github/ISSUE_TEMPLATE/` with a valid `name` + `about` (`.md`) or `name` + `description` (`.yml`). Files elsewhere, or missing those keys, do not tick.
-- **Pull request template** — a PR template present on the default branch.
+- **Description**: non-empty repository description.
+- **README**: a recognized README, resolved in order: `.github/` → root → `docs/`.
+- **Code of conduct**: `CODE_OF_CONDUCT.md` in root, `docs/`, or `.github/`; may be supplied by an account default.
+- **Contributing**: `CONTRIBUTING.md` in root, `docs/`, or `.github/`.
+- **License**: `LICENSE` / `LICENSE.txt` / `LICENSE.md` / `LICENSE.rst` at root, matched by Licensee to an SPDX ID. **Cannot** be supplied by an account default.
+- **Security policy**: `SECURITY.md` in root, `docs/`, or `.github/`.
+- **Issue templates**: `.github/ISSUE_TEMPLATE/` with a valid `name` + `about` (`.md`) or `name` + `description` (`.yml`). Files elsewhere, or missing those keys, do not tick.
+- **Pull request template**: a PR template present on the default branch.
 
 **Multi-location precedence:** `.github/` → root → `docs/`.
 
 **Account-default repo (`.github`)** can supply: `ACCESSIBILITY`, `CODE_OF_CONDUCT`, `CONTRIBUTING`, discussion forms, `FUNDING`, issue + PR templates, `config.yml`, `SECURITY`, `VULNERABILITY_REPORT`, `SUPPORT`. It **cannot** supply: license, `CODEOWNERS`, `GOVERNANCE`, `CITATION`.
 
-The checklist is **minimum hygiene for public repos**. It measures **presence only** — never README quality.
+The checklist is **minimum hygiene for public repos**. It measures **presence only**, never README quality.
 
 ## 2. Tailoring matrix
 
@@ -108,31 +108,31 @@ Legend: ● required, ◐ recommended, ○ optional/nice, ✗ overkill.
 
 ## 3. Overkill / do not add
 
-- **Solo** — CODE_OF_CONDUCT, CONTRIBUTING, issue/PR templates, GOVERNANCE, CODEOWNERS, coverage/downloads badges, a dedicated docs site. A single good README plus a license (if public) is the whole job.
-- **Small team** — sponsor/funding badges, public "community" ceremony (CoC usually lives org-wide via the `.github` defaults repo), stars/contributor badge walls, CITATION.cff unless it is research software.
-- **Large OSS** — badge walls; duplicated docs (README vs wiki vs site should cross-link, not repeat); stale Roadmap / Project-status. Keep the README a quickstart and push depth to docs/wiki.
+- **Solo**: CODE_OF_CONDUCT, CONTRIBUTING, issue/PR templates, GOVERNANCE, CODEOWNERS, coverage/downloads badges, a dedicated docs site. A single good README plus a license (if public) is the whole job.
+- **Small team**: sponsor/funding badges, public "community" ceremony (CoC usually lives org-wide via the `.github` defaults repo), stars/contributor badge walls, CITATION.cff unless it is research software.
+- **Large OSS**: badge walls; duplicated docs (README vs wiki vs site should cross-link, not repeat); stale Roadmap / Project-status. Keep the README a quickstart and push depth to docs/wiki.
 
 ## 4. README conventions
 
 Per GitHub's "About READMEs", a README should answer: **what it does, why it's useful, how to start, where to get help, who maintains it**. GitHub auto-generates a TOC from headings and anchors, and truncates READMEs past **500 KiB**. ([About READMEs](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-readmes), [makeareadme.com](https://www.makeareadme.com/), [README-Driven Development](https://tom.preston-werner.com/2010/08/23/readme-driven-development.html))
 
-**standard-readme spec** — required, in order: Title, Short Description, [TOC], Install, Usage, Contributing, License (must be last). Optional, in order: Banner, Badges, Long Description, Security, Background, Extra Sections, API, Maintainers, Thanks. Short description **< 120 chars**, no `>`, SPDX license + owner. ([spec](https://github.com/richardlitt/standard-readme/blob/main/spec.md))
+**standard-readme spec** requires, in order: Title, Short Description, [TOC], Install, Usage, Contributing, License (must be last). Optional, in order: Banner, Badges, Long Description, Security, Background, Extra Sections, API, Maintainers, Thanks. Short description **< 120 chars**, no `>`, SPDX license + owner. ([spec](https://github.com/richardlitt/standard-readme/blob/main/spec.md))
 
 **Common section set:** Title/Name, Description (short + long), Badges, Visuals/Screenshots/GIF, TOC, Features, Background/Motivation, Requirements, Install, Usage (smallest runnable example + expected output), API Reference, Configuration, Examples, Roadmap, Project status, Support, Contributing, Code of Conduct link, Authors/Acknowledgements, Citation, Changelog link, License.
 
 **Badge taxonomy:** build/CI, coverage, version/release, downloads, license, language/platform, docs site, OpenSSF/scorecard, chat, funding, stars/contributors. See [Awesome README](https://github.com/matiassingers/awesome-readme).
 
-**Changelog** — [Keep a Changelog](https://keepachangelog.com/en/1.1.0/): categories Added / Changed / Deprecated / Removed / Fixed / Security, an `Unreleased` section, ISO dates, SemVer link.
+**Changelog**: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) categories Added / Changed / Deprecated / Removed / Fixed / Security, an `Unreleased` section, ISO dates, SemVer link.
 
-**Versioning** — [Semantic Versioning](https://semver.org/): `MAJOR.MINOR.PATCH`. Licensing help: [choosealicense.com](https://choosealicense.com/), [licensing a repository](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/licensing-a-repository).
+**Versioning**: [Semantic Versioning](https://semver.org/), `MAJOR.MINOR.PATCH`. Licensing help: [choosealicense.com](https://choosealicense.com/), [licensing a repository](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/licensing-a-repository).
 
 ## 5. Audit heuristics
 
-1. **Detect the audience first** (public? contributors? downstream consumers?) — this gates which checks apply.
+1. **Detect the audience first** (public? contributors? downstream consumers?). This gates which checks apply.
 2. **Community checklist ≠ README quality.** It scores presence only; validate location validity and issue-template frontmatter keys.
 3. **Public repos:** missing LICENSE is **high** (unlicensed = not open source); README / description / SECURITY are **medium**.
 4. **OSS libraries:** require install + usage + license + changelog + CONTRIBUTING + issue templates; recommend SemVer + Keep a Changelog.
-5. **Solo:** do not nag for community files — focus on a working quickstart, a runnable example, and a license if public.
+5. **Solo:** do not nag for community files; focus on a working quickstart, a runnable example, and a license if public.
 6. **Dead weight:** broken relative links, stale/failing badges, README > 500 KiB truncated, mixed-language READMEs without BCP-47 names.
 
 ## Sources

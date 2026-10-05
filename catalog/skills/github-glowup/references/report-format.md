@@ -9,8 +9,8 @@ that the user can override), and which mode is running.
 
 Then sections, omitting any that are empty:
 
-1. **✅ Already good** — present items worth acknowledging.
-2. **⚠️ Broken / dead** — failing badge, README >500 KiB (truncated), wrong
+1. **✅ Already good**: present items worth acknowledging.
+2. **⚠️ Broken / dead**: failing badge, README >500 KiB (truncated), wrong
    language stats, dead relative links, unlicensed public repo, `gh` account
    mismatch / `gh` unavailable (running offline).
 3. **README polish**
@@ -18,12 +18,12 @@ Then sections, omitting any that are empty:
 5. **Health files & automation**
 6. **Repo settings (UI-only)**
 7. **Commit signing**
-8. **Deliberately skipped** — list what you are *not* suggesting and why (this is
+8. **Deliberately skipped**: list what you are *not* suggesting and why (this is
    the audience gate made visible).
 
 ## Item format
 
-> **<title>** — <one-line why>
+> **<title>**: <one-line why>
 > - Add `<path>`:
 >   ```<lang>
 >   <snippet>
@@ -46,16 +46,16 @@ Keep it scannable; put exact snippets in fenced blocks; no fluff.
 After the report, ask with the agent's structured multi-select tool (batch ≤4
 questions):
 
-1. **Quick wins?** — apply the preset (description + topics, README polish,
-   3–6 badges, LICENSE, `.gitignore`, `SECURITY.md` if public).
-2. **README polish** — multi-select: alerts, Mermaid, `<details>`, TOC,
+1. **Quick wins?**: apply the preset (description + topics, README polish,
+   3-6 badges, LICENSE, `.gitignore`, `SECURITY.md` if public).
+2. **README polish** (multi-select): alerts, Mermaid, `<details>`, TOC,
    footnotes, dark-mode logo, relative-link fixes.
-3. **Badges** — multi-select from the shortlist generated for this repo.
-4. **Health & automation** — multi-select: `SECURITY.md`, Dependabot, CI
+3. **Badges**: multi-select from the shortlist generated for this repo.
+4. **Health & automation** (multi-select): `SECURITY.md`, Dependabot, CI
    workflow, release notes, issue/PR templates, `CODEOWNERS`.
-5. **Settings (you click)** — a checklist to acknowledge; the agent does not
+5. **Settings (you click)**: a checklist to acknowledge; the agent does not
    apply these.
-6. **Signing** — offer SSH signing setup (edits `~/.gitconfig`; confirm first).
+6. **Signing**: offer SSH signing setup (edits `~/.gitconfig`; confirm first).
 
 If the agent has no structured-question tool, print a numbered checklist and
 wait for the reply.

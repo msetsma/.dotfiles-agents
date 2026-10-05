@@ -31,5 +31,5 @@ writers.
 
 `sync` mirrors meetings, transcripts, chats, and files into a local SQLite
 archive at `~/.cache/teams-browser/archive.db`; `search` and `digest` then run
-offline. Session tokens refresh automatically and expire about hourly — re-run
+offline. Session tokens refresh automatically and expire about hourly; re-run
 `login` if a refresh is blocked.

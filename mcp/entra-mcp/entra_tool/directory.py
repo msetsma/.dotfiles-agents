@@ -97,7 +97,7 @@ def _load_directory_rows(
 
     If Graph is unreachable, a stale cache is served rather than failing: the
     directory changes slowly, and yesterday's list beats no list at all. The
-    fallback applies only to implicit refreshes — `entra cache refresh` asks
+    fallback applies only to implicit refreshes; `entra cache refresh` asks
     for ``refresh_cache=True`` and must surface the failure.
     """
     if use_cache and not refresh_cache and cache_is_fresh(meta_file, cache_file):

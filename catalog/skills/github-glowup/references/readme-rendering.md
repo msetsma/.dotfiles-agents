@@ -16,7 +16,7 @@ Something that works in an issue comment may be dead in a committed file. Key di
 
 | Feature | Syntax | Renders in | Audience fit | Notes |
 |---|---|---|---|---|
-| Alerts | `> [!NOTE]` | README, issues, PRs, discussions, wikis | All | GitHub-only extension; 1–2 per article, never consecutive |
+| Alerts | `> [!NOTE]` | README, issues, PRs, discussions, wikis | All | GitHub-only extension; 1-2 per article, never consecutive |
 | Mermaid diagrams | ` ```mermaid ` | README, issues, PRs, discussions, wikis; standalone `.mermaid`/`.mmd` | Team, OSS | Live SVG; ~v11.16.x bundled |
 | Math / LaTeX | `$x$`, `$$x$$`, ` ```math ` | README, issues, PRs, discussions, wikis | OSS (technical) | MathJax |
 | Footnotes | `text[^1]` … `[^1]: def` | README, issues, PRs, discussions | OSS | Not in wikis |
@@ -31,22 +31,22 @@ Something that works in an issue comment may be dead in a committed file. Key di
 | Heading anchors | `#section-name` | Everywhere | All | Auto-generated per heading |
 | Hidden comments | `<!-- … -->` | Raw source / clones | All | Never put secrets here |
 | Emoji | `:shipit:` | Everywhere | All | Unknown shortcodes render literally |
-| Mentions | `@user`, `@org/team` | Everywhere | — | Link but do **not** notify in README |
+| Mentions | `@user`, `@org/team` | Everywhere | - | Link but do **not** notify in README |
 | Images / embeds | `![alt](path)` | Everywhere | All | Drag-drop uploads get `user-attachments` URLs |
 
 ## Details by feature
 
 ### Alerts
-Five types only: `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`. Use uppercase. Works in README, issues, PRs, discussions, wikis. It is a **GitHub-only extension** — other renderers show the literal `[!NOTE]` text. Use 1–2 per article and never consecutively. Cannot nest inside lists, blockquotes, or `<details>`; an extra blank line ends the alert.
+Five types only: `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`. Use uppercase. Works in README, issues, PRs, discussions, wikis. It is a **GitHub-only extension**: other renderers show the literal `[!NOTE]` text. Use 1-2 per article and never consecutively. Cannot nest inside lists, blockquotes, or `<details>`; an extra blank line ends the alert.
 
 ### Mermaid
-Fenced ` ```mermaid ` block renders a live SVG via GitHub's Viewscreen; also works as a standalone `.mermaid`/`.mmd` file. GitHub bundles Mermaid ~v11.16.x (verify with ` ```mermaid info `). Supported types include: flowchart/graph, sequenceDiagram, classDiagram, stateDiagram-v2, erDiagram, gantt, pie, gitGraph, journey, mindmap, timeline, quadrantChart, requirementDiagram, C4*, sankey-beta, xychart-beta, block-beta, packet-beta, architecture-beta, kanban, radar-beta, treemap. `%%{init}%%` theme overrides are stripped — GitHub uses its own light/dark theme. Not screen-reader accessible; no markdown lists inside nodes.
+Fenced ` ```mermaid ` block renders a live SVG via GitHub's Viewscreen; also works as a standalone `.mermaid`/`.mmd` file. GitHub bundles Mermaid ~v11.16.x (verify with ` ```mermaid info `). Supported types include: flowchart/graph, sequenceDiagram, classDiagram, stateDiagram-v2, erDiagram, gantt, pie, gitGraph, journey, mindmap, timeline, quadrantChart, requirementDiagram, C4*, sankey-beta, xychart-beta, block-beta, packet-beta, architecture-beta, kanban, radar-beta, treemap. `%%{init}%%` theme overrides are stripped; GitHub uses its own light/dark theme. Not screen-reader accessible; no markdown lists inside nodes.
 
 ### Math / LaTeX
 Inline `$...$`, inline backtick form `` $`\sqrt{x}` ``, block `$$...$$`, and the ` ```math ` fence. Rendered by MathJax in README, issues, PRs, discussions, wikis. Escape a literal `$` as `\$` or `<span>$</span>`. A block after text needs a line break. Prefer the ` ```math ` fence to avoid `$` collisions with prose.
 
 ### Footnotes
-`text[^1]` with a definition `[^1]: definition`. Renders at the bottom with back-links. Works in README, issues, PRs, discussions — **not** in wikis. Multi-line definitions need two trailing spaces on continued lines.
+`text[^1]` with a definition `[^1]: definition`. Renders at the bottom with back-links. Works in README, issues, PRs, and discussions, but **not** in wikis. Multi-line definitions need two trailing spaces on continued lines.
 
 ### Collapsible sections
 ```html
@@ -59,18 +59,18 @@ Markdown content here
 Works everywhere. Blank lines around the content are required. Nesting is fiddly. Content still appears in the raw source (no true hiding).
 
 ### Task lists
-`- [x]` done, `- [ ]` todo. In README/`.md` files the checkboxes are **read-only** (view only). Interactive tracking and progress bars exist only in issue bodies. Tasklist blocks are retired — use sub-issues. A list item beginning with `(` must be escaped as `\(`.
+`- [x]` done, `- [ ]` todo. In README/`.md` files the checkboxes are **read-only** (view only). Interactive tracking and progress bars exist only in issue bodies. Tasklist blocks are retired; use sub-issues. A list item beginning with `(` must be escaped as `\(`.
 
 ### Tables
-GFM pipe tables. Alignment via `:---`, `:---:`, `---:`. Renders everywhere. No `rowspan`/`colspan`. No block elements inside cells — use `<br>`. Header row is mandatory. Escape literal pipes as `\|`.
+GFM pipe tables. Alignment via `:---`, `:---:`, `---:`. Renders everywhere. No `rowspan`/`colspan`. No block elements inside cells; use `<br>`. Header row is mandatory. Escape literal pipes as `\|`.
 
 ### Code fences
-Use only a language identifier after the fence for syntax highlighting. GitHub does **not** support fence `title="…"` (a Docusaurus/Pandoc/mkdocs feature) or line highlighting `{2,4-6}` (a GitLab/Prism/mkdocs feature) — both are unimplemented requests. For emphasis, use the `diff` fence with leading `+`/`-` for green/red lines, and put filenames in `**bold**` or a `## heading` above.
+Use only a language identifier after the fence for syntax highlighting. GitHub does **not** support fence `title="…"` (a Docusaurus/Pandoc/mkdocs feature) or line highlighting `{2,4-6}` (a GitLab/Prism/mkdocs feature); both are unimplemented requests. For emphasis, use the `diff` fence with leading `+`/`-` for green/red lines, and put filenames in `**bold**` or a `## heading` above.
 
 ### Links, anchors, permalinks
-- `[x](docs/f.md)` — relative to the current file.
-- `[x](/docs/f.md)` — root-relative.
-- `#section` — auto heading anchors: lowercase, spaces → `-`, punctuation stripped, duplicates get `-1`.
+- `[x](docs/f.md)`: relative to the current file.
+- `[x](/docs/f.md)`: root-relative.
+- `#section`: auto heading anchors, lowercase, spaces → `-`, punctuation stripped, duplicates get `-1`.
 - Line links: `.../blob/COMMIT/path#L10` and ranges `#L10-L20`. Markdown files need `?plain=1`.
 - Press `y` on a file view to get a commit permalink.
 - Link text must be on one line.
@@ -96,15 +96,15 @@ Use only a language identifier after the fence for syntax highlighting. GitHub d
 
 ## NEVER suggest (GitHub does not support)
 
-- **Fence `title="…"`** — not implemented (Docusaurus/Pandoc/mkdocs only).
-- **Line highlighting `{2,4-6}`** — not implemented (GitLab/Prism/mkdocs only).
-- **Autolinked references in repo files** — `#123` / `GH-123` / `owner/repo#N` do not autolink in READMEs or wikis.
+- **Fence `title="…"`**: not implemented (Docusaurus/Pandoc/mkdocs only).
+- **Line highlighting `{2,4-6}`**: not implemented (GitLab/Prism/mkdocs only).
+- **Autolinked references in repo files**: `#123` / `GH-123` / `owner/repo#N` do not autolink in READMEs or wikis.
 - **Nested alerts** inside lists, blockquotes, or `<details>`.
-- **Interactive task-list checkboxes or progress bars** in a README — only in issue bodies.
+- **Interactive task-list checkboxes or progress bars** in a README: only in issue bodies.
 - **Footnotes in wikis.**
-- **Block elements inside table cells** — use `<br>`.
+- **Block elements inside table cells**: use `<br>`.
 - **`rowspan` / `colspan`** in tables.
-- **Inlining a committed `.mp4`** to auto-play — upload via drag-drop instead.
+- **Inlining a committed `.mp4`** to auto-play: upload via drag-drop instead.
 - **Clickable links inside a rendered PDF** in the repo.
 - **`@mentions` as notifications from a README.**
 
@@ -121,7 +121,7 @@ Write for the reader's repo, not the author's machine:
 
 - No `this machine` / `my setup` framing.
 - No history or migration notes: `modeled on`, `migrated from`, `previously`, `was …`.
-- No personal or business context — internal hosts, employer or product systems, private paths.
+- No personal or business context: internal hosts, employer or product systems, private paths.
 - Terse over exhaustive; let code, tables, and diagrams carry the detail.
 
 ## Sources

@@ -5,7 +5,7 @@ and an `entra-mcp` MCP server. Both share one core package (`entra_tool`).
 
 ## Auth
 
-Uses your existing `az login` session via `az rest` — no app registration, no
+Uses your existing `az login` session via `az rest`: no app registration, no
 client secret, no certificate.
 
 ```sh

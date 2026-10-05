@@ -23,7 +23,7 @@ make sync         # render + merge into every agent
 
 ```
 .dotfiles-agents/
-├── catalog/                # single source of truth — one file per resource
+├── catalog/                # single source of truth: one file per resource
 │   ├── mcp/*.toml          # MCP servers (custom + third-party)
 │   ├── skills/<name>.toml  # skills (content in <name>/SKILL.md)
 │   ├── plugins/<name>.toml # opencode plugins (content in <name>.ts)
@@ -76,7 +76,7 @@ no block is skipped.
 | Codex          | mcp          | `~/.codex/config.toml` → `[mcp_servers]`                          | merge    |
 | Codex          | hooks        | `~/.codex/hooks.json` → `hooks`                                   | merge    |
 
-opencode has no `skills` row — it inherits `~/.claude/skills/`.
+opencode has no `skills` row; it inherits `~/.claude/skills/`.
 
 ## Resource kinds
 
@@ -87,9 +87,9 @@ catalog/hooks/<name>.toml        # event + matcher + command
 catalog/instructions/<name>.toml # + <name>.md
 ```
 
-- **Skills / plugins** — symlinked per item.
-- **Hooks** — merged additively; retire one via `hook_commands` in `catalog/retired.toml`.
-- **Instructions** — per-client, wrapped in a `<!-- dotfiles-agents:begin/end -->` block.
+- **Skills / plugins**: symlinked per item.
+- **Hooks**: merged additively; retire one via `hook_commands` in `catalog/retired.toml`.
+- **Instructions**: per-client, wrapped in a `<!-- dotfiles-agents:begin/end -->` block.
 
 `catalog/skills/github-glowup/` is a real skill; `example-skill/` and
 `hooks/example-hook.toml` are templates.
@@ -120,7 +120,7 @@ Full table of what this repo manages. `custom` = source lives in this repo;
 
 ## Secrets
 
-**No secrets live here** — `github` uses `${GITHUB_TOKEN}`; machine-specific
+**No secrets live here**: `github` uses `${GITHUB_TOKEN}`; machine-specific
 values live in the untracked `catalog/local.toml` (`catalog/local.toml.example`).
 
 ## Keeping up to date
@@ -140,13 +140,13 @@ make agent-update     # apply, then re-sync
 | `uv-project`        | bump the pinned git tag + re-lock                                 |
 | `git`               | `git pull --ff-only`; tag-pinned / no-upstream reported as manual |
 | `source`            | always current (runs from a working tree)                         |
-| `manual` / `remote` | a binary/app or hosted endpoint — nothing to do                   |
+| `manual` / `remote` | a binary/app or hosted endpoint; nothing to do                    |
 
 ## Adding or changing a resource
 
-1. **Server** — add/edit `catalog/mcp/<name>.toml` (set `clients = [...]`).
-2. **Skill** — add `catalog/skills/<name>.toml` + `catalog/skills/<name>/SKILL.md`.
-3. **Hook** — add `catalog/hooks/<name>.toml`.
-4. **Retire** — add the name (or, for hooks, the command) to `catalog/retired.toml`.
+1. **Server**: add/edit `catalog/mcp/<name>.toml` (set `clients = [...]`).
+2. **Skill**: add `catalog/skills/<name>.toml` + `catalog/skills/<name>/SKILL.md`.
+3. **Hook**: add `catalog/hooks/<name>.toml`.
+4. **Retire**: add the name (or, for hooks, the command) to `catalog/retired.toml`.
 5. `make agent-check`, then `make sync`.
 6. New server? Add a row to the Inventory table above.

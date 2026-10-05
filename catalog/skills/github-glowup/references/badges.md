@@ -11,10 +11,10 @@ Base host: `https://img.shields.io` (append `.svg` for the SVG variant). GitHub 
 | shields `github/*` | Dynamic / zero-maintenance | shields.io | Reads GitHub API; shared token pool |
 | Native Actions badge | Dynamic / zero-maintenance | GitHub | Served by GitHub, no third party |
 | Third-party (npm / PyPI / crates / Codecov) | Dynamic / zero-maintenance | shields.io | Same token pool for shields routes |
-| Static `badge/:label-:message-:color` | Manual | — | Hard-coded; rots silently |
-| Hard-coded "build passing" / version / coverage % | Manual | — | Replace with a dynamic equivalent |
+| Static `badge/:label-:message-:color` | Manual | - | Hard-coded; rots silently |
+| Hard-coded "build passing" / version / coverage % | Manual | - | Replace with a dynamic equivalent |
 
-Static badges that duplicate dynamic data (a hand-written version next to a release badge, a fixed "build passing" next to CI) are a smell — pick one source of truth.
+Static badges that duplicate dynamic data (a hand-written version next to a release badge, a fixed "build passing" next to CI) are a smell; pick one source of truth.
 
 ## Dynamic GitHub badges (shields.io)
 
@@ -83,7 +83,7 @@ https://img.shields.io/github/actions/workflow/status/:user/:repo/:workflow
 
 - `:workflow` is the filename, **case-sensitive**, include any subdirectory.
 - `?branch=`, `?event=`.
-- The old `/github/workflow/status/…` (by workflow name) is **deprecated — don't use it**.
+- The old `/github/workflow/status/…` (by workflow name) is **deprecated; don't use it**.
 
 ## Static & custom badges
 
@@ -124,12 +124,12 @@ shields badges do **not** auto-adapt and there is no shields theme param. Practi
 - Prefer mid-tone or brand colors that read on both light and dark backgrounds.
 - Add `logoColor=white` for near-black logos.
 - For a badge that must differ per theme, use `<picture>` with `prefers-color-scheme` (modern approach).
-- The `#gh-dark-mode-only` / `#gh-light-mode-only` URL fragments are **deprecated** — avoid.
+- The `#gh-dark-mode-only` / `#gh-light-mode-only` URL fragments are **deprecated**; avoid.
 
 ## Accessibility & layout
 
 - shields SVGs carry `role="img"` + `aria-label`, but still write meaningful **alt** text: what the badge means; describe the destination if it is linked.
-- One row of **3–6** badges near the top.
+- One row of **3-6** badges near the top.
 - Group in this order: build/CI + coverage → version/license → community.
 - Keep **one style** across the row.
 - **10+** badges is noise.
@@ -142,7 +142,7 @@ shields badges do **not** auto-adapt and there is no shields theme param. Practi
 
 ## Minimal recommended row
 
-CI (native, linked to Actions), release, license, last commit, issues, stars — works for solo, team, and OSS repos (trim for solo, this set for OSS):
+CI (native, linked to Actions), release, license, last commit, issues, stars; works for solo, team, and OSS repos (trim for solo, this set for OSS):
 
 ```markdown
 [![CI](https://github.com/OWNER/REPO/actions/workflows/main.yml/badge.svg?branch=main)](https://github.com/OWNER/REPO/actions/workflows/main.yml)
@@ -155,12 +155,12 @@ CI (native, linked to Actions), release, license, last commit, issues, stars —
 
 ## Gotchas
 
-- **Token pool**: shields shares a pool of GitHub tokens; heavy/rate-limited usage shows error badges — raise limits via [`/github-auth`](https://shields.io/docs).
+- **Token pool**: shields shares a pool of GitHub tokens; heavy/rate-limited usage shows error badges; raise limits via [`/github-auth`](https://shields.io/docs).
 - **Caching**: HTTP caching applies; `cacheSeconds` cannot go below the default.
-- **Error-state badges**: an inaccessible/invalid/not-found result renders an error badge, and a native badge returns a 404 SVG — both read as broken to visitors.
+- **Error-state badges**: an inaccessible/invalid/not-found result renders an error badge, and a native badge returns a 404 SVG; both read as broken to visitors.
 - **Workflow filename**: case-sensitive; include the subdirectory if the file isn't at `.github/workflows/` root.
 - **Branch in URL**: URL-encode spaces and `/` (e.g. `feature%2Fx`, or pass `?branch=feature/x`).
-- **No `?branch=`**: the badge can show a misleading green from *any* branch — set the branch explicitly.
+- **No `?branch=`**: the badge can show a misleading green from *any* branch; set the branch explicitly.
 - **Private repos**: not externally embeddable.
 - **Third party**: shields.io is third-party and can be down; the native Actions badge is served by GitHub.
 

@@ -321,7 +321,7 @@ def search_groups(
     returned `id` with the other group tools; display names are not always
     unique.
 
-    Matching is fuzzy — partial words, out-of-order words, and small
+    Matching is fuzzy: partial words, out-of-order words, and small
     misspellings all match, so an exact display name is not required.
 
     By default only results scoring within 10% of the best match are returned.
@@ -354,7 +354,7 @@ def list_users(
     has_title: bool | None = None,
     limit: int = 50,
 ) -> dict[str, Any]:
-    """List people by attribute — complete and unranked, unlike a search.
+    """List people by attribute: complete and unranked, unlike a search.
 
     Answers "who is in department X", "every contractor", "all disabled
     accounts", "everyone in this office". It reads the local cache, so it costs
@@ -402,7 +402,7 @@ def list_groups(
     group_type: str | None = None,
     limit: int = 50,
 ) -> dict[str, Any]:
-    """List groups by attribute — complete and unranked, unlike a search.
+    """List groups by attribute: complete and unranked, unlike a search.
 
     Answers "all mail-enabled groups", "every security group", "all Microsoft
     365 groups". It reads the local cache, so it costs no Graph calls. Filters
@@ -614,7 +614,7 @@ def get_group_members(group: str, mode: str = 'transitive', include_groups: bool
         group: Exact group display name or Entra object id.
         mode: "transitive" (default) expands nested groups to the people who
             actually get access. "direct" returns only direct members.
-        include_groups: Also return the nested groups — direct ones under
+        include_groups: Also return the nested groups: the direct ones under
             "direct", every nested group under "transitive".
     """
     resolved = _resolve_group(group)

@@ -10,7 +10,7 @@ File precedence when a health file lives in more than one place: `.github/` → 
 
 - **Issue templates live only in `.github/ISSUE_TEMPLATE/`** (never root or `docs/`).
 - **PR templates** may also be in `.github/`, root, or `docs/`.
-- An account/org default `.github` repo can supply health files — but **not** LICENSE, CODEOWNERS, GOVERNANCE, or CITATION.
+- An account/org default `.github` repo can supply health files, but **not** LICENSE, CODEOWNERS, GOVERNANCE, or CITATION.
 
 ## A. Community health files
 
@@ -20,7 +20,7 @@ File precedence when a health file lives in more than one place: `.github/` → 
 |---|---|
 | What | Structured bug/feature intake. Legacy Markdown templates or YAML issue forms. |
 | How | Legacy: `.github/ISSUE_TEMPLATE/bug_report.md` with frontmatter `name, about, title, labels, assignees`. Form: `.github/ISSUE_TEMPLATE/bug_report.yml` with keys `name, description, title, labels, assignees, type, projects, body`; body element types `markdown`, `textarea`, `input`, `dropdown`, `checkboxes`, `upload`; supports validations. Chooser: `.github/ISSUE_TEMPLATE/config.yml` (`blank_issues_enabled`, `contact_links`). |
-| Unlocks | Ticks the Community Profile checklist — but only if the template has valid `name`/`about` (`.md`) or `name`/`description` (`.yml`). |
+| Unlocks | Ticks the Community Profile checklist, but only if the template has valid `name`/`about` (`.md`) or `name`/`description` (`.yml`). |
 | Fit | small → large |
 
 Ordering is alphanumeric; prefix filenames `01-`, `02-` to control order.
@@ -74,7 +74,7 @@ Ordering is alphanumeric; prefix filenames `01-`, `02-` to control order.
 
 | | |
 |---|---|
-| What | Decision-making structure. **Conventional only — not a GitHub-recognized health file.** |
+| What | Decision-making structure. **Conventional only; not a GitHub-recognized health file.** |
 | How | root/`docs/`. |
 | Unlocks | Nothing automated; documents process. |
 | Fit | large projects only |
@@ -153,7 +153,7 @@ updates:
 | Unlocks | User/org site at `<owner>.github.io`; project site at `<owner>.github.io/<repo>`. Supports `.nojekyll`, `CNAME`. |
 | Fit | docs / demos |
 
-Private-repo Pages requires a paid plan — and the **published site is still public**.
+Private-repo Pages requires a paid plan, and the **published site is still public**.
 
 ### 14. Releases + auto notes
 

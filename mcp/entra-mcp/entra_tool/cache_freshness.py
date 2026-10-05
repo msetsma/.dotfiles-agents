@@ -45,7 +45,7 @@ def human_age(seconds: int | None) -> str:
 def cache_state_label(from_cache: bool, is_fresh: bool) -> str:
     """Describe where a set of rows came from.
 
-    "fresh" — fetched from Graph; "hit" — read from a fresh cache; "stale" —
+    "fresh": fetched from Graph; "hit": read from a fresh cache; "stale":
     a cache served because the refresh failed.
     """
     if not from_cache:

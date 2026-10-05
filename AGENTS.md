@@ -8,12 +8,12 @@ is registered with the local agent software.
 
 **When you create or change a resource, update its catalog entry and the
 Inventory table in [`README.md`](README.md).** The catalog is the single source of
-truth for everything the agents load — MCP servers (custom *and*
+truth for everything the agents load: MCP servers (custom *and*
 third-party), skills, plugins, hooks, and instructions; the README table is the
 human index. No catalog entry, no resource.
 
 Then run `make sync` to push the catalog into every
-agent — see [README.md](README.md) for the merge-vs-symlink model and
+agent. See [README.md](README.md) for the merge-vs-symlink model and
 [`bin/agent_sync.py`](bin/agent_sync.py) for the engine. Don't hand-edit the agent
 config files (`~/.claude.json`, `~/.config/opencode/opencode.jsonc`,
 `~/.codex/config.toml`, the Claude Desktop config); edit the catalog instead.
@@ -23,7 +23,7 @@ npm/uv/git versions, `make agent-update` applies them. Prefer `ref = "latest"`
 (float) unless you need a specific version.
 
 Also keep the server's own `README.md` (the deep docs) and `pyproject.toml`
-`description` in sync — `README.md` at the root is the summary, the server
+`description` in sync: `README.md` at the root is the summary, the server
 README is the detail.
 
 ## Repo conventions
@@ -32,7 +32,7 @@ README is the detail.
   `src/` or `server.py`, `tests/`).
 - **Python + `uv`.** `requires-python = ">=3.14"`. Run via
   `uv run --directory <dir> ...`, so no global install is needed. (Exception:
-  `entra-mcp` is uv-tool-installed because it also ships a daily-use CLI — see
+  `entra-mcp` is uv-tool-installed because it also ships a daily-use CLI; see
   the launch commands below.)
 - **stdio transport.** Agents launch the process; nothing listens on a port.
 - **Read-only by default.** Annotate tools with
@@ -55,21 +55,21 @@ Tool-level detail lives in each directory's `README.md`. Don't duplicate it here
 
 Alongside servers, the catalog owns four more kinds:
 
-- **Skills** — `catalog/skills/<name>.toml` (definition) plus
+- **Skills**: `catalog/skills/<name>.toml` (definition) plus
   `catalog/skills/<name>/SKILL.md` (content), symlinked into each listed client's
   skills directory. Never hand-edit a client's skills dir; edit the catalog.
-- **Plugins** — `catalog/plugins/<name>.toml` (definition) plus
+- **Plugins**: `catalog/plugins/<name>.toml` (definition) plus
   `catalog/plugins/<name>.ts` (content), symlinked into each listed client's
   plugins directory. This is how opencode hooks are delivered (opencode plugins,
   not a JSON event map).
-- **Hooks** — `catalog/hooks/<name>.toml`, merged additively into each listed
+- **Hooks**: `catalog/hooks/<name>.toml`, merged additively into each listed
   client's hook map (Claude Code, Codex). See
   [`catalog/hooks/example-hook.toml`](catalog/hooks/) for the shape.
-- **Instructions** — `catalog/instructions/<name>.toml` (definition) plus
+- **Instructions**: `catalog/instructions/<name>.toml` (definition) plus
   `<name>.md` (content), merged into a marked block in each listed client's
   global instruction file (`~/.config/opencode/AGENTS.md`, `~/.claude/CLAUDE.md`,
   `~/.codex/AGENTS.md`). Only the marked block is rewritten; notes you write
-  outside it survive. Instructions are deliberately per-client — each tool's
+  outside it survive. Instructions are deliberately per-client: each tool's
   vocabulary and agent names differ.
 
 The `python-clean` gate is the worked example: a Claude Code hook plus an
@@ -85,7 +85,7 @@ client supports; a kind with no block is skipped for that client.
 
 Configured clients: **opencode**, **Claude Code**, **Claude Desktop**, **Codex**.
 
-Always use an **absolute path to `uv`** (`/opt/homebrew/bin/uv`) in GUI apps —
+Always use an **absolute path to `uv`** (`/opt/homebrew/bin/uv`) in GUI apps;
 they don't inherit your shell `PATH`. Replace the command/args with the new
 server's entry point.
 
@@ -139,7 +139,7 @@ claude mcp list
 ### Claude Desktop
 
 Config: `~/Library/Application Support/Claude/claude_desktop_config.json`.
-Include `env.PATH` — the app launches without your shell environment.
+Include `env.PATH`: the app launches without your shell environment.
 
 ```json
 "mcpServers": {
@@ -173,7 +173,7 @@ The `claude-code` / `vscode` / `opencode` targets write **project-local** files
 in the current directory, so run it from the project you want, or use the manual
 snippets above.
 
-## Adding a new server — checklist
+## Adding a new server: checklist
 
 1. Create `~/.dotfiles-agents/mcp/<name>/` with `pyproject.toml`, `README.md`, entry point, tests.
 2. Make it run with `uv run --directory ~/.dotfiles-agents/mcp/<name> <entrypoint>`.

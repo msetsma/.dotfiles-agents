@@ -38,10 +38,10 @@ The image shown when the repo link is shared. Settings → **Social preview** �
 A threaded forum attached to the repo. Settings → Features → **Set up discussions**. Managed through GraphQL; `gh` support is limited. Best for teams and large OSS projects.
 
 ### 5. Wiki
-Settings → Features → **Wikis**. Backed by a separate git repo at `<repo>.wiki.git`; has a public-editing toggle. Soft limit of **5000 files**. Wiki pages are search-indexed only if the repo has **500+ stars AND public editing is disabled** — prefer GitHub Pages for SEO.
+Settings → Features → **Wikis**. Backed by a separate git repo at `<repo>.wiki.git`; has a public-editing toggle. Soft limit of **5000 files**. Wiki pages are search-indexed only if the repo has **500+ stars AND public editing is disabled**; prefer GitHub Pages for SEO.
 
 ### 6. GitHub Pages
-Settings → **Pages**. Source can be a branch + folder (`/` or `/docs`) or a GitHub Actions workflow (`upload-pages-artifact` + `deploy-pages`, using the `github-pages` environment). URL: `<owner>.github.io` for user/org sites, `<owner>.github.io/<repo>` for project sites. `CNAME` is configured in settings (not by a file alone); add `.nojekyll` to bypass Jekyll. Pages on private repos needs a paid plan; making a repo private can unpublish the site — remove DNS records to avoid domain takeover.
+Settings → **Pages**. Source can be a branch + folder (`/` or `/docs`) or a GitHub Actions workflow (`upload-pages-artifact` + `deploy-pages`, using the `github-pages` environment). URL: `<owner>.github.io` for user/org sites, `<owner>.github.io/<repo>` for project sites. `CNAME` is configured in settings (not by a file alone); add `.nojekyll` to bypass Jekyll. Pages on private repos needs a paid plan; making a repo private can unpublish the site; remove DNS records to avoid domain takeover.
 
 ### 7. Sponsors / FUNDING
 Add `.github/FUNDING.yml` on the default branch, or set via Settings → General → Features → **Sponsorships**. Lists platforms plus a `custom` entry (≤4). Quote URLs containing `:`. No fee on personal accounts.

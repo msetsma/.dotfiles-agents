@@ -14,8 +14,8 @@ consent and no Full Disk Access.
 | `mail_search` | Search by `subject`, `sender`, or `body` |
 | `mail_get` | Headers and body for one message |
 | `sp_roots` | Synced SharePoint library roots |
-| `sp_find` | Filename search — downloads nothing |
-| `sp_read` | Text of one file — downloads it if needed |
+| `sp_find` | Filename search; downloads nothing |
+| `sp_read` | Text of one file; downloads it if needed |
 
 All tools are read-only; nothing sends mail, creates events, or writes files.
 
