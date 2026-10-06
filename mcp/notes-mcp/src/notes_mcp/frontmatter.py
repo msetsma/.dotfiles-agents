@@ -55,9 +55,21 @@ def parse(text: str) -> tuple[dict[str, Any], str]:
     return loaded, body
 
 
+class _NoAliasDumper(yaml.SafeDumper):
+    """Render repeated objects inline instead of YAML anchors and aliases.
+
+    The ``qmd`` mirror shares values with the user-editable fields, so PyYAML
+    would otherwise emit ``&id001`` / ``*id001``. That is valid YAML but noisy
+    and confusing to hand-edit.
+    """
+
+    def ignore_aliases(self, data: Any) -> bool:
+        return True
+
+
 def serialize(fm: dict[str, Any], body: str) -> str:
     """Render ``fm`` and ``body`` back into note text."""
-    block = yaml.safe_dump(fm, sort_keys=False, allow_unicode=True)
+    block = yaml.dump(fm, Dumper=_NoAliasDumper, sort_keys=False, allow_unicode=True)
     return f'{_FENCE}\n{block}{_FENCE}\n{body}'
 
 
@@ -87,7 +99,12 @@ def sync_qmd_metadata(fm: dict[str, Any]) -> dict[str, Any]:
     qmd = fm.get('qmd')
     if not isinstance(qmd, dict):
         qmd = {}
-    qmd['metadata'] = {'type': fm.get('type'), 'status': fm.get('status'), 'tags': fm.get('tags')}
+    tags = fm.get('tags')
+    qmd['metadata'] = {
+        'type': fm.get('type'),
+        'status': fm.get('status'),
+        'tags': list(tags) if isinstance(tags, list) else tags,
+    }
     fm['qmd'] = qmd
     return fm
 

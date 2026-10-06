@@ -67,6 +67,30 @@ def test_sync_qmd_metadata_tracks_current_values():
     assert fm['qmd']['metadata'] == {'type': 'note', 'status': 'archived', 'tags': ['a', 'b']}
 
 
+def test_serialize_emits_no_yaml_anchors():
+    fm = make_fm()
+    fm['tags'] = ['a', 'b']
+    sync_qmd_metadata(fm)
+
+    text = serialize(fm, 'Body\n')
+
+    assert '&' not in text
+    assert '*id' not in text
+    parsed, _ = parse(text)
+    assert parsed['tags'] == ['a', 'b']
+    assert parsed['qmd']['metadata']['tags'] == ['a', 'b']
+
+
+def test_sync_qmd_metadata_does_not_alias_tags():
+    fm = make_fm()
+    fm['tags'] = ['a']
+
+    sync_qmd_metadata(fm)
+    fm['tags'].append('b')
+
+    assert fm['qmd']['metadata']['tags'] == ['a']
+
+
 def test_parse_without_frontmatter_is_invalid():
     with pytest.raises(NotesError) as excinfo:
         parse('Just a plain body.\n')
