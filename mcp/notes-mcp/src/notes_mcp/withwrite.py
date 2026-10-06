@@ -69,6 +69,7 @@ def with_write(
         payload['commit'] = git.commit(tool=tool, summary=summary, session=config.session)
         payload['pending_push'] = not git.push()
         payload['needs_index_update'] = bool(payload.get('needs_index_update', False))
+        payload.setdefault('ok', True)
         if payload['pending_push']:
             _record_push_failure(payload, config)
         return payload
