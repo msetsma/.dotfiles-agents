@@ -174,7 +174,14 @@ def frontmatter(
     ]
     if scope is not None:
         lines.append(f'scope: {scope}')
-    lines += ['qmd:', '  metadata:', f'    type: {type_}', f'    status: {status}', f'    tags: {_yaml_list(tags)}']
+    lines += [
+        'qmd:',
+        '  metadata:',
+        f'    type: {type_}',
+        f'    status: {status}',
+        f'    tags: {_yaml_list(tags)}',
+        '---',
+    ]
     return '\n'.join(lines) + '\n'
 
 
