@@ -105,6 +105,7 @@ Full table of what this repo manages. `custom` = source lives in this repo;
 | Server                                       | Origin   | Launch                                                                  | Clients                                      |
 |----------------------------------------------|----------|-------------------------------------------------------------------------|----------------------------------------------|
 | [`m365-local`](mcp/m365-local-mcp/README.md) | custom   | `uv run --directory ~/.dotfiles-agents/mcp/m365-local-mcp server.py`    | opencode, Claude Code, Claude Desktop        |
+| [`notes`](mcp/notes-mcp/README.md)           | custom   | `uv run --directory ~/.dotfiles-agents/mcp/notes-mcp notes-mcp`         | opencode, Claude Code, Claude Desktop        |
 | [`teams-browser`](mcp/teams-mcp/README.md)   | custom   | `uv run --directory ~/.dotfiles-agents/mcp/teams-mcp teams-browser-mcp` | opencode, Claude Code, Claude Desktop        |
 | [`entra-mcp`](mcp/entra-mcp/README.md)       | custom   | `entra-mcp` (uv tool)                                                   | opencode, Claude Code, Claude Desktop, Codex |
 | `obscura`                                    | external | `~/.local/bin/obscura mcp --stealth`                                    | opencode, Claude Code, Claude Desktop        |
