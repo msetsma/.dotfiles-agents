@@ -17,6 +17,20 @@ Read: `notes_index`, `notes_search`, `notes_read`, `notes_list`, `notes_recent`,
 Write: `notes_create`, `notes_update`, `notes_append`.
 Structure: `notes_move`, `notes_rename`, `notes_sync`.
 
+## Deviations from the Part 2 spec
+
+The vault on disk is Johnny-Decimal x PARA (not the spec's generic PARA), and the
+repo's ruff gate forbids camelCase arguments and the `type` builtin. So:
+
+- Tool parameters are published **snake_case**: `category_id`, `note_type`
+  (`type` in the spec), `from_line`, `max_lines`, `target_category_id`,
+  `new_title`. Behavior is unchanged.
+- The MCP maintains the `qmd.metadata` frontmatter mirror (the spec omitted it).
+- Success payloads may carry `pending_push` and `needs_index_update` (from the
+  vault `AGENTS.md`).
+- `notes_sync` returns the qmd/lock/git status; `CONFIG_ERROR` and `NOT_FOUND`
+  are additional error codes.
+
 ## Env
 
 | Var | Default | Purpose |

@@ -1,0 +1,17 @@
+name        = "notes"
+description = "Read/write MCP for the personal Obsidian vault (Johnny-Decimal x PARA): qmd-backed search plus git-committed create/update/append/move/rename."
+kind        = "local"
+origin      = "custom"
+clients     = ["opencode", "claude-code", "claude-desktop"]
+
+[launch]
+command = "uv"
+args    = ["run", "--directory", "${AGENT_HOME}/mcp/notes-mcp", "notes-mcp"]
+
+[env]
+VAULT_PATH     = "~/notes"
+QMD_COLLECTION = "notes"
+
+[package]
+manager = "source"
+path    = "${AGENT_HOME}/mcp/notes-mcp"
