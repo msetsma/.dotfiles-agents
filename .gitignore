@@ -29,5 +29,8 @@ build/
 *.db-shm
 *.db-wal
 
+# Node (pi packages)
+node_modules/
+
 # macOS
 .DS_Store

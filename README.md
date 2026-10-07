@@ -137,6 +137,7 @@ Full table of what this repo manages. `custom` = source lives in this repo;
 | `rpiv-todo` | `npm:@juicesharp/rpiv-todo` | model-managed todo list as a live overlay |
 | `pi-goal-x` | `npm:pi-goal-x` | `/goal`: goal planning, persistent progress, completion auditor |
 | `pi-zentui` | `npm:pi-zentui` | UI components: editors, messages, progress, statuslines |
+| [`pi-quiet`](packages/pi-quiet/README.md) | `packages/pi-quiet` (local) | compact tool rendering, `alt+o` detail overlay, `/quiet` modes |
 
 ## Secrets
 
