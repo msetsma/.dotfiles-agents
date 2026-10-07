@@ -236,3 +236,69 @@ def test_append_without_target(vault) -> None:
 
     assert result['ok'] is False
     assert result['error']['code'] == 'PATH_REJECTED'
+
+
+# --------------------------------------------------------------------------- #
+# journal derivation, journal update, duplicate-in-lock (H5 / L3 / M4)
+# --------------------------------------------------------------------------- #
+def test_create_daily_appends_when_it_exists(vault, monkeypatch) -> None:
+    ctx = make_ctx(vault)
+    monkeypatch.setattr(write, '_today', lambda: '2026-01-05')
+    rel = '40 Journal/41 Daily/2026-01-05.md'
+    assert 'agent daily line' not in (vault.agent / rel).read_text(encoding='utf-8')
+
+    result = write.notes_create(ctx, '41', None, 'daily', 'agent daily line')
+
+    assert result.get('ok') is not False, result
+    assert result['path'] == rel
+    text = (vault.agent / rel).read_text(encoding='utf-8')
+    assert 'agent daily line' in text
+    fm, _ = frontmatter.parse(text)
+    assert fm['type'] == 'daily'
+    assert ctx.search.calls == 1
+
+
+def test_journal_dir_follows_index_path(vault, monkeypatch) -> None:
+    ctx = make_ctx(vault)
+    monkeypatch.setattr(write, '_today', lambda: '2026-03-03')
+    new_dir = '40 Journal/41 Daily Reworked'
+    (vault.agent / new_dir).mkdir(parents=True, exist_ok=True)
+    index = vault.agent / '00 Meta/00.00 Index.md'
+    index.write_text(
+        index.read_text(encoding='utf-8').replace(
+            '| 41 | Daily | 40 Journal/41 Daily |', f'| 41 | Daily | {new_dir} |'
+        ),
+        encoding='utf-8',
+    )
+
+    result = write.notes_create(ctx, '41', None, 'daily', 'body')
+
+    assert result.get('ok') is not False, result
+    assert result['path'] == f'{new_dir}/2026-03-03.md'
+    assert (vault.agent / result['path']).is_file()
+
+
+def test_create_duplicate_creates_nothing(vault) -> None:
+    ctx = make_ctx(vault)
+    first = write.notes_create(ctx, '11', 'Dupe Target', 'note', 'one')
+    assert first.get('ok') is not False, first
+    target = vault.agent / first['path']
+    content = target.read_text(encoding='utf-8')
+    head = _last_subject(vault)
+
+    second = write.notes_create(ctx, '11', 'Dupe Target', 'note', 'two')
+
+    assert second['ok'] is False
+    assert second['error']['code'] == 'DUPLICATE_FILENAME'
+    assert target.read_text(encoding='utf-8') == content
+    assert _last_subject(vault) == head
+
+
+def test_duplicate_check_ignores_git_dir(vault) -> None:
+    ctx = make_ctx(vault)
+    (vault.agent / '.git' / 'Decoy.md').write_text('decoy\n', encoding='utf-8')
+
+    result = write.notes_create(ctx, '11', 'Decoy', 'note', 'body')
+
+    assert result.get('ok') is not False, result
+    assert result['path'] == '10 Projects/11 Project A/Decoy.md'

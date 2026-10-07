@@ -162,6 +162,26 @@ def test_move_duplicate_filename(vault) -> None:
     assert result['error']['code'] == 'DUPLICATE_FILENAME'
 
 
+def test_move_rewrites_path_qualified_links(vault) -> None:
+    ctx = make_ctx(vault)
+    referrer = _create(
+        ctx, 'Path Referrer', '# Path Referrer\n\nSee [[10 Projects/11 Project A/Meeting Notes 2026-01-05]].\n'
+    )
+    before = _head(vault)
+
+    result = structure.notes_move(ctx, '10 Projects/11 Project A/Meeting Notes 2026-01-05.md', '21')
+
+    new_rel = '20 Areas/21 Platform Engineering/Meeting Notes 2026-01-05.md'
+    assert result['ok'] is True, result
+    assert result['path'] == new_rel
+    assert result['rewritten'] == 1
+    assert _commits_since(vault, before) == 1
+
+    text = (vault.agent / referrer).read_text(encoding='utf-8')
+    assert '[[20 Areas/21 Platform Engineering/Meeting Notes 2026-01-05]]' in text
+    assert '[[10 Projects/11 Project A/Meeting Notes 2026-01-05' not in text
+
+
 # --------------------------------------------------------------------------- #
 # notes_rename
 # --------------------------------------------------------------------------- #
@@ -169,7 +189,10 @@ def test_rename_rewrites_wikilinks_in_one_commit(vault) -> None:
     ctx = make_ctx(vault)
     target = _create(ctx, 'Old Title', '# Old Title\n\nbody\n')
     referrer = _create(
-        ctx, 'Referrer', '# Referrer\n\nSee [[Old Title]], [[Old Title|alias]], [[Old Title#Heading]].\n'
+        ctx,
+        'Referrer',
+        '# Referrer\n\nSee [[Old Title]], [[Old Title|alias]], [[Old Title#Heading]],'
+        ' and [[10 Projects/11 Project A/Old Title]].\n',
     )
     before = _head(vault)
 
@@ -189,6 +212,7 @@ def test_rename_rewrites_wikilinks_in_one_commit(vault) -> None:
     assert '[[New Title]]' in text
     assert '[[New Title|alias]]' in text
     assert '[[New Title#Heading]]' in text
+    assert '[[10 Projects/11 Project A/New Title]]' in text
     assert '[[Old Title' not in text
 
 
@@ -220,6 +244,82 @@ def test_rename_missing_note(vault) -> None:
 
     assert result['ok'] is False
     assert result['error']['code'] == 'NOT_FOUND'
+
+
+# --------------------------------------------------------------------------- #
+# notes_move_category
+# --------------------------------------------------------------------------- #
+CATEGORY = '10 Projects/11 Project A'
+
+
+def _create_in(ctx, category_id: str, title: str, body: str) -> str:
+    result = write.notes_create(ctx, category_id, title, 'note', body)
+    assert result.get('ok') is not False, result
+    return result['path']
+
+
+def test_move_category_relocates_and_updates_index(vault) -> None:
+    ctx = make_ctx(vault)
+    referrer = _create_in(
+        ctx,
+        '33',
+        'Category Referrer',
+        '# Category Referrer\n\nSee [[10 Projects/11 Project A/Meeting Notes 2026-01-05]] '
+        'and [[Meeting Notes 2026-01-05]].\n',
+    )
+    before = _head(vault)
+
+    result = structure.notes_move_category(ctx, '11', '10 Projects/Renamed Project')
+
+    new_dir = '10 Projects/11 Renamed Project'
+    assert result['ok'] is True, result
+    assert result['path'] == new_dir
+    assert result['index_path'] == '00 Meta/00.00 Index.md'
+    assert result['needs_index_update'] is False
+    assert result['rewritten'] == 1
+    assert _commits_since(vault, before) == 1
+
+    assert not (vault.agent / CATEGORY).exists()
+    assert (vault.agent / new_dir / 'Meeting Notes 2026-01-05.md').is_file()
+
+    index_text = (vault.agent / '00 Meta/00.00 Index.md').read_text(encoding='utf-8')
+    assert new_dir in index_text
+    assert CATEGORY not in index_text
+    assert ctx.index.get('11').path == new_dir
+
+    text = (vault.agent / referrer).read_text(encoding='utf-8')
+    assert '[[10 Projects/11 Renamed Project/Meeting Notes 2026-01-05]]' in text
+    assert '[[Meeting Notes 2026-01-05]]' in text
+    assert '[[10 Projects/11 Project A/' not in text
+
+
+def test_move_category_rejects_meta_destination(vault) -> None:
+    ctx = make_ctx(vault)
+
+    result = structure.notes_move_category(ctx, '11', '00 Meta/11 Project A')
+
+    assert result['ok'] is False
+    assert result['error']['code'] == 'PATH_REJECTED'
+    assert (vault.agent / CATEGORY).is_dir()
+
+
+def test_move_category_rejects_existing_destination(vault) -> None:
+    ctx = make_ctx(vault)
+    (vault.agent / '10 Projects/11 Existing').mkdir(parents=True, exist_ok=True)
+
+    result = structure.notes_move_category(ctx, '11', '10 Projects/11 Existing')
+
+    assert result['ok'] is False
+    assert result['error']['code'] == 'PATH_REJECTED'
+
+
+def test_move_category_rejects_same_path(vault) -> None:
+    ctx = make_ctx(vault)
+
+    result = structure.notes_move_category(ctx, '11', CATEGORY)
+
+    assert result['ok'] is False
+    assert result['error']['code'] == 'PATH_REJECTED'
 
 
 # --------------------------------------------------------------------------- #

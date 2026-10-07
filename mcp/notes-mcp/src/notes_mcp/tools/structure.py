@@ -18,13 +18,14 @@ from __future__ import annotations
 
 import re
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 from notes_mcp import frontmatter
+from notes_mcp.atomic import atomic_write
 from notes_mcp.errors import DUPLICATE_FILENAME, NOT_FOUND, PATH_REJECTED, NotesError, notes_error
+from notes_mcp.index import INDEX_REL_PATH
 from notes_mcp.lock import FileLock
-from notes_mcp.tools.write import _atomic_write
 from notes_mcp.withwrite import with_write
 
 
@@ -59,13 +60,14 @@ def notes_move(ctx: ToolContext, path: str, target_category_id: str | None = Non
         if (ctx.config.vault_path / new_rel).exists():
             raise _duplicate(new_rel)
 
+        paths = list(dict.fromkeys([old_rel, new_rel]))
         result = with_write(
             config=ctx.config,
             git=ctx.git,
-            paths=[new_rel],
+            paths=paths,
             tool='notes_move',
             summary=new_rel,
-            fn=lambda: _move_payload(ctx, old_rel, new_rel, category.path),
+            fn=lambda: _move_payload(ctx, old_rel, new_rel, category.path, paths),
         )
     except NotesError as exc:
         return exc.to_dict()
@@ -101,7 +103,7 @@ def notes_rename(ctx: ToolContext, path: str, new_title: str | None = None, **op
         if new_rel != old_rel and (ctx.config.vault_path / new_rel).exists():
             raise _duplicate(new_rel)
 
-        paths = [new_rel]
+        paths = list(dict.fromkeys([old_rel, new_rel]))
         result = with_write(
             config=ctx.config,
             git=ctx.git,
@@ -109,6 +111,39 @@ def notes_rename(ctx: ToolContext, path: str, new_title: str | None = None, **op
             tool='notes_rename',
             summary=new_rel,
             fn=lambda: _rename_payload(ctx, old_rel, new_rel, old_title, new_stem, paths),
+        )
+    except NotesError as exc:
+        return exc.to_dict()
+
+    if result.get('ok') is not False:
+        result.setdefault('ok', True)
+        ctx.search.schedule_reindex()
+    return result
+
+
+def notes_move_category(ctx: ToolContext, category_id: str, new_path: str) -> dict[str, Any]:
+    """Relocate a whole category folder, updating the Index and its links.
+
+    ``git mv`` moves the directory recursively; every path-qualified wikilink
+    whose target lay under the old path is rewritten, and the Index ``Path``
+    row is updated, all in one commit. Categories may not move into or out of
+    ``00 Meta``, onto an existing directory, or onto their own path.
+    """
+    try:
+        category = ctx.index.validate(category_id)
+        old_dir = category.path
+        new_dir = _normalize_new_dir(ctx, category.id, old_dir, new_path)
+        old_files = _category_files(ctx, old_dir)
+        new_files = [_relocate(rel, old_dir, new_dir) for rel in old_files]
+        paths = list(dict.fromkeys([*old_files, *new_files, INDEX_REL_PATH]))
+
+        result = with_write(
+            config=ctx.config,
+            git=ctx.git,
+            paths=paths,
+            tool='notes_move_category',
+            summary=f'{old_dir} -> {new_dir}',
+            fn=lambda: _move_category_payload(ctx, category_id, old_dir, new_dir),
         )
     except NotesError as exc:
         return exc.to_dict()
@@ -154,10 +189,12 @@ def notes_sync(ctx: ToolContext) -> dict[str, Any]:
 # --------------------------------------------------------------------------- #
 # payload builders (run inside with_write, under the lock)
 # --------------------------------------------------------------------------- #
-def _move_payload(ctx: ToolContext, old_rel: str, new_rel: str, category_path: str) -> dict[str, Any]:
+def _move_payload(ctx: ToolContext, old_rel: str, new_rel: str, category_path: str, paths: list[str]) -> dict[str, Any]:
     ctx.git.run(['git', 'mv', old_rel, new_rel])
+    changed = _rewrite_links(ctx, _path_patterns(old_rel, new_rel))
+    _extend_paths(paths, changed)
     _bump_updated(ctx, new_rel)
-    return {'path': new_rel, 'needs_index_update': category_path == _ARCHIVE_PATH}
+    return {'path': new_rel, 'rewritten': len(changed), 'needs_index_update': category_path == _ARCHIVE_PATH}
 
 
 def _rename_payload(
@@ -165,10 +202,19 @@ def _rename_payload(
 ) -> dict[str, Any]:
     if new_rel != old_rel:
         ctx.git.run(['git', 'mv', old_rel, new_rel])
-    changed = _rewrite_links(ctx, old_title, new_title)
-    paths.extend(rel for rel in changed if rel not in paths)
+    patterns = [(_link_pattern(old_title), f'[[{new_title}')]
+    patterns += _path_patterns(old_rel, new_rel)
+    changed = _rewrite_links(ctx, patterns)
+    _extend_paths(paths, changed)
     _bump_updated(ctx, new_rel)
     return {'path': new_rel, 'rewritten': len(changed), 'needs_index_update': False}
+
+
+def _move_category_payload(ctx: ToolContext, category_id: str, old_dir: str, new_dir: str) -> dict[str, Any]:
+    ctx.git.run(['git', 'mv', old_dir, new_dir])
+    changed = _rewrite_links(ctx, _prefix_patterns(old_dir, new_dir))
+    ctx.index.apply_path(category_id, new_dir)
+    return {'path': new_dir, 'index_path': INDEX_REL_PATH, 'rewritten': len(changed), 'needs_index_update': False}
 
 
 # --------------------------------------------------------------------------- #
@@ -189,18 +235,18 @@ def _bump_updated(ctx: ToolContext, rel: str) -> None:
     fm, body = frontmatter.parse(target.read_text(encoding='utf-8'))
     fm['updated'] = _today()
     frontmatter.sync_qmd_metadata(fm)
-    _atomic_write(target, frontmatter.serialize(fm, body))
+    atomic_write(target, frontmatter.serialize(fm, body))
 
 
-def _rewrite_links(ctx: ToolContext, old_title: str, new_title: str) -> list[str]:
-    """Rewrite ``[[old_title...]]`` links vault-wide; return the changed rel paths."""
+def _rewrite_links(ctx: ToolContext, patterns: list[tuple[re.Pattern[str], str]]) -> list[str]:
+    """Rewrite matching wikilink targets vault-wide; return the changed rel paths."""
     changed: list[str] = []
     for rel, path in _writable_md(ctx):
         text = path.read_text(encoding='utf-8')
-        rewritten, did_change = _rewrite_text(text, old_title, new_title)
+        rewritten, did_change = _rewrite_text(text, patterns)
         if not did_change:
             continue
-        _atomic_write(path, rewritten)
+        atomic_write(path, rewritten)
         changed.append(rel)
     return changed
 
@@ -218,13 +264,8 @@ def _writable_md(ctx: ToolContext) -> list[tuple[str, Path]]:
     return writable
 
 
-def _rewrite_text(text: str, old_title: str, new_title: str) -> tuple[str, bool]:
+def _rewrite_text(text: str, patterns: list[tuple[re.Pattern[str], str]]) -> tuple[str, bool]:
     """Replace wikilink targets outside fenced code blocks; report whether any changed."""
-    pattern = _link_pattern(old_title)
-
-    def replace(_match: re.Match[str]) -> str:
-        return f'[[{new_title}'
-
     lines = text.split('\n')
     fenced = False
     changed = False
@@ -238,7 +279,9 @@ def _rewrite_text(text: str, old_title: str, new_title: str) -> tuple[str, bool]
         if fenced:
             out.append(line)
             continue
-        rewritten = pattern.sub(replace, line)
+        rewritten = line
+        for pattern, replacement in patterns:
+            rewritten = pattern.sub(lambda _match, _replacement=replacement: _replacement, rewritten)
         if rewritten != line:
             changed = True
         out.append(rewritten)
@@ -248,6 +291,70 @@ def _rewrite_text(text: str, old_title: str, new_title: str) -> tuple[str, bool]
 def _link_pattern(old_title: str) -> re.Pattern[str]:
     """Match ``[[<old title>`` only when followed by ``]``, ``|``, or ``#``."""
     return re.compile(r'\[\[' + re.escape(old_title) + r'(?=[\]|#])')
+
+
+def _path_patterns(old_rel: str, new_rel: str) -> list[tuple[re.Pattern[str], str]]:
+    """Anchored path-qualified link pairs for a moved or renamed note."""
+    old_target = _strip_md(old_rel)
+    new_target = _strip_md(new_rel)
+    if old_target == new_target:
+        return []
+    return [(_link_pattern(old_target), f'[[{new_target}')]
+
+
+def _prefix_patterns(old_dir: str, new_dir: str) -> list[tuple[re.Pattern[str], str]]:
+    """Prefix replacement for every link whose target was under ``old_dir/``."""
+    pattern = re.compile(r'\[\[' + re.escape(old_dir + '/'))
+    return [(pattern, f'[[{new_dir}/')]
+
+
+def _strip_md(rel: str) -> str:
+    return rel.removesuffix('.md')
+
+
+def _extend_paths(paths: list[str], extra: list[str]) -> None:
+    for rel in extra:
+        if rel not in paths:
+            paths.append(rel)
+
+
+def _normalize_new_dir(ctx: ToolContext, category_id: str, old_dir: str, new_path: str) -> str:
+    """Normalise, prefix with the ``NN `` id, and validate a category destination."""
+    normalized = re.sub(r'/+', '/', new_path.replace('\\', '/').strip('/'))
+    if not normalized:
+        raise _reject_path(new_path, 'the destination is empty')
+    parent = PurePosixPath(normalized).parent
+    base = PurePosixPath(normalized).name
+    prefix = f'{category_id} '
+    if not base.startswith(prefix):
+        base = f'{prefix}{base}'
+    new_dir = base if str(parent) == '.' else f'{parent}/{base}'
+    if new_dir == old_dir:
+        raise _reject_path(new_dir, 'the category is already at that path')
+    if ctx.guard.is_meta(new_dir):
+        raise _reject_path(new_dir, 'categories may not live under 00 Meta')
+    if (ctx.config.vault_path / new_dir).is_dir():
+        raise _reject_path(new_dir, 'a directory already exists there')
+    return new_dir
+
+
+def _category_files(ctx: ToolContext, old_dir: str) -> list[str]:
+    """Every ``.md`` file currently under the category directory, vault-relative."""
+    root = ctx.config.vault_path / old_dir
+    return sorted(ctx.guard.relpath(path) for path in root.rglob('*.md'))
+
+
+def _relocate(rel: str, old_dir: str, new_dir: str) -> str:
+    return f'{new_dir}{rel[len(old_dir) :]}'
+
+
+def _reject_path(rel: str, reason: str) -> NotesError:
+    return NotesError(
+        PATH_REJECTED,
+        f'refusing to move the category to {rel!r} ({reason})',
+        'Choose a vault-relative directory outside 00 Meta that does not already exist.',
+        path=rel,
+    )
 
 
 def _alias(options: dict[str, object], key: str, current: str | None) -> str | None:

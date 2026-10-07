@@ -11,17 +11,49 @@ from __future__ import annotations
 
 import subprocess
 import time
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from notes_mcp.errors import CONFLICT, NotesError, notes_error
+from notes_mcp.atomic import atomic_write
+from notes_mcp.errors import CONFLICT, notes_error
 
 
 if TYPE_CHECKING:
     from notes_mcp.config import Config
 
 INDEX_POLL_INTERVAL = 0.2
+
+# A rebase/merge left unmerged paths behind (the caller must run the conflict path).
+CONFLICT_MARKERS = ('CONFLICT', 'Automatic merge failed', 'could not apply', 'unmerged', 'needs merge', 'fix conflicts')
+# No rebase in progress but the remote could not be reached (caller records PENDING_SYNC).
+TRANSIENT_MARKERS = (
+    'could not resolve host',
+    'unable to access',
+    'connection refused',
+    'connection timed out',
+    'operation timed out',
+    'network is unreachable',
+    'temporary failure in name resolution',
+    "couldn't connect to server",
+    'could not read from remote repository',
+    'does not appear to be a git repository',
+    'ssl',
+    'proxy',
+)
+
+
+@dataclass
+class PullResult:
+    """The outcome of :meth:`Git.pull_rebase_autostash`; never raises."""
+
+    ok: bool
+    transient: bool
+    conflict: bool
+    detail: str
+    local_sha: str
+    remote_sha: str
 
 
 class Git:
@@ -72,26 +104,34 @@ class Git:
     # ------------------------------------------------------------------ #
     # sync
     # ------------------------------------------------------------------ #
-    def pull_rebase_autostash(self) -> None:
-        """Rebase the local branch onto the remote, stashing uncommitted edits."""
+    def pull_rebase_autostash(self) -> PullResult:
+        """Rebase onto the remote, stashing edits. Never raises; classify the failure."""
         remote = self.config.git_remote
         branch = self.current_branch()
         proc = self.run(['git', 'pull', '--rebase', '--autostash', remote, branch], check=False)
-        if proc.returncode != 0:
-            stderr = (proc.stderr or '').strip()
-            raise notes_error(
-                CONFLICT,
-                f'pull --rebase failed for {remote}/{branch}' + (f': {stderr}' if stderr else ''),
-                'Resolve the rebase/stash conflict, then retry the write.',
-                local_sha=self._rev_parse('HEAD'),
-                remote_sha=self._rev_parse(f'{remote}/{branch}'),
-                stderr=stderr,
-            )
+        local_sha = self._rev_parse('HEAD')
+        remote_sha = self._rev_parse(f'{remote}/{branch}')
+        if proc.returncode == 0:
+            return PullResult(True, False, False, '', local_sha, remote_sha)
+        combined = f'{proc.stdout or ""}\n{proc.stderr or ""}'
+        detail = (proc.stderr or '').strip() or (proc.stdout or '').strip() or 'pull failed'
+        if self._rebase_in_progress() or any(marker in combined for marker in CONFLICT_MARKERS):
+            return PullResult(False, False, True, detail, local_sha, remote_sha)
+        if any(marker in combined.lower() for marker in TRANSIENT_MARKERS):
+            return PullResult(False, True, False, detail, local_sha, remote_sha)
+        return PullResult(False, False, True, detail, local_sha, remote_sha)
+
+    def _rebase_in_progress(self) -> bool:
+        """Whether a rebase or merge is genuinely mid-flight."""
+        git_dir = self.cwd / '.git'
+        return any((git_dir / name).exists() for name in ('rebase-merge', 'rebase-apply', 'MERGE_HEAD'))
 
     def push(self, *, retries: int = 3) -> bool:
-        """Push HEAD; on rejection rebase and retry. Never raises."""
+        """Push the current branch; on rejection pull and retry. Never raises."""
+        remote = self.config.git_remote
+        branch = self.current_branch()
         for attempt in range(max(1, retries)):
-            proc = self.run(['git', 'push', self.config.git_remote, 'HEAD'], check=False)
+            proc = self.run(['git', 'push', remote, branch], check=False)
             if proc.returncode == 0:
                 return True
             combined = f'{proc.stdout or ""}\n{proc.stderr or ""}'
@@ -99,11 +139,11 @@ class Git:
                 return False
             if attempt == retries - 1:
                 return False
-            try:
-                self.pull_rebase_autostash()
-            except NotesError:
+            result = self.pull_rebase_autostash()
+            if result.conflict:
                 self.abort_rebase()
                 return False
+            time.sleep(min(0.5 * 2**attempt, 5.0))
         return False
 
     def abort_rebase(self) -> None:
@@ -112,7 +152,7 @@ class Git:
 
     @staticmethod
     def _is_rejected(output: str) -> bool:
-        markers = ('non-fast-forward', 'fetch first', '[rejected]', 'failed to push')
+        markers = ('non-fast-forward', 'fetch first', '[rejected]', 'stale info', '! [remote rejected]')
         return any(marker in output for marker in markers)
 
     def _rev_parse(self, ref: str) -> str:
@@ -128,8 +168,14 @@ class Git:
             return
         self.run(['git', 'add', '--', *rel_paths])
 
-    def commit(self, *, tool: str, summary: str, session: str) -> str:
-        """Commit staged changes as ``agent:<name>`` and return the new sha."""
+    def commit(self, *, tool: str, summary: str, session: str, paths: list[str]) -> str:
+        """Commit exactly ``paths`` as ``agent:<name>`` and return the new sha.
+
+        The pathspec keeps foreign staged files (e.g. Obsidian Git) out of the
+        commit, so ``paths`` must never be empty.
+        """
+        if not paths:
+            raise ValueError('commit requires a non-empty pathspec')
         name = self.config.agent_name
         self.run(
             [
@@ -145,8 +191,53 @@ class Git:
                 f'Agent: {name}',
                 '-m',
                 f'Session: {session}',
+                '--',
+                *paths,
             ]
         )
+        return self._rev_parse('HEAD')
+
+    def dirty_paths(self, paths: list[str]) -> list[str]:
+        """The subset of ``paths`` with uncommitted changes (porcelain v1)."""
+        if not paths:
+            return []
+        proc = self.run(['git', 'status', '--porcelain', '--', *paths], check=False)
+        if proc.returncode != 0:
+            return []
+        dirty: set[str] = set()
+        for line in proc.stdout.splitlines():
+            if len(line) < 4:
+                continue
+            for piece in line[3:].split(' -> '):
+                dirty.add(piece.strip().strip('"'))
+        return [path for path in paths if path in dirty]
+
+    def snapshot_dirty(self, paths: list[str], *, tool: str, summary: str) -> str | None:
+        """Commit pre-existing human edits among ``paths``; return the sha or None.
+
+        The snapshot runs under the human identity (``config.human_name`` /
+        ``human_email`` via ``-c`` when set, else ambient) so the agent's own
+        commits stay attributable to ``agent:<name>``.
+        """
+        dirty = self.dirty_paths(paths)
+        if not dirty:
+            return None
+        self.run(['git', 'add', '--', *dirty])
+        args = ['git']
+        if self.config.human_name:
+            args += ['-c', f'user.name={self.config.human_name}']
+        if self.config.human_email:
+            args += ['-c', f'user.email={self.config.human_email}']
+        args += [
+            'commit',
+            '-m',
+            f'human: preserve edits before {tool}',
+            '-m',
+            f'Human snapshot: {summary}',
+            '--',
+            *dirty,
+        ]
+        self.run(args)
         return self._rev_parse('HEAD')
 
     # ------------------------------------------------------------------ #
@@ -216,7 +307,6 @@ class Git:
             name = f'{name}.md'
         rel = f'00 Meta/03 Conflicts/{stamp} {name}'
         target = self.cwd / rel
-        target.parent.mkdir(parents=True, exist_ok=True)
         body = (
             f'# Conflict: {rel_path}\n\n'
             f'- Local: `{local_sha}`\n'
@@ -224,5 +314,5 @@ class Git:
             f'## Intended change\n\n{intended}\n\n'
             f'## Diff excerpt\n\n```\n{diff_excerpt}\n```\n'
         )
-        target.write_text(body, encoding='utf-8')
+        atomic_write(target, body)
         return rel

@@ -1,4 +1,4 @@
-"""MCP server entry point: registers the 12 ``notes_*`` tools over stdio.
+"""MCP server entry point: registers the 13 ``notes_*`` tools over stdio.
 
 The vault is the single source of truth for behavior (see the vault ``AGENTS.md``);
 ``CONTRACT.md`` fixes the interfaces. Tool parameters are published snake_case
@@ -58,11 +58,23 @@ def _read_tools(ctx: ToolContext) -> dict[str, Tool]:
         category_id: str | None = None,
         note_type: str | None = None,
         status: str | None = None,
+        tags: list[str] | None = None,
         limit: int = 10,
         rerank: bool = True,
     ) -> dict[str, Any]:
-        """Hybrid search the vault, filtered by area/category/type/status."""
-        return _call(read_tools.notes_search, ctx, query, area, category_id, note_type, status, limit, rerank)
+        """Search the vault, filtered by area/category/type/status/tags."""
+        return _call(
+            read_tools.notes_search,
+            ctx,
+            query,
+            area=area,
+            category_id=category_id,
+            type_=note_type,
+            status=status,
+            tags=tags,
+            limit=limit,
+            rerank=rerank,
+        )
 
     def notes_read(path: str, from_line: int | None = None, max_lines: int | None = None) -> dict[str, Any]:
         """Read a note: parsed frontmatter plus body (optionally a line range)."""
@@ -135,16 +147,25 @@ def _structure_tools(ctx: ToolContext) -> dict[str, Tool]:
         """Pull the vault (autostash) and report status; no commit."""
         return _call(structure_tools.notes_sync, ctx)
 
-    return {'notes_move': notes_move, 'notes_rename': notes_rename, 'notes_sync': notes_sync}
+    def notes_move_category(category_id: str, new_path: str) -> dict[str, Any]:
+        """Move a whole category folder, updating the Index and its links."""
+        return _call(structure_tools.notes_move_category, ctx, category_id, new_path)
+
+    return {
+        'notes_move': notes_move,
+        'notes_rename': notes_rename,
+        'notes_sync': notes_sync,
+        'notes_move_category': notes_move_category,
+    }
 
 
 def build_tools(ctx: ToolContext) -> dict[str, Tool]:
-    """Create the 12 tool callables bound to ``ctx`` (also used by tests)."""
+    """Create the 13 tool callables bound to ``ctx`` (also used by tests)."""
     return {**_read_tools(ctx), **_write_tools(ctx), **_structure_tools(ctx)}
 
 
 def build_server(config: Config | None = None) -> Any:
-    """Build the MCPServer with all 12 tools registered."""
+    """Build the MCPServer with all 13 tools registered."""
     from mcp.server import MCPServer
     from mcp.types import ToolAnnotations
 

@@ -1,5 +1,5 @@
 name        = "notes"
-description = "Read/write MCP for the personal Obsidian vault (Johnny-Decimal x PARA): qmd-backed search plus git-committed create/update/append/move/rename."
+description = "Read/write MCP for the personal Obsidian vault (Johnny-Decimal x PARA): daemon-backed qmd search plus git-committed create/update/append/move/rename."
 kind        = "local"
 origin      = "custom"
 clients     = ["opencode", "claude-code", "claude-desktop"]
@@ -8,9 +8,17 @@ clients     = ["opencode", "claude-code", "claude-desktop"]
 command = "uv"
 args    = ["run", "--directory", "${AGENT_HOME}/mcp/notes-mcp", "notes-mcp"]
 
+# VAULT_PATH is required. The human identity pins the pre-write "snapshot" commit
+# so an agent overwrite never loses the user's unsaved edits. QMD_DAEMON_URL
+# points at `qmd mcp --http`; empty/0/false disables it (CLI fallback).
 [env]
-VAULT_PATH     = "~/notes"
-QMD_COLLECTION = "notes"
+VAULT_PATH         = "~/notes"
+QMD_COLLECTION     = "notes"
+QMD_DAEMON_URL     = "http://localhost:8181/mcp"
+QMD_TIMEOUT        = "60"
+QMD_EMBED_ON_WRITE = "1"
+HUMAN_NAME         = "Mitchell Setsma"
+HUMAN_EMAIL        = "38572013+msetsma@users.noreply.github.com"
 
 [package]
 manager = "source"

@@ -61,10 +61,12 @@ def notes_index(ctx: ToolContext) -> dict:
 def notes_search(
     ctx: ToolContext,
     query: str,
+    *,
     area: str | None = None,
     category_id: str | None = None,
     type_: str | None = None,
     status: str | None = None,
+    tags: list[str] | None = None,
     limit: int = 10,
     rerank: bool = True,
     **options: object,
@@ -72,8 +74,10 @@ def notes_search(
     """Search the vault and post-filter hits by path/frontmatter.
 
     ``qmd --filter`` proved unreliable, so filtering happens here: ``category_id``
-    and ``area`` match on the hit path, ``type_``/``status`` parse the hit's
-    frontmatter. ``type`` is accepted as an alias for ``type_``.
+    and ``area`` match on the hit path, ``type_``/``status``/``tags`` parse the
+    hit's frontmatter. When any filter is set the search requests an oversampled
+    pool (up to ``50``) before post-filtering, because qmd applies its own limit
+    before we can filter. ``type`` is accepted as an alias for ``type_``.
     """
     if 'type' in options:
         type_ = options.pop('type')  # type: ignore[assignment]
@@ -81,19 +85,20 @@ def notes_search(
         unknown = ', '.join(sorted(options))
         raise TypeError(f'unexpected keyword argument(s): {unknown}')
 
+    filtering = any(value is not None for value in (area, category_id, type_, status)) or bool(tags)
+    pool = min(max(limit * 5, limit), 50) if filtering else limit
+
     try:
-        hits = ctx.search.search(query, limit=limit, rerank=rerank)
+        hits = ctx.search.search(query, limit=pool, rerank=rerank)
         prefix = ctx.index.get(category_id).path if category_id is not None else None
     except NotesError as exc:
         return exc.to_dict()
 
     matched: list[dict[str, Any]] = []
     for hit in hits:
-        if prefix is not None and not hit.path.startswith(prefix):
-            continue
-        if area is not None and not hit.path.startswith(area):
-            continue
-        if (type_ is not None or status is not None) and not _matches_frontmatter(ctx, hit.path, type_, status):
+        if len(matched) >= limit:
+            break
+        if not _hit_matches(ctx, hit.path, prefix, area, type_, status, tags):
             continue
         matched.append({'path': hit.path, 'title': hit.title, 'score': hit.score, 'snippet': hit.snippet})
 
@@ -176,14 +181,41 @@ def _slice_body(body: str, from_line: int | None, max_lines: int | None) -> str:
     return '\n'.join(lines[start:end])
 
 
-def _matches_frontmatter(ctx: ToolContext, path: str, type_: str | None, status: str | None) -> bool:
-    """True when the hit file's frontmatter matches the requested type/status."""
+def _hit_matches(
+    ctx: ToolContext,
+    path: str,
+    prefix: str | None,
+    area: str | None,
+    type_: str | None,
+    status: str | None,
+    tags: list[str] | None,
+) -> bool:
+    """True when a hit passes the path and frontmatter filters."""
+    norm = path.replace('\\', '/')
+    if prefix is not None and not _under(norm, prefix.replace('\\', '/').strip('/')):
+        return False
+    if area is not None and not norm.startswith(area.replace('\\', '/').strip('/')):
+        return False
+    if type_ is None and status is None and not tags:
+        return True
     frontmatter = _frontmatter(ctx, path)
     if frontmatter is None:
         return False
     if type_ is not None and str(frontmatter.get('type')) != str(type_):
         return False
-    return status is None or str(frontmatter.get('status')) == str(status)
+    if status is not None and str(frontmatter.get('status')) != str(status):
+        return False
+    if tags:
+        note_tags = frontmatter.get('tags')
+        note_tags = note_tags if isinstance(note_tags, list) else []
+        if not any(tag in note_tags for tag in tags):
+            return False
+    return True
+
+
+def _under(path: str, prefix: str) -> bool:
+    """True when ``path`` is ``prefix`` itself or a descendant of it."""
+    return path == prefix or path.startswith(prefix + '/')
 
 
 def _frontmatter(ctx: ToolContext, path: str) -> dict[str, Any] | None:

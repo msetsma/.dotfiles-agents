@@ -1,4 +1,8 @@
-"""Tests for the qmd CLI adapter (CONTRACT section 8)."""
+"""Tests for the qmd adapter (CONTRACT section 8).
+
+Hermetic: the daemon HTTP call and the CLI subprocess call are both patched, so
+no live daemon or real ``qmd`` binary is required.
+"""
 
 from __future__ import annotations
 
@@ -7,6 +11,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.error import URLError
 
 import pytest
 
@@ -24,6 +29,9 @@ class _Config:
     qmd_embed_model: str | None = None
     qmd_rerank_model: str | None = None
     qmd_generate_model: str | None = None
+    qmd_daemon_url: str | None = None
+    qmd_timeout: float = search_mod.DEFAULT_TIMEOUT
+    qmd_embed_on_write: bool = True
 
 
 SAMPLE = [
@@ -48,6 +56,11 @@ SAMPLE = [
 ]
 
 
+def _sse(results: list[dict]) -> str:
+    payload = {'jsonrpc': '2.0', 'id': 1, 'result': {'structuredContent': {'results': results}}}
+    return f'event: message\ndata: {json.dumps(payload)}\n\n'
+
+
 class _Recorder:
     """Monkeypatch target for subprocess.run; records argv/kwargs per call."""
 
@@ -62,6 +75,18 @@ class _Recorder:
         return subprocess.CompletedProcess(argv, self.returncode, stdout=self.stdout, stderr=self.stderr)
 
 
+class _HttpRecorder:
+    """Monkeypatch target for search_mod._http_post_json."""
+
+    def __init__(self, body: str):
+        self.calls: list[tuple[str, dict, float]] = []
+        self.body = body
+
+    def __call__(self, url: str, payload: dict, *, timeout: float) -> str:
+        self.calls.append((url, payload, timeout))
+        return self.body
+
+
 @pytest.fixture
 def fake(monkeypatch):
     monkeypatch.setattr(search_mod.shutil, 'which', lambda name: f'/fake/{name}')
@@ -74,12 +99,120 @@ def _arg_after(argv: list[str], flag: str) -> str:
     return argv[argv.index(flag) + 1]
 
 
+def _daemon_args(rec: _HttpRecorder) -> dict:
+    return rec.calls[0][1]['params']['arguments']
+
+
 # --------------------------------------------------------------------------- #
-# subcommand selection + normalization
+# daemon path
+# --------------------------------------------------------------------------- #
+def test_daemon_hybrid_arguments_and_normalization(monkeypatch):
+    results = [
+        {'docid': '#1', 'file': 'notes/30 Resources/Tool.md', 'title': 'Tool', 'score': 0.5, 'snippet': 's'},
+        {'docid': '#2', 'file': 'qmd://notes/notes/Welcome.md', 'title': 'Welcome', 'score': None, 'snippet': 'w'},
+    ]
+    rec = _HttpRecorder(_sse(results))
+    monkeypatch.setattr(search_mod, '_http_post_json', rec)
+
+    hits = Searcher(_Config(qmd_daemon_url='http://localhost:8181/mcp')).search('tools')
+
+    url, payload, timeout = rec.calls[0]
+    assert url == 'http://localhost:8181/mcp'
+    assert timeout == search_mod.DEFAULT_TIMEOUT
+    assert payload['method'] == 'tools/call'
+    assert payload['params']['name'] == 'query'
+    args = _daemon_args(rec)
+    assert [s['type'] for s in args['searches']] == ['lex', 'vec']
+    assert args['intent'] == 'tools'
+    assert args['collections'] == ['notes']
+    assert args['limit'] == 10
+
+    assert [h.path for h in hits] == ['30 Resources/Tool.md', 'notes/Welcome.md']
+    assert hits[0].score == pytest.approx(0.5)
+    assert hits[1].score is None
+    assert hits[0].title == 'Tool'
+    assert hits[0].snippet == 's'
+    assert all(isinstance(h, SearchHit) for h in hits)
+
+
+def test_daemon_bm25_sends_lex_only(monkeypatch):
+    rec = _HttpRecorder(_sse([{'file': 'notes/A.md', 'title': 'A', 'score': 1.0, 'snippet': 's'}]))
+    monkeypatch.setattr(search_mod, '_http_post_json', rec)
+
+    Searcher(_Config(qmd_daemon_url='http://x/mcp')).search('q', collection='other', limit=3, rerank=False)
+
+    args = _daemon_args(rec)
+    assert [s['type'] for s in args['searches']] == ['lex']
+    assert args['collections'] == ['other']
+    assert args['limit'] == 3
+
+
+def test_daemon_tolerates_plain_json_body(monkeypatch):
+    payload = {'result': {'structuredContent': {'results': [{'file': 'notes/A.md', 'score': 0.1}]}}}
+    rec = _HttpRecorder(json.dumps(payload))
+    monkeypatch.setattr(search_mod, '_http_post_json', rec)
+
+    hits = Searcher(_Config(qmd_daemon_url='http://x/mcp')).search('q')
+
+    assert [h.path for h in hits] == ['A.md']
+
+
+def test_daemon_empty_results_is_not_a_failure(monkeypatch, fake):
+    rec = _HttpRecorder(_sse([]))
+    monkeypatch.setattr(search_mod, '_http_post_json', rec)
+
+    hits = Searcher(_Config(qmd_daemon_url='http://x/mcp')).search('q')
+
+    assert hits == []
+    assert fake.calls == []  # daemon answered; CLI untouched
+
+
+# --------------------------------------------------------------------------- #
+# fallback to the CLI
+# --------------------------------------------------------------------------- #
+def test_daemon_failure_falls_back_to_cli(monkeypatch, fake):
+    def boom(url: str, payload: dict, *, timeout: float) -> str:
+        raise URLError('connection refused')
+
+    monkeypatch.setattr(search_mod, '_http_post_json', boom)
+
+    hits = Searcher(_Config(qmd_daemon_url='http://x/mcp')).search('tools')
+
+    assert fake.calls, 'expected the CLI fallback to run'
+    argv, _ = fake.calls[0]
+    assert argv[1] == 'query'
+    assert [h.path for h in hits] == ['30 Resources/32 Tools/32 Tools.md', 'notes/Welcome.md']
+
+
+def test_daemon_configured_but_binary_missing_raises(monkeypatch):
+    def boom(url: str, payload: dict, *, timeout: float) -> str:
+        raise URLError('connection refused')
+
+    monkeypatch.setattr(search_mod, '_http_post_json', boom)
+    monkeypatch.setattr(search_mod.shutil, 'which', lambda name: None)
+
+    with pytest.raises(NotesError) as excinfo:
+        Searcher(_Config(qmd_daemon_url='http://x/mcp')).search('anything')
+
+    assert excinfo.value.code == INDEX_UNAVAILABLE
+
+
+def test_daemon_disabled_goes_straight_to_cli(monkeypatch, fake):
+    def forbidden(url: str, payload: dict, *, timeout: float) -> str:
+        raise AssertionError('daemon must not be called when disabled')
+
+    monkeypatch.setattr(search_mod, '_http_post_json', forbidden)
+
+    Searcher(_Config(qmd_daemon_url=None)).search('q')
+
+    assert fake.calls
+
+
+# --------------------------------------------------------------------------- #
+# CLI subcommand selection + normalization
 # --------------------------------------------------------------------------- #
 def test_search_rerank_true_uses_query_and_normalizes(fake):
-    searcher = Searcher(_Config())
-    hits = searcher.search('tools')
+    hits = Searcher(_Config()).search('tools')
 
     argv, kwargs = fake.calls[0]
     assert argv[1] == 'query'
@@ -98,8 +231,7 @@ def test_search_rerank_true_uses_query_and_normalizes(fake):
 
 
 def test_search_rerank_false_uses_search_and_honors_args(fake):
-    searcher = Searcher(_Config())
-    searcher.search('q', collection='other', limit=3, rerank=False)
+    Searcher(_Config()).search('q', collection='other', limit=3, rerank=False)
 
     argv, _ = fake.calls[0]
     assert argv[1] == 'search'
@@ -107,32 +239,30 @@ def test_search_rerank_false_uses_search_and_honors_args(fake):
     assert _arg_after(argv, '-n') == '3'
 
 
-def test_search_accepts_and_ignores_filter(fake):
-    searcher = Searcher(_Config())
-    searcher.search('x', filter={'type': 'note'})
-    searcher.search('x', filter_={'type': 'note'})
+def test_search_honors_config_timeout(fake):
+    Searcher(_Config(qmd_timeout=12.5)).search('q')
 
-    assert len(fake.calls) == 2
-    for argv, _ in fake.calls:
-        # qmd's --filter is unreliable, so it must never be passed through.
-        assert '--filter' not in argv
+    assert fake.calls[0][1]['timeout'] == 12.5
+
+
+def test_search_rejects_removed_filter_kwarg(fake):
+    with pytest.raises(TypeError):
+        Searcher(_Config()).search('x', filter={'type': 'note'})
 
 
 def test_search_rejects_unknown_kwargs(fake):
-    searcher = Searcher(_Config())
     with pytest.raises(TypeError):
-        searcher.search('x', bogus=1)
+        Searcher(_Config()).search('x', bogus=1)
 
 
 # --------------------------------------------------------------------------- #
-# failure -> INDEX_UNAVAILABLE
+# CLI failure -> INDEX_UNAVAILABLE
 # --------------------------------------------------------------------------- #
 def test_missing_qmd_binary_raises_index_unavailable(monkeypatch):
     monkeypatch.setattr(search_mod.shutil, 'which', lambda name: None)
-    searcher = Searcher(_Config())
 
     with pytest.raises(NotesError) as excinfo:
-        searcher.search('anything')
+        Searcher(_Config()).search('anything')
 
     assert excinfo.value.code == INDEX_UNAVAILABLE
     assert excinfo.value.hint
@@ -141,10 +271,9 @@ def test_missing_qmd_binary_raises_index_unavailable(monkeypatch):
 def test_nonzero_exit_raises_index_unavailable(monkeypatch):
     monkeypatch.setattr(search_mod.shutil, 'which', lambda name: f'/fake/{name}')
     monkeypatch.setattr(search_mod.subprocess, 'run', _Recorder(returncode=2, stdout='', stderr='model missing'))
-    searcher = Searcher(_Config())
 
     with pytest.raises(NotesError) as excinfo:
-        searcher.search('anything')
+        Searcher(_Config()).search('anything')
 
     assert excinfo.value.code == INDEX_UNAVAILABLE
     assert 'model missing' in excinfo.value.message
@@ -153,10 +282,9 @@ def test_nonzero_exit_raises_index_unavailable(monkeypatch):
 def test_unparseable_json_raises_index_unavailable(monkeypatch):
     monkeypatch.setattr(search_mod.shutil, 'which', lambda name: f'/fake/{name}')
     monkeypatch.setattr(search_mod.subprocess, 'run', _Recorder(stdout='not json'))
-    searcher = Searcher(_Config())
 
     with pytest.raises(NotesError) as excinfo:
-        searcher.search('anything')
+        Searcher(_Config()).search('anything')
 
     assert excinfo.value.code == INDEX_UNAVAILABLE
 
@@ -181,14 +309,24 @@ def test_model_env_passed_through(monkeypatch):
 # --------------------------------------------------------------------------- #
 # reindex
 # --------------------------------------------------------------------------- #
-def test_reindex_runs_update_only_by_default(fake):
-    Searcher(_Config()).reindex()
+def test_reindex_embeds_by_default(fake):
+    Searcher(_Config(qmd_embed_on_write=True)).reindex()
+    assert [call[0][1] for call in fake.calls] == ['update', 'embed']
+
+
+def test_reindex_skips_embed_when_config_disables(fake):
+    Searcher(_Config(qmd_embed_on_write=False)).reindex()
     assert [call[0][1] for call in fake.calls] == ['update']
 
 
-def test_reindex_with_embed_runs_both(fake):
-    Searcher(_Config()).reindex(embed=True)
+def test_reindex_explicit_embed_overrides_config(fake):
+    Searcher(_Config(qmd_embed_on_write=False)).reindex(embed=True)
     assert [call[0][1] for call in fake.calls] == ['update', 'embed']
+
+
+def test_reindex_explicit_no_embed_overrides_config(fake):
+    Searcher(_Config(qmd_embed_on_write=True)).reindex(embed=False)
+    assert [call[0][1] for call in fake.calls] == ['update']
 
 
 # --------------------------------------------------------------------------- #
@@ -233,6 +371,29 @@ def test_health_parses_version_status_and_models(monkeypatch):
     assert health['indexed_at'] == '1h ago'
     assert health['models']['embedding'] == '/models/embed.gguf'
     assert health['models']['generation'] == '/models/gen.gguf'
+    assert health['daemon'] == {'up': False, 'url': None}
+
+
+def test_health_daemon_up(monkeypatch):
+    monkeypatch.setattr(search_mod.shutil, 'which', lambda name: None)
+    monkeypatch.setattr(search_mod, '_http_get', lambda url, *, timeout: '{"status":"ok"}')
+
+    health = Searcher(_Config(qmd_daemon_url='http://x:8181/mcp')).health()
+
+    assert health['daemon'] == {'up': True, 'url': 'http://x:8181/mcp'}
+
+
+def test_health_daemon_down_never_raises(monkeypatch):
+    monkeypatch.setattr(search_mod.shutil, 'which', lambda name: None)
+
+    def boom(url: str, *, timeout: float) -> str:
+        raise URLError('refused')
+
+    monkeypatch.setattr(search_mod, '_http_get', boom)
+
+    health = Searcher(_Config(qmd_daemon_url='http://x:8181/mcp')).health()
+
+    assert health['daemon']['up'] is False
 
 
 def test_health_never_raises_when_qmd_missing(monkeypatch):
@@ -280,7 +441,7 @@ def test_integration_real_qmd_bm25():
     if shutil.which('qmd') is None:
         pytest.skip('qmd not installed')
 
-    searcher = Searcher(_Config())
+    searcher = Searcher(_Config(qmd_daemon_url=None))
     hits = searcher.search('notes', rerank=False, limit=3)
 
     assert isinstance(hits, list)

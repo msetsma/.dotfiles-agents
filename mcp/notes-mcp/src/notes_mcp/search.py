@@ -1,17 +1,20 @@
-"""qmd CLI adapter (CONTRACT section 8).
+"""qmd adapter: HTTP daemon first, CLI fallback (CONTRACT section 8).
 
-``Searcher`` shells out to the ``qmd`` binary (verified against 2.8.3). All
-invocations use argument arrays, never a shell string, and carry a timeout.
-``QMD_EMBED_MODEL`` / ``QMD_RERANK_MODEL`` / ``QMD_GENERATE_MODEL`` are passed
-through to the child env verbatim when configured, so model selection stays
-offline and deterministic.
+``Searcher`` prefers the live qmd MCP daemon (``config.qmd_daemon_url``) over
+shelling out to the ``qmd`` binary. The daemon is spoken to over JSON-RPC
+(MCP Streamable-HTTP): a ``tools/call`` named ``query`` whose SSE ``data:``
+frame carries ``result.structuredContent.results``. On any daemon failure --
+connection refused, timeout, non-2xx, unparseable body, missing results -- it
+falls back to the CLI. Daemon disabled (``None``) goes straight to the CLI.
 
-The JSON payload from ``qmd search`` / ``qmd query`` is a list of objects::
+All CLI invocations use argument arrays, never a shell string, and carry a
+timeout drawn from ``config.qmd_timeout``. ``QMD_EMBED_MODEL`` /
+``QMD_RERANK_MODEL`` / ``QMD_GENERATE_MODEL`` are passed through to the child
+env verbatim when configured, so model selection stays offline and
+deterministic.
 
-    {"docid", "score", "file": "qmd://<collection>/<relpath>",
-     "line", "title", "context", "snippet"}
-
-``file`` is normalized to a vault-relative POSIX path.
+Search results are normalized to vault-relative POSIX paths: a leading
+``<collection>/`` or ``qmd://<collection>/`` prefix is stripped.
 """
 
 from __future__ import annotations
@@ -22,8 +25,10 @@ import os
 import shutil
 import subprocess
 import threading
+import urllib.request
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
+from urllib.parse import urlsplit, urlunsplit
 
 from notes_mcp.errors import INDEX_UNAVAILABLE, notes_error
 
@@ -33,6 +38,7 @@ if TYPE_CHECKING:
 
 QMD_BIN = 'qmd'
 DEFAULT_TIMEOUT = 180.0
+HEALTH_TIMEOUT = 5.0
 
 
 @dataclass
@@ -45,8 +51,27 @@ class SearchHit:
     snippet: str | None
 
 
+def _http_post_json(url: str, payload: dict, *, timeout: float) -> str:
+    """POST ``payload`` as JSON and return the response body text.
+
+    Module-level so tests can patch it and never touch the network.
+    """
+    body = json.dumps(payload).encode('utf-8')
+    opener = urllib.request.build_opener()
+    opener.addheaders = [('Content-Type', 'application/json'), ('Accept', 'application/json, text/event-stream')]
+    with opener.open(url, data=body, timeout=timeout) as response:
+        return response.read().decode('utf-8')
+
+
+def _http_get(url: str, *, timeout: float) -> str:
+    """GET ``url`` and return the body text. Module-level for test patching."""
+    opener = urllib.request.build_opener()
+    with opener.open(url, timeout=timeout) as response:
+        return response.read().decode('utf-8')
+
+
 class Searcher:
-    """Thin, fail-closed adapter over the ``qmd`` CLI."""
+    """Adapter over the qmd daemon with a fail-closed CLI fallback."""
 
     def __init__(self, config: Config) -> None:
         self.config = config
@@ -57,33 +82,39 @@ class Searcher:
     # search
     # ------------------------------------------------------------------ #
     def search(
-        self,
-        query: str,
-        *,
-        collection: str | None = None,
-        filter_: dict | None = None,
-        limit: int = 10,
-        rerank: bool = True,
-        **options: object,
+        self, query: str, *, collection: str | None = None, limit: int = 10, rerank: bool = True
     ) -> list[SearchHit]:
         """Run a BM25 (``rerank=False``) or hybrid+rerank query.
 
-        CONTRACT names the third parameter ``filter``; the clean-python gate
-        forbids shadowing the builtin, so the keyword is exposed as ``filter_``
-        and ``filter=`` is still accepted (and ignored) for compatibility.
-
-        NOTE: qmd's ``--filter`` is unreliable -- a probe with a genuinely
-        matching filter returned ``[]`` -- so the filter is never passed to
-        qmd. Callers post-filter hits by path/metadata instead.
+        Tries the daemon first when configured; any failure falls back to the
+        CLI. ``rerank=False`` is lex-only (BM25), ``rerank=True`` adds a vector
+        leg (hybrid rerank).
         """
-        if 'filter' in options:
-            filter_ = options.pop('filter')  # type: ignore[assignment]
-        if options:
-            unknown = ', '.join(sorted(options))
-            raise TypeError(f'unexpected keyword argument(s): {unknown}')
-        del filter_  # accepted for interface compatibility only; see note above
-
         coll = self._collection(collection)
+        if self.config.qmd_daemon_url:
+            with contextlib.suppress(Exception):
+                return self._daemon_search(query, coll, limit, rerank)
+        return self._cli_search(query, coll, limit, rerank)
+
+    def _daemon_search(self, query: str, coll: str, limit: int, rerank: bool) -> list[SearchHit]:
+        searches: list[dict[str, str]] = [{'type': 'lex', 'query': query}]
+        if rerank:
+            searches.append({'type': 'vec', 'query': query})
+        arguments = {'searches': searches, 'intent': query, 'collections': [coll], 'limit': limit}
+        payload = {
+            'jsonrpc': '2.0',
+            'id': 1,
+            'method': 'tools/call',
+            'params': {'name': 'query', 'arguments': arguments},
+        }
+        body = _http_post_json(self.config.qmd_daemon_url, payload, timeout=self._timeout())
+        data = self._parse_daemon_body(body)
+        results = data['result']['structuredContent']['results']
+        if not isinstance(results, list):
+            raise TypeError('daemon results was not a list')
+        return [self._to_hit(item, coll) for item in results if isinstance(item, dict)]
+
+    def _cli_search(self, query: str, coll: str, limit: int, rerank: bool) -> list[SearchHit]:
         subcommand = 'query' if rerank else 'search'
         args = [subcommand, query, '-c', coll, '--json', '-n', str(limit)]
         proc = self._run(args)
@@ -112,8 +143,14 @@ class Searcher:
     # ------------------------------------------------------------------ #
     # reindex
     # ------------------------------------------------------------------ #
-    def reindex(self, *, embed: bool = False) -> None:
-        """Refresh the text index; optionally refresh vector embeddings too."""
+    def reindex(self, *, embed: bool | None = None) -> None:
+        """Refresh the text index; optionally refresh vector embeddings too.
+
+        When ``embed`` is ``None`` the ``config.qmd_embed_on_write`` default
+        decides whether ``qmd embed`` runs after ``qmd update``.
+        """
+        if embed is None:
+            embed = bool(getattr(self.config, 'qmd_embed_on_write', True))
         proc = self._run(['update'])
         self._require_ok(proc, 'update', ['update'])
         if embed:
@@ -151,6 +188,7 @@ class Searcher:
             'collection': self._collection(None),
             'indexed_at': None,
             'models': {},
+            'daemon': self._daemon_health(),
         }
         try:
             if shutil.which(QMD_BIN) is None:
@@ -169,11 +207,32 @@ class Searcher:
             return result
         return result
 
+    def _daemon_health(self) -> dict:
+        url = getattr(self.config, 'qmd_daemon_url', None)
+        if not url:
+            return {'up': False, 'url': None}
+        up = False
+        try:
+            _http_get(self._health_url(url), timeout=HEALTH_TIMEOUT)
+            up = True
+        except Exception:
+            up = False
+        return {'up': up, 'url': url}
+
+    @staticmethod
+    def _health_url(url: str) -> str:
+        parts = urlsplit(url)
+        return urlunsplit((parts.scheme, parts.netloc, '/health', '', ''))
+
     # ------------------------------------------------------------------ #
     # internals
     # ------------------------------------------------------------------ #
     def _collection(self, collection: str | None) -> str:
         return collection or self.config.qmd_collection
+
+    def _timeout(self) -> float:
+        value = getattr(self.config, 'qmd_timeout', None)
+        return float(value) if value else DEFAULT_TIMEOUT
 
     def _env(self) -> dict[str, str]:
         env = dict(os.environ)
@@ -200,7 +259,7 @@ class Searcher:
         run = subprocess.run
         try:
             return run(
-                [exe, *args], capture_output=True, text=True, timeout=DEFAULT_TIMEOUT, check=False, env=self._env()
+                [exe, *args], capture_output=True, text=True, timeout=self._timeout(), check=False, env=self._env()
             )
         except (OSError, subprocess.SubprocessError) as exc:
             raise notes_error(
@@ -229,13 +288,23 @@ class Searcher:
     def _normalize_path(raw: str | None, collection: str) -> str:
         if not raw:
             return ''
-        prefix = f'qmd://{collection}/'
-        if raw.startswith(prefix):
-            return raw[len(prefix) :]
+        for prefix in (f'qmd://{collection}/', f'{collection}/'):
+            if raw.startswith(prefix):
+                return raw[len(prefix) :]
         if raw.startswith('qmd://'):
             remainder = raw[len('qmd://') :].split('/', 1)
             return remainder[1] if len(remainder) == 2 else ''
         return raw
+
+    @staticmethod
+    def _parse_daemon_body(text: str) -> dict:
+        stripped = (text or '').strip()
+        if stripped.startswith('{'):
+            return json.loads(stripped)
+        for line in stripped.splitlines():
+            if line.startswith('data:'):
+                return json.loads(line[len('data:') :].strip())
+        raise ValueError('daemon response carried no data frame')
 
     def _to_hit(self, item: dict, collection: str) -> SearchHit:
         score = item.get('score')

@@ -19,6 +19,9 @@ INVALID_FRONTMATTER = 'INVALID_FRONTMATTER'
 INDEX_UNAVAILABLE = 'INDEX_UNAVAILABLE'
 CONFIG_ERROR = 'CONFIG_ERROR'
 NOT_FOUND = 'NOT_FOUND'
+# Not a failure: the write proceeded but a transient sync failure (offline
+# remote) left the vault ahead of/behind the remote. Annotates a success payload.
+PENDING_SYNC = 'PENDING_SYNC'
 
 ALL_CODES = (
     CONFLICT,
@@ -31,6 +34,7 @@ ALL_CODES = (
     INDEX_UNAVAILABLE,
     CONFIG_ERROR,
     NOT_FOUND,
+    PENDING_SYNC,
 )
 
 

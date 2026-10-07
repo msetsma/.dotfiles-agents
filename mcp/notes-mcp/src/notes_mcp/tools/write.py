@@ -15,13 +15,12 @@ frontmatter module, so it is imported as ``_frontmatter``.
 from __future__ import annotations
 
 import os
-import tempfile
-from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from notes_mcp import frontmatter as _frontmatter
+from notes_mcp.atomic import atomic_write
 from notes_mcp.errors import (
     DUPLICATE_FILENAME,
     FIND_NOT_UNIQUE,
@@ -40,10 +39,15 @@ if TYPE_CHECKING:
 _ALLOWED_TYPES = frozenset(
     {'note', 'project', 'decision', 'meeting', 'person', 'howto', 'reference', 'daily', 'weekly', 'hub'}
 )
+_JOURNAL_TYPES = frozenset({'daily', 'weekly'})
+# Documented fallbacks when a category is missing from (or not yet in) the Index.
 _DAILY_DIR = '40 Journal/41 Daily'
 _WEEKLY_DIR = '40 Journal/42 Weekly'
 _MEETINGS_DIR = '40 Journal/43 Meetings'
-_DAILY_TEMPLATE = '00 Meta/01 Templates/Daily.md'
+_META_DIR = '00 Meta'
+_DAILY_TEMPLATE_NAME = '01 Templates/Daily.md'
+# Never descend into these while hunting for a duplicate filename.
+_PRUNE_DIRS = frozenset({'.git', '.obsidian', '.githooks', _META_DIR})
 
 
 # --------------------------------------------------------------------------- #
@@ -76,8 +80,8 @@ def notes_create(
 
         rel = _create_rel(ctx, category, title, note_type)
         target = ctx.guard.resolve(rel, for_write=True)
-        if _basename_exists(ctx, Path(rel).name):
-            raise _duplicate(rel)
+        if note_type in _JOURNAL_TYPES and target.is_file():
+            return _update_journal(ctx, target, rel, body)
 
         text = _compose_new(ctx, category, note_type, title, body, tags, related, source, status)
         result = with_write(
@@ -86,7 +90,7 @@ def notes_create(
             paths=[rel],
             tool='notes_create',
             summary=title or Path(rel).stem,
-            fn=lambda: _write_payload(target, text, rel),
+            fn=lambda: _create_payload(ctx, target, text, rel, note_type not in _JOURNAL_TYPES),
         )
     except NotesError as exc:
         return exc.to_dict()
@@ -148,7 +152,7 @@ def notes_append(
     """
     try:
         if daily:
-            rel = f'{_DAILY_DIR}/{_today()}.md'
+            rel = f'{_category_dir(ctx, "41", _DAILY_DIR)}/{_today()}.md'
         elif path:
             target = ctx.guard.resolve(path, for_write=True)
             rel = ctx.guard.relpath(target)
@@ -178,13 +182,13 @@ def notes_append(
 # create helpers
 # --------------------------------------------------------------------------- #
 def _create_rel(ctx: ToolContext, category: Any, title: str | None, note_type: str) -> str:
-    safe = ctx.guard.sanitize_filename(title or '')
     if note_type == 'daily':
-        return f'{_DAILY_DIR}/{_today()}.md'
+        return f'{_category_dir(ctx, "41", _DAILY_DIR)}/{_today()}.md'
     if note_type == 'weekly':
-        return f'{_WEEKLY_DIR}/{_week_stamp()}.md'
+        return f'{_category_dir(ctx, "42", _WEEKLY_DIR)}/{_week_stamp()}.md'
+    safe = ctx.guard.sanitize_filename(title or '')
     if note_type == 'meeting':
-        return f'{_MEETINGS_DIR}/{_today()} {safe}.md'
+        return f'{_category_dir(ctx, "43", _MEETINGS_DIR)}/{_today()} {safe}.md'
     return f'{category.path}/{safe}.md'
 
 
@@ -225,7 +229,63 @@ def _daily_body(ctx: ToolContext, title: str | None, body: str, today: str) -> s
 
 
 def _basename_exists(ctx: ToolContext, filename: str) -> bool:
-    return any(path.name == filename for path in ctx.config.vault_path.rglob('*.md'))
+    """Vault-wide basename collision check, pruning git/VCS internals.
+
+    ``os.walk`` with an in-place ``dirnames`` filter is far cheaper than
+    ``rglob`` and never descends into ``.git`` (whose object store holds
+    arbitrarily many files).
+    """
+    for _dirpath, dirnames, filenames in os.walk(ctx.config.vault_path):
+        dirnames[:] = [name for name in dirnames if name not in _PRUNE_DIRS]
+        if filename in filenames:
+            return True
+    return False
+
+
+def _category_dir(ctx: ToolContext, category_id: str, fallback: str) -> str:
+    """The Index category's path, or ``fallback`` when it is absent."""
+    try:
+        return ctx.index.get(category_id).path
+    except NotesError:
+        return fallback
+
+
+def _create_payload(ctx: ToolContext, target: Path, text: str, rel: str, check_duplicate: bool) -> dict[str, Any]:
+    """Write a brand-new note, refusing a filename collision before writing.
+
+    The check runs under the vault lock (the callback only runs after
+    ``with_write`` acquired it), so two concurrent creates cannot both win.
+    """
+    if check_duplicate and _basename_exists(ctx, Path(rel).name):
+        raise _duplicate(rel)
+    return _write_payload(target, text, rel)
+
+
+def _update_journal(ctx: ToolContext, target: Path, rel: str, body: str) -> dict[str, Any]:
+    """Append to an existing daily/weekly note instead of raising DUPLICATE."""
+    try:
+        result = with_write(
+            config=ctx.config,
+            git=ctx.git,
+            paths=[rel],
+            tool='notes_update',
+            summary=rel,
+            fn=lambda: _journal_payload(target, rel, body),
+        )
+    except NotesError as exc:
+        return exc.to_dict()
+    if result.get('ok') is not False:
+        ctx.search.schedule_reindex()
+    return result
+
+
+def _journal_payload(target: Path, rel: str, body: str) -> dict[str, Any]:
+    fm, current = _frontmatter.parse(target.read_text(encoding='utf-8'))
+    fm['updated'] = _today()
+    _frontmatter.sync_qmd_metadata(fm)
+    _frontmatter.validate(fm, hub=fm.get('type') == 'hub')
+    atomic_write(target, _frontmatter.serialize(fm, _append_body(current, None, body)))
+    return {'path': rel, 'needs_index_update': False}
 
 
 # --------------------------------------------------------------------------- #
@@ -271,7 +331,7 @@ def _append_payload(
     body = _append_body(body, heading, text)
     fm['updated'] = _today()
     _frontmatter.sync_qmd_metadata(fm)
-    _atomic_write(target, _frontmatter.serialize(fm, body))
+    atomic_write(target, _frontmatter.serialize(fm, body))
     return {'path': rel, 'needs_index_update': False}
 
 
@@ -304,35 +364,18 @@ def _append_body(body: str, heading: str | None, text: str) -> str:
 # shared helpers
 # --------------------------------------------------------------------------- #
 def _write_payload(target: Path, text: str, rel: str) -> dict[str, Any]:
-    _atomic_write(target, text)
+    atomic_write(target, text)
     return {'path': rel, 'needs_index_update': False}
 
 
-def _atomic_write(path: Path, text: str) -> None:
-    """Write ``text`` atomically: temp file in the target dir then ``os.replace``."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    handle, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=f'.{path.name}.', suffix='.tmp')
-    tmp = Path(tmp_name)
-    try:
-        with os.fdopen(handle, 'w', encoding='utf-8') as stream:
-            stream.write(text)
-        Path(tmp).replace(path)
-    except BaseException:
-        with suppress(FileNotFoundError):
-            tmp.unlink()
-        raise
-
-
 def _read_template(ctx: ToolContext) -> str:
-    template = ctx.config.vault_path / _DAILY_TEMPLATE
+    rel = f'{_category_dir(ctx, "00", _META_DIR)}/{_DAILY_TEMPLATE_NAME}'
+    template = ctx.config.vault_path / rel
     try:
         return template.read_text(encoding='utf-8')
     except OSError as exc:
         raise NotesError(
-            NOT_FOUND,
-            f'daily template is missing: {_DAILY_TEMPLATE}',
-            f'Restore {_DAILY_TEMPLATE} in the vault.',
-            path=_DAILY_TEMPLATE,
+            NOT_FOUND, f'daily template is missing: {rel}', f'Restore {rel} in the vault.', path=rel
         ) from exc
 
 

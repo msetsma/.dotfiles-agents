@@ -29,14 +29,14 @@ type: {type_}
 status: {status}
 created: "2026-01-05"
 updated: "2026-01-05"
-tags: []
+tags: {tags}
 related: []
 source: []
 qmd:
   metadata:
     type: {type_}
     status: {status}
-    tags: []
+    tags: {tags}
 ---
 {body}"""
 
@@ -62,10 +62,12 @@ def make_ctx(vault):
     )
 
 
-def write_note(ctx, rel: str, *, type_: str, status: str = 'active', body: str = '# Note\n') -> None:
+def write_note(
+    ctx, rel: str, *, type_: str, status: str = 'active', body: str = '# Note\n', tags: list[str] | None = None
+) -> None:
     path = ctx.config.vault_path / rel
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(NOTE_TEMPLATE.format(type_=type_, status=status, body=body), encoding='utf-8')
+    path.write_text(NOTE_TEMPLATE.format(type_=type_, status=status, body=body, tags=tags or []), encoding='utf-8')
 
 
 class FakeSearcher:
@@ -199,7 +201,7 @@ def test_recent_returns_agent_commits_and_filters(vault):
     ctx = make_ctx(vault)
     write_note(ctx, AGENT_NOTE, type_='daily', body='# 2026-01-06\n')
     ctx.git.add([AGENT_NOTE])
-    sha = ctx.git.commit(tool='test', summary='add daily note', session='s')
+    sha = ctx.git.commit(tool='test', summary='add daily note', session='s', paths=[AGENT_NOTE])
 
     agent = read.notes_recent(ctx, since='7d', author='agent')
     assert_ok(agent)
@@ -238,8 +240,15 @@ def test_search_filters_by_category_id(vault):
     assert_ok(result)
     assert result['count'] == 1
     assert result['hits'][0]['path'] == MEETING_NOTE
-    assert ctx.search.calls[0]['limit'] == 10
+    assert ctx.search.calls[0]['limit'] == 50
     assert ctx.search.calls[0]['rerank'] is True
+
+
+def test_search_category_id_not_found(vault):
+    ctx = _search_ctx(vault)
+    result = read.notes_search(ctx, 'q', category_id='99')
+    assert result['ok'] is False
+    assert result['error']['code'] == 'CATEGORY_NOT_FOUND'
 
 
 def test_search_filters_by_type_and_status(vault):
@@ -287,3 +296,32 @@ def test_search_rejects_unknown_kwargs(vault):
     ctx = _search_ctx(vault)
     with pytest.raises(TypeError, match='unexpected keyword'):
         read.notes_search(ctx, 'q', bogus=1)
+
+
+def test_search_oversamples_then_truncates(vault):
+    ctx = make_ctx(vault)
+    paths = [f'30 Resources/33 Concepts/Note {index}.md' for index in range(5)]
+    for rel in paths:
+        write_note(ctx, rel, type_='concept')
+    ctx.search = FakeSearcher(hits=[SearchHit(path=rel, title=rel, score=1.0, snippet=None) for rel in paths])
+
+    result = read.notes_search(ctx, 'q', type_='concept', limit=2)
+    assert_ok(result)
+    assert ctx.search.calls[0]['limit'] == 10  # min(max(2 * 5, 2), 50)
+    assert result['count'] == 2
+    assert [hit['path'] for hit in result['hits']] == paths[:2]
+
+
+def test_search_filters_by_tags_any_match(vault):
+    ctx = _search_ctx(vault)
+    write_note(ctx, CONCEPT_NOTE, type_='concept', tags=['ml', 'reading'])
+    write_note(ctx, MEETING_NOTE, type_='meeting', tags=['work'])
+
+    single = read.notes_search(ctx, 'q', tags=['ml'])
+    assert [hit['path'] for hit in single['hits']] == [CONCEPT_NOTE]
+
+    any_tag = read.notes_search(ctx, 'q', tags=['work', 'ml'])
+    assert {hit['path'] for hit in any_tag['hits']} == {CONCEPT_NOTE, MEETING_NOTE}
+
+    none = read.notes_search(ctx, 'q', tags=['missing'])
+    assert none['count'] == 0

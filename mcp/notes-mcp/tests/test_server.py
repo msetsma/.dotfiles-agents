@@ -21,10 +21,11 @@ EXPECTED_TOOLS = {
     'notes_move',
     'notes_rename',
     'notes_sync',
+    'notes_move_category',
 }
 
 
-def test_registers_all_twelve_tools(vault):
+def test_registers_all_thirteen_tools(vault):
     mcp = build_server(vault.config())
     assert {tool.name for tool in asyncio.run(mcp.list_tools())} == EXPECTED_TOOLS
 
@@ -38,6 +39,14 @@ def test_read_tools_are_read_only(vault):
         else:
             assert tool.annotations.read_only_hint is False
             assert tool.annotations.destructive_hint is False
+
+
+def test_move_category_is_a_write_tool(vault):
+    mcp = build_server(vault.config())
+    tool = next(t for t in asyncio.run(mcp.list_tools()) if t.name == 'notes_move_category')
+    assert tool.annotations is not None
+    assert tool.annotations.read_only_hint is False
+    assert tool.annotations.destructive_hint is False
 
 
 def test_index_wrapper(vault):
