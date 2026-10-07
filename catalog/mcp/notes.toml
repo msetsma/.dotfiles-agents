@@ -1,5 +1,5 @@
 name        = "notes"
-description = "Read/write MCP for the personal Obsidian vault (Johnny-Decimal x PARA): daemon-backed qmd search, git-committed create/update/append/move/rename, inbox capture/triage, and a vault lint."
+description = "Read/write MCP for the personal Obsidian vault (Johnny-Decimal x PARA): daemon-backed qmd search, git-committed create/update/append/move/rename, inbox capture/triage, related-note discovery, digests/reports, a vault lint, and CriticMarkup suggestion mode."
 kind        = "local"
 origin      = "custom"
 clients     = ["opencode", "claude-code", "claude-desktop"]
