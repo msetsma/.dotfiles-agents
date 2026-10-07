@@ -49,6 +49,15 @@ def test_hydrated_flag():
     assert s._is_hydrated(RealStat()) is True
 
 
+def _tmp_file(data: bytes) -> Path:
+    """Write `data` to a fresh temp .xlsx; the caller unlinks it."""
+    fd, name = tempfile.mkstemp(suffix='.xlsx')
+    os.close(fd)
+    out = Path(name)
+    out.write_bytes(data)
+    return out
+
+
 def _synthetic_xlsx() -> Path:
     """Minimal OOXML workbook: one shared string, one numeric cell."""
     ns = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'
@@ -63,9 +72,7 @@ def _synthetic_xlsx() -> Path:
             '<row><c><v>42</v></c><c t="inlineStr"><is><t>inline</t></is></c></row>'
             '</sheetData></worksheet>',
         )
-    out = Path('/tmp/_sp_test.xlsx')
-    out.write_bytes(buf.getvalue())
-    return out
+    return _tmp_file(buf.getvalue())
 
 
 def test_xlsx_extraction():
@@ -103,9 +110,7 @@ def _multi_sheet_xlsx(n: int) -> Path:
                 f'<c t="inlineStr"><is><t>MARKER{i}</t></is></c>'
                 '</row></sheetData></worksheet>',
             )
-    out = Path('/tmp/_sp_multi.xlsx')
-    out.write_bytes(buf.getvalue())
-    return out
+    return _tmp_file(buf.getvalue())
 
 
 def test_xlsx_sheet_labels_match_content():
@@ -129,8 +134,7 @@ def test_xlsx_fallback_sorts_numerically():
     with zipfile.ZipFile(buf, 'w') as zf:
         for i in (1, 2, 10):
             zf.writestr(f'xl/worksheets/sheet{i}.xml', f'<worksheet xmlns="{main}"/>')
-    p = Path('/tmp/_sp_fallback.xlsx')
-    p.write_bytes(buf.getvalue())
+    p = _tmp_file(buf.getvalue())
     try:
         with zipfile.ZipFile(p) as zf:
             order = [name for name, _ in s._xlsx_sheet_parts(zf)]
@@ -215,7 +219,8 @@ def test_sp_find_returns_newest_when_truncated():
             f.write_text('x')
             os.utime(f, (1_700_000_000 + i * 86400,) * 2)
         r = s.sp_find('*.txt', limit=2)
-        assert r['truncated'] is True and r['total_matched'] == 6, r
+        assert r['truncated'] is True, r
+        assert r['total_matched'] == 6, r
         assert [h['name'] for h in r['results']] == ['f5.txt', 'f4.txt'], r['results']
 
 
@@ -418,15 +423,19 @@ def test_write_error_surfaces_as_dict():
         s._graph_request = orig
 
 
+def _run(t) -> bool:
+    """Run one test, print its outcome, and return whether it passed."""
+    try:
+        t()
+    except Exception as e:
+        print(f'FAIL {t.__name__}: {type(e).__name__}: {e}')
+        return False
+    print(f'ok   {t.__name__}')
+    return True
+
+
 if __name__ == '__main__':
     tests = [v for k, v in sorted(globals().items()) if k.startswith('test_')]
-    failed = 0
-    for t in tests:
-        try:
-            t()
-            print(f'ok   {t.__name__}')
-        except Exception as e:
-            failed += 1
-            print(f'FAIL {t.__name__}: {type(e).__name__}: {e}')
+    failed = sum(not _run(t) for t in tests)
     print(f'\n{len(tests) - failed}/{len(tests)} passed')
     raise SystemExit(1 if failed else 0)

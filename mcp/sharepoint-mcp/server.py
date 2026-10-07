@@ -23,10 +23,12 @@ import subprocess
 import sys
 import time
 import urllib.parse
-import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
 from typing import Any
+from xml.etree.ElementTree import Element
+
+from defusedxml.ElementTree import ParseError, fromstring
 
 # mcp SDK 2.0 renamed FastMCP to MCPServer; the decorator API is unchanged.
 # Import path matches the existing house pattern in dev/kan-setup/bin/kan-mcp.py.
@@ -80,8 +82,7 @@ def sync_roots() -> list[Path]:
     collision), and both the org name and that suffix can change.
     """
     base = Path.home() / 'Library' / 'CloudStorage'
-    roots = sorted(p for p in base.glob('OneDrive-SharedLibraries-*') if p.is_dir())
-    return roots
+    return sorted(p for p in base.glob('OneDrive-SharedLibraries-*') if p.is_dir())
 
 
 def _resolve_in_roots(raw_path: str) -> Path:
@@ -138,6 +139,47 @@ def sp_roots() -> dict[str, Any]:
     return {'roots': out}
 
 
+def _scan_matches(
+    search_bases: list[Path], needle: str, *, is_glob: bool, include_dirs: bool
+) -> tuple[list[dict[str, Any]], int]:
+    """Walk `search_bases` and return (matching hits, entries scanned).
+
+    Collects ALL matches before sorting/truncating. Breaking at `limit` during
+    the walk would return an arbitrary filesystem-order slice that then gets
+    sorted by date -- presenting itself as "newest first" while omitting newer
+    files found later in the walk. Metadata-only, so a full walk is cheap.
+    """
+    hits: list[dict[str, Any]] = []
+    scanned = 0
+    for base in search_bases:
+        for path in base.rglob('*'):
+            if any(part in SKIP_DIRS or part.startswith('._') for part in path.parts):
+                continue
+            is_dir = path.is_dir()
+            if is_dir and not include_dirs:
+                continue
+            scanned += 1
+            name = path.name
+            matched = fnmatch.fnmatch(name.lower(), needle) if is_glob else needle in name.lower()
+            if not matched:
+                continue
+            try:
+                st = path.stat()  # metadata only -- no hydration
+            except OSError:
+                continue
+            hits.append(
+                {
+                    'path': str(path),
+                    'name': name,
+                    'is_dir': is_dir,
+                    'size': st.st_size,
+                    'modified': time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(st.st_mtime)),
+                    'hydrated': _is_hydrated(st),
+                }
+            )
+    return hits, scanned
+
+
 @mcp.tool(annotations=READ_ONLY)
 def sp_find(pattern: str, subdir: str | None = None, limit: int = 100, include_dirs: bool = False) -> dict[str, Any]:
     """Search synced SharePoint files by name or path. Downloads nothing.
@@ -168,41 +210,7 @@ def sp_find(pattern: str, subdir: str | None = None, limit: int = 100, include_d
         search_bases = roots
 
     is_glob = any(ch in pattern for ch in '*?')
-    needle = pattern.lower()
-
-    hits: list[dict[str, Any]] = []
-    scanned = 0
-
-    # Collect ALL matches before sorting/truncating. Breaking at `limit` during
-    # the walk would return an arbitrary filesystem-order slice that then gets
-    # sorted by date -- presenting itself as "newest first" while omitting newer
-    # files found later in the walk. Metadata-only, so a full walk is cheap.
-    for base in search_bases:
-        for path in base.rglob('*'):
-            if any(part in SKIP_DIRS or part.startswith('._') for part in path.parts):
-                continue
-            is_dir = path.is_dir()
-            if is_dir and not include_dirs:
-                continue
-            scanned += 1
-            name = path.name
-            matched = fnmatch.fnmatch(name.lower(), needle) if is_glob else needle in name.lower()
-            if not matched:
-                continue
-            try:
-                st = path.stat()  # metadata only -- no hydration
-            except OSError:
-                continue
-            hits.append(
-                {
-                    'path': str(path),
-                    'name': name,
-                    'is_dir': is_dir,
-                    'size': st.st_size,
-                    'modified': time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(st.st_mtime)),
-                    'hydrated': _is_hydrated(st),
-                }
-            )
+    hits, scanned = _scan_matches(search_bases, pattern.lower(), is_glob=is_glob, include_dirs=include_dirs)
 
     hits.sort(key=lambda h: h['modified'], reverse=True)
     total_matched = len(hits)
@@ -233,10 +241,30 @@ def sp_find(pattern: str, subdir: str | None = None, limit: int = 100, include_d
 def _xml_text(data: bytes) -> str:
     """All text nodes of an XML document, whitespace-collapsed."""
     try:
-        root = ET.fromstring(data)
-    except ET.ParseError:
+        root = fromstring(data)
+    except ParseError:
         return ''
     return ' '.join(t.strip() for t in root.itertext() if t and t.strip())
+
+
+def _xlsx_rels(zf: zipfile.ZipFile, parts: list[str]) -> dict[str, str]:
+    """Relationship id -> zip part for the workbook ({} if absent or unparseable)."""
+    pkg_ns = '{http://schemas.openxmlformats.org/package/2006/relationships}'
+    rels: dict[str, str] = {}
+    if 'xl/_rels/workbook.xml.rels' in parts:
+        try:
+            tree = fromstring(zf.read('xl/_rels/workbook.xml.rels'))
+            for rel in tree.iter(f'{pkg_ns}Relationship'):
+                rid, target = rel.get('Id'), rel.get('Target', '')
+                if not rid or not target:
+                    continue
+                target = target.lstrip('/')
+                if not target.startswith('xl/'):
+                    target = 'xl/' + target
+                rels[rid] = target
+        except ParseError:
+            pass
+    return rels
 
 
 def _xlsx_sheet_parts(zf: zipfile.ZipFile) -> list[tuple[str, str]]:
@@ -250,37 +278,22 @@ def _xlsx_sheet_parts(zf: zipfile.ZipFile) -> list[tuple[str, str]]:
     """
     main = '{http://schemas.openxmlformats.org/spreadsheetml/2006/main}'
     rel_ns = '{http://schemas.openxmlformats.org/officeDocument/2006/relationships}'
-    pkg_ns = '{http://schemas.openxmlformats.org/package/2006/relationships}'
 
     parts = zf.namelist()
-
-    rels: dict[str, str] = {}
-    if 'xl/_rels/workbook.xml.rels' in parts:
-        try:
-            tree = ET.fromstring(zf.read('xl/_rels/workbook.xml.rels'))
-            for rel in tree.iter(f'{pkg_ns}Relationship'):
-                rid, target = rel.get('Id'), rel.get('Target', '')
-                if not rid or not target:
-                    continue
-                target = target.lstrip('/')
-                if not target.startswith('xl/'):
-                    target = 'xl/' + target
-                rels[rid] = target
-        except ET.ParseError:
-            pass
+    rels = _xlsx_rels(zf, parts)
 
     ordered: list[tuple[str, str]] = []
     names: list[str] = []
     if 'xl/workbook.xml' in parts:
         try:
-            wb = ET.fromstring(zf.read('xl/workbook.xml'))
+            wb = fromstring(zf.read('xl/workbook.xml'))
             for sheet in wb.iter(f'{main}sheet'):
                 name = sheet.get('name', '')
                 names.append(name)
                 part = rels.get(sheet.get(f'{rel_ns}id', ''), '')
                 if part in parts:
                     ordered.append((name, part))
-        except ET.ParseError:
+        except ParseError:
             pass
     if ordered:
         return ordered
@@ -296,8 +309,35 @@ def _xlsx_sheet_parts(zf: zipfile.ZipFile) -> list[tuple[str, str]]:
     # order matches document order in all but pathological files, and keeping
     # the real sheet names beats labelling everything "sheetN".
     if names and len(names) == len(sheet_parts):
-        return list(zip(names, sheet_parts))
+        return list(zip(names, sheet_parts, strict=True))
     return [(Path(p).stem, p) for p in sheet_parts]
+
+
+XLSX_MAIN_NS = '{http://schemas.openxmlformats.org/spreadsheetml/2006/main}'
+
+
+def _xlsx_shared_strings(zf: zipfile.ZipFile) -> list[str]:
+    """The workbook's shared-string table ([] if absent or unparseable)."""
+    if 'xl/sharedStrings.xml' not in zf.namelist():
+        return []
+    try:
+        sst = fromstring(zf.read('xl/sharedStrings.xml'))
+    except ParseError:
+        return []
+    return [' '.join(t.strip() for t in si.itertext() if t and t.strip()) for si in sst.findall(f'{XLSX_MAIN_NS}si')]
+
+
+def _xlsx_cell_text(c: Element, shared: list[str]) -> str:
+    """Display text of one <c> cell: shared string, inline string, or raw value."""
+    v = c.find(f'{XLSX_MAIN_NS}v')
+    if c.get('t') == 's' and v is not None and v.text and v.text.isdigit():
+        i = int(v.text)
+        return shared[i] if i < len(shared) else ''
+    if c.get('t') == 'inlineStr':
+        return ' '.join(t.strip() for t in c.itertext() if t and t.strip())
+    if v is not None and v.text:
+        return v.text
+    return ''
 
 
 def _xlsx_text(zf: zipfile.ZipFile, max_chars: int) -> str:
@@ -307,37 +347,19 @@ def _xlsx_text(zf: zipfile.ZipFile, max_chars: int) -> str:
     formatting, merged cells, formulas and number formats (a date shows as its
     serial number). Upgrade to openpyxl if real cell typing is needed.
     """
-    ns = '{http://schemas.openxmlformats.org/spreadsheetml/2006/main}'
-    shared: list[str] = []
-    if 'xl/sharedStrings.xml' in zf.namelist():
-        try:
-            sst = ET.fromstring(zf.read('xl/sharedStrings.xml'))
-            for si in sst.findall(f'{ns}si'):
-                shared.append(' '.join(t.strip() for t in si.itertext() if t and t.strip()))
-        except ET.ParseError:
-            pass
+    ns = XLSX_MAIN_NS
+    shared = _xlsx_shared_strings(zf)
 
     chunks: list[str] = []
     total = 0
     for label, sheet in _xlsx_sheet_parts(zf):
         chunks.append(f'### sheet: {label}')
         try:
-            ws = ET.fromstring(zf.read(sheet))
-        except (ET.ParseError, KeyError):
+            ws = fromstring(zf.read(sheet))
+        except ParseError, KeyError:
             continue
         for row in ws.iter(f'{ns}row'):
-            cells = []
-            for c in row.iter(f'{ns}c'):
-                v = c.find(f'{ns}v')
-                if c.get('t') == 's' and v is not None and v.text and v.text.isdigit():
-                    i = int(v.text)
-                    cells.append(shared[i] if i < len(shared) else '')
-                elif c.get('t') == 'inlineStr':
-                    cells.append(' '.join(t.strip() for t in c.itertext() if t and t.strip()))
-                elif v is not None and v.text:
-                    cells.append(v.text)
-                else:
-                    cells.append('')
+            cells = [_xlsx_cell_text(c, shared) for c in row.iter(f'{ns}c')]
             line = '\t'.join(cells).rstrip()
             if line:
                 chunks.append(line)
@@ -364,6 +386,24 @@ def _office_text(path: Path, max_chars: int) -> str:
                 parts.append(_xml_text(zf.read(s)))
             return '\n'.join(parts)
     return ''
+
+
+def _read_content(target: Path, suffix: str, max_chars: int) -> str | dict[str, Any]:
+    """Decoded text of `target`, or an {'error': ...} dict if it can't be read."""
+    try:
+        # Known text suffixes, extensionless files, and anything else: try
+        # text and let replacement chars reveal a binary.
+        return _office_text(target, max_chars) if suffix in OFFICE_SUFFIXES else target.read_text(errors='replace')
+    except zipfile.BadZipFile:
+        return {'error': f'Not a readable OOXML file (corrupt or wrong extension): {target}'}
+    except KeyError as e:
+        # A valid zip missing the part we expect (odd producers, renamed archive).
+        return {'error': f'Missing expected part {e} in {target.name}; not a usable OOXML file.'}
+    except OSError as e:
+        return {
+            'error': f'Read failed ({e}). If the file is a placeholder, OneDrive may be '
+            'offline or the download was blocked.'
+        }
 
 
 @mcp.tool(annotations=READ_ONLY)
@@ -407,23 +447,9 @@ def sp_read(path: str, max_chars: int = 20000) -> dict[str, Any]:
             'was_downloaded_before': was_hydrated,
         }
 
-    try:
-        if suffix in OFFICE_SUFFIXES:
-            text = _office_text(target, max_chars)
-        else:
-            # Known text suffixes, extensionless files, and anything else: try
-            # text and let replacement chars reveal a binary.
-            text = target.read_text(errors='replace')
-    except zipfile.BadZipFile:
-        return {'error': f'Not a readable OOXML file (corrupt or wrong extension): {target}'}
-    except KeyError as e:
-        # A valid zip missing the part we expect (odd producers, renamed archive).
-        return {'error': f'Missing expected part {e} in {target.name}; not a usable OOXML file.'}
-    except OSError as e:
-        return {
-            'error': f'Read failed ({e}). If the file is a placeholder, OneDrive may be '
-            'offline or the download was blocked.'
-        }
+    text = _read_content(target, suffix, max_chars)
+    if isinstance(text, dict):
+        return text
 
     # NOTE: deliberately no html.unescape here. Office text arrives already
     # decoded by ElementTree, so unescaping again would turn a cell literally
