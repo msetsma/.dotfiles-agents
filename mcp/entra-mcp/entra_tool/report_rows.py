@@ -40,22 +40,26 @@ def report_display_name(user: dict[str, Any]) -> str:
     return clean(user.get('displayName') or user.get('mail') or user.get('id'))
 
 
+def visible_report_children(
+    parent_id: str, children_by_manager: dict[str, list[dict[str, Any]]]
+) -> list[dict[str, Any]]:
+    """Children of `parent_id`, with hidden users replaced by their own visible children."""
+    visible: list[dict[str, Any]] = []
+    for child in sorted(children_by_manager.get(parent_id, []), key=report_sort_key):
+        child_id = child.get('id') or ''
+        if not child_id:
+            continue
+        if report_is_visible(child):
+            visible.append(child)
+        else:
+            visible.extend(visible_report_children(child_id, children_by_manager))
+    return visible
+
+
 def build_visible_report_rows(
     root_id: str, users: dict[str, dict[str, Any]], children_by_manager: dict[str, list[dict[str, Any]]]
 ) -> list[list[Any]]:
     rows: list[list[Any]] = []
-
-    def visible_children(parent_id: str) -> list[dict[str, Any]]:
-        visible: list[dict[str, Any]] = []
-        for child in sorted(children_by_manager.get(parent_id, []), key=report_sort_key):
-            child_id = child.get('id') or ''
-            if not child_id:
-                continue
-            if report_is_visible(child):
-                visible.append(child)
-            else:
-                visible.extend(visible_children(child_id))
-        return visible
 
     def append_row(user: dict[str, Any], visible_level: int, tree_name: str) -> None:
         rows.append(
@@ -86,7 +90,7 @@ def build_visible_report_rows(
             child_prefix = prefix + ('    ' if is_last else '│   ')
 
         append_row(user, visible_level, tree_name)
-        children = visible_children(user.get('id') or '')
+        children = visible_report_children(user.get('id') or '', children_by_manager)
         for index, child in enumerate(children):
             walk(child, visible_level + 1, child_prefix, index == len(children) - 1)
 
@@ -94,7 +98,7 @@ def build_visible_report_rows(
     if root and report_is_visible(root):
         walk(root, 0, '', True, True)
     elif root:
-        children = visible_children(root_id)
+        children = visible_report_children(root_id, children_by_manager)
         for index, child in enumerate(children):
             walk(child, 0, '', index == len(children) - 1)
 

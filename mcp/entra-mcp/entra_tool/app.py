@@ -70,12 +70,13 @@ def main(argv: list[str]) -> int:
     try:
         opts = parse_args(argv, print_quick_start)
         run(opts)
-        return 0
     except BrokenPipeError:
         return 0
     except AppError as exc:
         print(f'Error: {exc}', file=sys.stderr)
         return 1
+    else:
+        return 0
 
 
 def cli_entry() -> None:

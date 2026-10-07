@@ -1,5 +1,6 @@
 import json
 import os
+import pathlib
 import shutil
 import subprocess
 from typing import Any
@@ -25,7 +26,7 @@ def az_command() -> str:
     if found:
         return found
     for candidate in AZ_FALLBACK_PATHS:
-        if os.path.exists(candidate):
+        if pathlib.Path(candidate).exists():
             return candidate
     return 'az'
 
@@ -72,8 +73,7 @@ def graph_post(url: str, body: dict[str, Any]) -> dict[str, Any]:
             'json',
         ],
         text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         check=False,
     )
     if result.returncode != 0:

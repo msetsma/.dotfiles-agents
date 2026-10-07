@@ -7,7 +7,7 @@ def cache_dir() -> Path:
         return Path(os.environ['XDG_CACHE_HOME']) / 'entra_membership'
     if os.environ.get('HOME'):
         return Path(os.environ['HOME']) / '.cache' / 'entra_membership'
-    return Path(os.environ.get('TMPDIR', '/tmp')) / 'entra_membership-cache'
+    return Path(os.environ.get('TMPDIR', str(Path('/') / 'tmp'))) / 'entra_membership-cache'
 
 
 def search_cache_path() -> Path:

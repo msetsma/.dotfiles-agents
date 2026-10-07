@@ -23,6 +23,7 @@ from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Literal
 
+from entra_mcp.matching import search_records
 from entra_tool.access_paths import find_containment_path
 from entra_tool.directory import (
     fetch_group_child_groups_json,
@@ -46,8 +47,6 @@ from entra_tool.group_audit import summarize_group_audit
 from entra_tool.report_rows import report_has_title, report_is_enabled, report_sort_key
 from entra_tool.report_tree import collect_report_tree_structured
 from entra_tool.text import is_guid, is_short_hex_id_prefix, looks_like_bad_guid
-
-from entra_mcp.matching import search_records
 
 
 GRAPH = 'https://graph.microsoft.com/v1.0'
@@ -134,7 +133,7 @@ def _suggest_users(query: str) -> str:
     term = query.split('@', 1)[0] if '@' in query else query
     try:
         rows, _ = load_user_search_rows(use_cache=True, refresh_cache=False)
-    except (AppError, OSError):
+    except AppError, OSError:
         return ''
     candidates = _search(rows, USER_SEARCH_ROW_FIELDS, USER_SEARCH_WEIGHTS, term, 3, 'normal')
     if not candidates:
@@ -147,7 +146,7 @@ def _suggest_groups(query: str) -> str:
     """Close cached matches to offer when an exact group name misses."""
     try:
         rows, _ = load_group_search_rows(use_cache=True, refresh_cache=False)
-    except (AppError, OSError):
+    except AppError, OSError:
         return ''
     candidates = _search(rows, GROUP_SEARCH_ROW_FIELDS, GROUP_SEARCH_WEIGHTS, query, 3, 'normal')
     if not candidates:
@@ -230,7 +229,7 @@ def _group_ref(group: dict[str, Any]) -> dict[str, Any]:
 
 def _row_to_record(row: list[Any], fields: list[str]) -> dict[str, Any]:
     padded = list(row) + [''] * (len(fields) - len(row))
-    record = dict(zip(fields, padded))
+    record = dict(zip(fields, padded, strict=False))
     if 'groupTypes' in record:
         raw = record['groupTypes']
         record['groupTypes'] = [part for part in str(raw).split(';') if part]
@@ -540,12 +539,12 @@ def why_user_in_group(user: str, group: str) -> dict[str, Any]:
     def fetch_parents(node_ids: Sequence[str]) -> dict[str, list[dict[str, Any]]]:
         with ThreadPoolExecutor(max_workers=GROUP_WORKERS) as executor:
             results = executor.map(fetch_parent, node_ids)
-        return dict(zip(node_ids, results))
+        return dict(zip(node_ids, results, strict=True))
 
     def fetch_children(node_ids: Sequence[str]) -> dict[str, list[dict[str, Any]]]:
         with ThreadPoolExecutor(max_workers=GROUP_WORKERS) as executor:
             results = executor.map(fetch_group_child_groups_json, node_ids)
-        return dict(zip(node_ids, results))
+        return dict(zip(node_ids, results, strict=True))
 
     found = find_containment_path(user_id, target_id, fetch_parents, fetch_children)
 

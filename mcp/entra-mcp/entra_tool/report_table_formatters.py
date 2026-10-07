@@ -8,7 +8,7 @@ from entra_tool.terminal_colors import COLORS
 def report_column_color(name: str, value: str) -> str:
     if name == 'USER':
         return COLORS.bold
-    if name == 'LEVEL' or name == 'ID' or name == 'DIRECTS':
+    if name in {'LEVEL', 'ID', 'DIRECTS'}:
         return COLORS.gray
     if name == 'MAIL':
         return text_color(value, COLORS.blue)
@@ -47,17 +47,17 @@ def format_reports_table(
         '  '.join([cell(name, widths[name], COLORS.bold + COLORS.cyan) for name in column_names]),
         '  '.join([cell('-' * widths[name], widths[name], COLORS.dim) for name in column_names]),
     ]
-    for record in records:
-        lines.append(
-            '  '.join(
-                [
-                    cell(
-                        record[name] if name == 'USER' else fit(record[name], widths[name], full_output),
-                        widths[name],
-                        report_column_color(name, record[name]),
-                    )
-                    for name in column_names
-                ]
-            )
+    lines.extend(
+        '  '.join(
+            [
+                cell(
+                    record[name] if name == 'USER' else fit(record[name], widths[name], full_output),
+                    widths[name],
+                    report_column_color(name, record[name]),
+                )
+                for name in column_names
+            ]
         )
+        for record in records
+    )
     return '\n'.join(lines)

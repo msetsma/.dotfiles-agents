@@ -197,6 +197,30 @@ def typo_score(tokens: Sequence[str], primary: str) -> float | None:
     return total / len(tokens)
 
 
+def _best_scores(
+    records: Sequence[dict[str, Any]], weights: Sequence[tuple[str, float]], tokens: list[str]
+) -> dict[int, tuple[float, dict[str, Any]]]:
+    """Score every record by the fuzzy pass, then let the typo pass upgrade it."""
+    primary_name = weights[0][0] if weights else ''
+    best: dict[int, tuple[float, dict[str, Any]]] = {}
+
+    for index, record in enumerate(records):
+        score = fuzzy_score(tokens, _prepare(record, weights))
+        if score is not None:
+            best[index] = (score, record)
+
+    for index, record in enumerate(records):
+        primary = normalize(str(record.get(primary_name) or ''))
+        score = typo_score(tokens, primary)
+        if score is None:
+            continue
+        current = best.get(index)
+        if current is None or score > current[0]:
+            best[index] = (score, record)
+
+    return best
+
+
 def search_records(
     records: Sequence[dict[str, Any]],
     weights: Sequence[tuple[str, float]],
@@ -227,23 +251,7 @@ def search_records(
     if not tokens:
         return []
 
-    primary_name = weights[0][0] if weights else ''
-    best: dict[int, tuple[float, dict[str, Any]]] = {}
-
-    for index, record in enumerate(records):
-        score = fuzzy_score(tokens, _prepare(record, weights))
-        if score is not None:
-            best[index] = (score, record)
-
-    for index, record in enumerate(records):
-        primary = normalize(str(record.get(primary_name) or ''))
-        score = typo_score(tokens, primary)
-        if score is None:
-            continue
-        current = best.get(index)
-        if current is None or score > current[0]:
-            best[index] = (score, record)
-
+    best = _best_scores(records, weights, tokens)
     if not best:
         return []
 

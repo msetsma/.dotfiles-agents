@@ -17,6 +17,22 @@ USER_SEARCH_TARGETS = {'search', 'search-users', 'user-search', 'users-search'}
 GROUP_SEARCH_TARGETS = {'search-groups', 'group-search', 'groups-search'}
 CACHE_TARGETS = {'cache-status', 'cache-refresh'}
 COMPARE_TARGETS = {'compare', 'compare-users', 'compare-groups'}
+COMPARE_USER_ALIASES = ('compare-users', 'compare-user', 'users-compare', 'user-compare')
+COMPARE_GROUP_ALIASES = ('compare-groups', 'compare-group', 'groups-compare', 'group-compare')
+SEARCH_COMMANDS = (
+    'search',
+    'users',
+    'groups',
+    'dept',
+    'department',
+    'departments',
+    'search-users',
+    'user-search',
+    'users-search',
+    'search-groups',
+    'group-search',
+    'groups-search',
+)
 FIRST_ARGUMENT_ERROR = (
     "First argument must be 'user', 'group', 'compare', 'compare-users', "
     "'compare-groups', 'reports', 'users', 'groups', 'dept', 'search', "
@@ -42,13 +58,10 @@ def read_initial_query(args: list[str]) -> str:
     return ''
 
 
-def parse_target(args: list[str]) -> Options:
-    target_type = args.pop(0)
-    identifier = ''
-    initial_query = ''
+def parse_compare_target(target_type: str, args: list[str]) -> tuple[str, str, str]:
+    """Return (target_type, left_identifier, right_identifier) for a compare command."""
     left_identifier = ''
     right_identifier = ''
-
     if target_type == 'compare':
         if args and not args[0].startswith('--'):
             kind = args.pop(0)
@@ -60,35 +73,63 @@ def parse_target(args: list[str]) -> Options:
                 left_identifier, right_identifier = read_compare_identifiers(args)
             else:
                 die('compare requires users or groups. Try: entra compare users')
-    elif target_type in ('compare-users', 'compare-user', 'users-compare', 'user-compare'):
+    elif target_type in COMPARE_USER_ALIASES:
         target_type = 'compare-users'
         left_identifier, right_identifier = read_compare_identifiers(args)
-    elif target_type in ('compare-groups', 'compare-group', 'groups-compare', 'group-compare'):
+    else:
         target_type = 'compare-groups'
         left_identifier, right_identifier = read_compare_identifiers(args)
-    elif target_type == 'search':
+    return target_type, left_identifier, right_identifier
+
+
+def parse_search_target(target_type: str, args: list[str]) -> tuple[str, str]:
+    """Return (target_type, initial_query) for a search, users, groups, or dept command."""
+    if target_type == 'search':
         if args and args[0] in ('group', 'groups'):
             target_type = 'search-groups'
             args.pop(0)
         elif args and args[0] in ('user', 'users'):
             target_type = 'search-users'
             args.pop(0)
-        initial_query = read_initial_query(args)
     elif target_type == 'users':
         target_type = 'search-users'
-        initial_query = read_initial_query(args)
     elif target_type == 'groups':
         target_type = 'search-groups'
-        initial_query = read_initial_query(args)
     elif target_type in ('dept', 'department', 'departments'):
         target_type = 'dept'
-        initial_query = read_initial_query(args)
-    elif target_type in ('search-users', 'user-search', 'users-search') or target_type in (
-        'search-groups',
-        'group-search',
-        'groups-search',
-    ):
-        initial_query = read_initial_query(args)
+    return target_type, read_initial_query(args)
+
+
+def parse_reports_target(args: list[str]) -> tuple[str, str]:
+    """Return (identifier, initial_query) for a reports command."""
+    if args and not args[0].startswith('--'):
+        value = args.pop(0)
+        if is_guid(value) or '@' in value:
+            return value, ''
+        return '', value
+    return '', ''
+
+
+def parse_cache_target(args: list[str]) -> str:
+    if not args or args[0].startswith('--'):
+        die('cache requires a subcommand: status or refresh')
+    subcommand = args.pop(0)
+    if subcommand not in ('status', 'refresh'):
+        die('cache requires a subcommand: status or refresh')
+    return f'cache-{subcommand}'
+
+
+def parse_target(args: list[str]) -> Options:
+    target_type = args.pop(0)
+    identifier = ''
+    initial_query = ''
+    left_identifier = ''
+    right_identifier = ''
+
+    if target_type == 'compare' or target_type in COMPARE_USER_ALIASES or target_type in COMPARE_GROUP_ALIASES:
+        target_type, left_identifier, right_identifier = parse_compare_target(target_type, args)
+    elif target_type in SEARCH_COMMANDS:
+        target_type, initial_query = parse_search_target(target_type, args)
     elif target_type in ('user', 'group'):
         if not args:
             die(
@@ -97,19 +138,9 @@ def parse_target(args: list[str]) -> Options:
         identifier = args.pop(0)
     elif target_type in ('reports', 'report', 'org', 'org-reports'):
         target_type = 'reports'
-        if args and not args[0].startswith('--'):
-            value = args.pop(0)
-            if is_guid(value) or '@' in value:
-                identifier = value
-            else:
-                initial_query = value
+        identifier, initial_query = parse_reports_target(args)
     elif target_type == 'cache':
-        if not args or args[0].startswith('--'):
-            die('cache requires a subcommand: status or refresh')
-        subcommand = args.pop(0)
-        if subcommand not in ('status', 'refresh'):
-            die('cache requires a subcommand: status or refresh')
-        target_type = f'cache-{subcommand}'
+        target_type = parse_cache_target(args)
     else:
         die(FIRST_ARGUMENT_ERROR)
 

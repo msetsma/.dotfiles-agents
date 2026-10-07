@@ -84,5 +84,5 @@ def add_manager_details_to_user_rows(rows: list[list[Any]]) -> list[list[Any]]:
         padded = list(row) + [''] * (5 - len(row))
         user_id = clean(padded[3])
         manager = managers.get(user_id, empty_manager_details())
-        enriched.append(padded[:5] + [manager['managerDisplayName'], manager['managerId']] + padded[5:])
+        enriched.append([*padded[:5], manager['managerDisplayName'], manager['managerId'], *padded[5:]])
     return enriched

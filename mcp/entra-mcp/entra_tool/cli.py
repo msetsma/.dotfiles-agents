@@ -24,6 +24,24 @@ def parse_args(argv: list[str], show_quick_start: Callable[[], None] | None = No
     return opts
 
 
+def validate_cache_options(opts: Options) -> None:
+    if opts.tsv_output or opts.fzf_output or opts.mode_explicit or opts.full_output:
+        die('cache commands only support --users, --groups, --all, and --color')
+    if opts.refresh_cache or not opts.use_cache:
+        die('cache commands do not support --refresh-cache or --no-cache')
+    if opts.target_type == 'cache-status' and opts.cache_scope_explicit:
+        die('cache status does not support --users, --groups, or --all')
+    if opts.target_type == 'cache-refresh' and not (opts.cache_users or opts.cache_groups):
+        die('cache refresh needs at least one cache scope')
+
+
+def validate_dept_options(opts: Options) -> None:
+    if opts.mode_explicit:
+        die('--direct and --transitive are not supported with dept')
+    if opts.fzf_output:
+        die('--fzf and --interactive are not supported with dept; dept already opens a picker')
+
+
 def validate_options(opts: Options) -> None:
     if opts.target_type in SEARCH_TARGETS and opts.tsv_output:
         die(
@@ -31,14 +49,7 @@ def validate_options(opts: Options) -> None:
         )
 
     if opts.target_type in CACHE_TARGETS:
-        if opts.tsv_output or opts.fzf_output or opts.mode_explicit or opts.full_output:
-            die('cache commands only support --users, --groups, --all, and --color')
-        if opts.refresh_cache or not opts.use_cache:
-            die('cache commands do not support --refresh-cache or --no-cache')
-        if opts.target_type == 'cache-status' and opts.cache_scope_explicit:
-            die('cache status does not support --users, --groups, or --all')
-        if opts.target_type == 'cache-refresh' and not (opts.cache_users or opts.cache_groups):
-            die('cache refresh needs at least one cache scope')
+        validate_cache_options(opts)
         return
 
     if opts.target_type in COMPARE_TARGETS:
@@ -50,10 +61,7 @@ def validate_options(opts: Options) -> None:
         die('--users, --groups, and --all are only valid with cache refresh')
 
     if opts.target_type == 'dept':
-        if opts.mode_explicit:
-            die('--direct and --transitive are not supported with dept')
-        if opts.fzf_output:
-            die('--fzf and --interactive are not supported with dept; dept already opens a picker')
+        validate_dept_options(opts)
 
     is_reports = opts.target_type == 'reports'
     if opts.target_type not in SEARCH_TARGETS and not is_reports and (opts.refresh_cache or not opts.use_cache):

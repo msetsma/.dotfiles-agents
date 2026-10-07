@@ -18,7 +18,9 @@ def resolve_user(identifier: str, state: State) -> None:
             f'https://graph.microsoft.com/v1.0/users/{encoded}?$select={select_fields(USER_RESOLVE_FIELDS)}'
         )
     except GraphError:
-        raise AppError(f"User not found: {identifier}. Use the user's full UPN/email address or Entra object id.")
+        raise AppError(
+            f"User not found: {identifier}. Use the user's full UPN/email address or Entra object id."
+        ) from None
 
     state.user_id = clean(obj.get('id'))
     state.user_display_name = obj.get('displayName') or ''
@@ -35,7 +37,9 @@ def resolve_group(identifier: str, state: State) -> None:
                 f'https://graph.microsoft.com/v1.0/groups/{encoded}?$select={select_fields(GROUP_SEARCH_FIELDS)}'
             )
         except GraphError:
-            raise AppError(f'Group not found: {identifier}. Use a full group object id or exact display name.')
+            raise AppError(
+                f'Group not found: {identifier}. Use a full group object id or exact display name.'
+            ) from None
     elif looks_like_bad_guid(identifier):
         raise AppError(f'This looks like a group id with extra characters: {identifier}')
     elif is_short_hex_id_prefix(identifier):
@@ -47,7 +51,7 @@ def resolve_group(identifier: str, state: State) -> None:
                 f'https://graph.microsoft.com/v1.0/groups?$filter={filter_value}&$select={select_fields(GROUP_SEARCH_FIELDS)}&$top=50'
             )
         except GraphError:
-            raise AppError(f'Group lookup failed for: {identifier}')
+            raise AppError(f'Group lookup failed for: {identifier}') from None
         matches = result.get('value') or []
         if not matches:
             raise AppError(f'No group found with displayName exactly equal to: {identifier}')

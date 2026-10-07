@@ -43,9 +43,7 @@ def collect_paged_json(url: str) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     while url:
         page = graph_get(url)
-        for item in page.get('value') or []:
-            if isinstance(item, dict):
-                items.append(item)
+        items.extend(item for item in page.get('value') or [] if isinstance(item, dict))
         url = page.get('@odata.nextLink') or ''
     return items
 
@@ -105,7 +103,7 @@ def _load_directory_rows(
 
     try:
         rows = fetch_rows()
-    except (AppError, OSError):
+    except AppError, OSError:
         if use_cache and not refresh_cache and cache_file.is_file():
             try:
                 stale_rows = read_tsv(cache_file)
@@ -219,8 +217,6 @@ def fetch_direct_report_users(manager: dict[str, Any]) -> list[dict[str, Any]]:
     url = f'https://graph.microsoft.com/v1.0/users/{uri_encode(manager_id)}/directReports/microsoft.graph.user?$select={report_user_select_fields()}&$top=999'
     while url:
         page = graph_get(url)
-        for child in page.get('value') or []:
-            if isinstance(child, dict):
-                children.append(child)
+        children.extend(child for child in page.get('value') or [] if isinstance(child, dict))
         url = page.get('@odata.nextLink') or ''
     return children

@@ -15,7 +15,7 @@ def load_report_direct_reports_cache(use_cache: bool, refresh_cache: bool) -> di
         return {}
     try:
         data = json.loads(cache_file.read_text())
-    except (json.JSONDecodeError, OSError):
+    except json.JSONDecodeError, OSError:
         return {}
     return data if isinstance(data, dict) else {}
 

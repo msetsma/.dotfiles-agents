@@ -53,7 +53,7 @@ def choose_report_columns(
     shrink_widths(widths, minimums, max_width, selected)
 
     for name in report_optional_columns():
-        candidate_names = sorted(selected + [name], key=report_display_order().index)
+        candidate_names = sorted([*selected, name], key=report_display_order().index)
         candidate_widths = dict(widths)
         candidate_widths[name] = report_column_width(records, name, minimums, preferred_caps, full_output)
         shrink_widths(candidate_widths, minimums, max_width, candidate_names)

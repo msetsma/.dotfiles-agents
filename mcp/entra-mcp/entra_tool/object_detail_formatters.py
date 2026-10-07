@@ -5,7 +5,8 @@ from entra_tool.terminal import json_array, json_scalar
 from entra_tool.terminal_colors import COLORS
 
 
-def print_proxy_addresses(obj: dict[str, Any], full_output: bool) -> None:
+def split_proxy_addresses(obj: dict[str, Any]) -> tuple[list[str], list[str], list[str]]:
+    """Return (smtp, x500, other) proxy addresses, primary SMTP first."""
     primary_smtp_values: list[str] = []
     smtp_alias_values: list[str] = []
     x500_values: list[str] = []
@@ -26,30 +27,34 @@ def print_proxy_addresses(obj: dict[str, Any], full_output: bool) -> None:
         else:
             other_values.append(str(addr))
 
-    smtp_values = primary_smtp_values + smtp_alias_values
+    return primary_smtp_values + smtp_alias_values, x500_values, other_values
+
+
+def print_kv_values(label: str, values: list[str]) -> None:
+    print_kv(label, values[0])
+    for value in values[1:]:
+        print_kv_continuation(value)
+
+
+def print_proxy_addresses(obj: dict[str, Any], full_output: bool) -> None:
+    smtp_values, x500_values, other_values = split_proxy_addresses(obj)
     if not smtp_values and not x500_values and not other_values:
         print_kv('Proxy SMTP', '-')
         return
 
     if smtp_values:
-        print_kv('Proxy SMTP', smtp_values[0])
-        for value in smtp_values[1:]:
-            print_kv_continuation(value)
+        print_kv_values('Proxy SMTP', smtp_values)
     else:
         print_kv('Proxy SMTP', '-')
 
     if x500_values:
         if full_output:
-            print_kv('Proxy X500', x500_values[0])
-            for value in x500_values[1:]:
-                print_kv_continuation(value)
+            print_kv_values('Proxy X500', x500_values)
         else:
             print_kv('Proxy X500', f'{len(x500_values)} legacy Exchange address(es) hidden; pass --full to show')
 
     if other_values:
-        print_kv('Proxy other', other_values[0])
-        for value in other_values[1:]:
-            print_kv_continuation(value)
+        print_kv_values('Proxy other', other_values)
 
 
 def print_user_details(obj: dict[str, Any], full_output: bool) -> None:

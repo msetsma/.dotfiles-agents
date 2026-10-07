@@ -15,7 +15,7 @@ def cache_is_fresh(meta_file: Path, cache_file: Path) -> bool:
         return False
     try:
         created = int(meta_file.read_text().splitlines()[0])
-    except (IndexError, ValueError, OSError):
+    except IndexError, ValueError, OSError:
         return False
     age = int(time.time()) - created
     return 0 <= age < cache_ttl_seconds()
@@ -24,7 +24,7 @@ def cache_is_fresh(meta_file: Path, cache_file: Path) -> bool:
 def cache_created_at(meta_file: Path) -> int | None:
     try:
         return int(meta_file.read_text().splitlines()[0])
-    except (IndexError, ValueError, OSError):
+    except IndexError, ValueError, OSError:
         return None
 
 

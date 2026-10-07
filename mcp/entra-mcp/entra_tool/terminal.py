@@ -6,7 +6,7 @@ from entra_tool.terminal_colors import COLORS
 
 
 def clean(value: Any) -> str:
-    if value is None or value == '' or value == 'None' or value == 'null':
+    if value is None or value in ('', 'None', 'null'):
         return '-'
     if isinstance(value, bool):
         return 'true' if value else 'false'
