@@ -60,7 +60,7 @@ repo's ruff gate forbids camelCase arguments and the `type` builtin. So:
 | `QMD_COLLECTION` | `notes` | qmd collection |
 | `QMD_DAEMON_URL` | `http://localhost:8181/mcp` | qmd daemon MCP endpoint; empty/`0`/`false` disables |
 | `QMD_TIMEOUT` | `60` | Seconds per qmd daemon/CLI call |
-| `QMD_EMBED_ON_WRITE` | `1` | Refresh vectors (`qmd embed`) after a write's reindex |
+| `QMD_EMBED_ON_WRITE` | `0` | Refresh vectors (`qmd embed`) after a write's reindex (rely on the hourly job by default) |
 | `HUMAN_NAME` / `HUMAN_EMAIL` | ambient git | Identity for pre-write snapshot commits |
 | `QMD_EMBED_MODEL` / `QMD_RERANK_MODEL` / `QMD_GENERATE_MODEL` | qmd defaults | Optional `file://` model overrides |
 
