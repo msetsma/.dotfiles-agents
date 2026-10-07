@@ -306,6 +306,24 @@ def test_nested_config_is_ignored(git_project: Path, tmp_path: Path) -> None:
     assert config_for(path, env=isolated_env(tmp_path)) == ''
 
 
+def test_ruff_runs_from_the_package_dir(git_project: Path, tmp_path: Path) -> None:
+    # A user-level config resolves `src` against the cwd, so the gate must run
+    # from pkg/ (nearest pyproject.toml) to see src/mypkg as first-party.
+    global_cfg = tmp_path / 'ruff' / 'ruff.toml'
+    global_cfg.parent.mkdir(parents=True)
+    global_cfg.write_text('src = ["src", "."]\n\n[lint]\nselect = ["I"]\n')
+    pkg = git_project / 'pkg'
+    (pkg / 'src' / 'mypkg').mkdir(parents=True)
+    (pkg / 'src' / 'mypkg' / '__init__.py').write_text('')
+    (pkg / 'pyproject.toml').write_text('[project]\nname = "mypkg"\n')
+    (pkg / 'tests').mkdir()
+    source = 'import os\n\nimport pytest\n\nimport mypkg\n\nprint(os, pytest, mypkg)\n'
+    path = write(pkg / 'tests', 'test_a.py', source)
+    result = run_path(str(path), env={**isolated_env(tmp_path), 'TMPDIR': str(tmp_path)})
+    assert result.returncode == 0, result.stderr
+    assert path.read_text() == source
+
+
 def test_no_config_anywhere_resolves_to_nothing(git_project: Path, tmp_path: Path) -> None:
     path = write(git_project, 'a.py', 'x = 1\n')
     assert config_for(path, env=isolated_env(tmp_path)) == ''

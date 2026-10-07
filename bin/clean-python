@@ -95,17 +95,41 @@ config_for() {
     printf '%s' "$cfg"
 }
 
+package_dir_for() {
+    # Nearest directory at or above $1 holding a pyproject.toml, stopping at the
+    # git root; the file's own directory when there is none.
+    local target="$1" dir root
+    if dir="$(cd "$(dirname "$target")" 2>/dev/null && pwd)"; then :; else
+        printf '%s' "$(dirname "$target")"
+        return
+    fi
+    root="$(project_root_for "$target")"
+    local here="$dir"
+    while :; do
+        if [[ -f "$here/pyproject.toml" ]]; then
+            printf '%s' "$here"
+            return
+        fi
+        [[ "$here" == "$root" || "$here" == / ]] && break
+        here="$(dirname "$here")"
+    done
+    printf '%s' "$dir"
+}
+
 ruff_run() {
-    # Run ruff for $1 with $ruff_bin from the file's own directory, so its
-    # report is cwd-independent (ruff prints paths relative to its cwd). The
-    # remaining arguments are the ruff subcommand + flags. Config is pinned to
-    # the project root when present, else the global config, else --isolated
+    # Run ruff for $1 with $ruff_bin from the file's package directory (see
+    # package_dir_for). A user-level config resolves `src` and infers
+    # target-version from the cwd, so this matches a plain `ruff check` run
+    # from the package, and the report stays cwd-independent. The remaining
+    # arguments are the ruff subcommand + flags. Config is pinned to the
+    # project root when present, else the global config, else --isolated
     # (built-in defaults) so a stray config can never leak in.
     local target="$1"
     shift
-    local dir base cfg
-    dir="$(dirname "$target")"
+    local dir base abs cfg
+    dir="$(package_dir_for "$target")"
     base="$(basename "$target")"
+    if abs="$(cd "$(dirname "$target")" 2>/dev/null && pwd)"; then base="${abs}/${base}"; base="${base#"$dir"/}"; fi
     cfg="$(config_for "$target")"
     if [[ -n "$cfg" ]]; then
         (cd "$dir" && "$ruff_bin" "$@" --config "$cfg" "$base" 2>&1)
