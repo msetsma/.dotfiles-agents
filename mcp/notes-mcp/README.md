@@ -13,11 +13,13 @@ shell/filesystem tools directly.
   target paths are snapshotted under the human identity first, so an agent
   overwrite never silently loses unsaved edits.
 
-## Tools (16)
+## Tools (20)
 
 Read: `notes_index`, `notes_search`, `notes_read`, `notes_list`, `notes_recent`,
-`notes_status`, `notes_triage`, `notes_lint`.
-Write: `notes_create`, `notes_update`, `notes_append`, `notes_capture`.
+`notes_status`, `notes_triage`, `notes_lint`, `notes_similar`,
+`notes_suggest_links`.
+Write: `notes_create`, `notes_update`, `notes_append`, `notes_capture`,
+`notes_weekly_digest`, `notes_stale_report`.
 Structure: `notes_move`, `notes_rename`, `notes_move_category`, `notes_sync`.
 
 ## Deviations from the Part 2 spec
@@ -62,6 +64,16 @@ repo's ruff gate forbids camelCase arguments and the `type` builtin. So:
 - **Types.** `watch` is accepted, and every templated type is seeded from its
   template in `00 Meta/01 Templates/` (Project Hub, Decision, Meeting, Person,
   Howto, Watch, Weekly, Daily).
+- **Discovery.** `notes_similar` (by note or raw text) and `notes_suggest_links`
+  (candidates not already linked) surface related notes; `notes_create` also
+  returns a best-effort `similar` list. `00 Meta` system files are ignored.
+- **Reports.** `notes_weekly_digest` drafts or refreshes the weekly note from
+  the week's changes (grouped by category); `notes_stale_report` lists notes not
+  touched in N days, or writes the report to today's daily under `## Reports`.
+- **Suggestion mode.** `notes_update`/`notes_append` take `mode` (`direct`
+  default, `suggest` via `NOTES_WRITE_MODE`): in `suggest` mode edits become
+  CriticMarkup substitutions (`{~~old~>new~~}`) and appends become additions
+  (`{++text++}`) for review in Obsidian.
 
 ## Env
 
@@ -77,6 +89,7 @@ repo's ruff gate forbids camelCase arguments and the `type` builtin. So:
 | `HUMAN_NAME` / `HUMAN_EMAIL` | ambient git | Identity for pre-write snapshot commits |
 | `NOTES_DAILY_DIR` / `NOTES_WEEKLY_DIR` / `NOTES_MEETINGS_DIR` | Index categories `41`/`42`/`43` | Journal directory overrides |
 | `NOTES_TEMPLATES_DIR` / `NOTES_ATTACHMENTS_DIR` | `00 Meta/01 Templates` / `00 Meta/02 Attachments` | Layout overrides |
+| `NOTES_WRITE_MODE` | `direct` | Default write mode: `direct` or `suggest` (CriticMarkup) |
 | `QMD_EMBED_MODEL` / `QMD_RERANK_MODEL` / `QMD_GENERATE_MODEL` | qmd defaults | Optional `file://` model overrides |
 
 ## Run / test

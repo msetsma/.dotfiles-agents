@@ -225,4 +225,29 @@ Framework: 16 tools (`notes_capture`, `notes_triage`, `notes_lint` added).
   `invalid_frontmatter`, `filename_collisions`, `missing_hubs`, `index_drift`,
   `secrets` (each capped at 100; `AGENTS.md` and the raw Index are skipped).
 
+## 15. v5 additions (P3, local only)
+
+Framework: 20 tools. No external search backend (explicitly declined).
+
+- **tools/similar.py** (read-only): `notes_similar(ctx, path=None, text=None,
+  limit=5)` — neighbours of a note or raw text; `notes_suggest_links(ctx, path,
+  limit=10)` — unlinked candidates. Both drop the source note and `00 Meta`
+  hits; `NotesError` -> envelope.
+- **criticmarkup.py**: `substitution(old, new)`, `addition(text)`,
+  `deletion(text)`, `comment(text)`, `has_markup(text)`.
+- **config.py**: `write_mode: str = 'direct'` (env `NOTES_WRITE_MODE`;
+  `suggest`/anything-else -> direct).
+- **tools/write.py**: `notes_update(..., mode=None)` / `notes_append(...,
+  mode=None)`; in `suggest` mode each edit becomes `{~~find~>replace~~}` and an
+  appended `text` becomes `{++text++}` (body/frontmatter stay direct).
+  `notes_create` attaches a best-effort `similar` list (<=3, non-fatal).
+- **tools/digest.py**: `notes_weekly_digest(ctx, week=None, write=True)` —
+  draft/refresh the weekly note (`layout.journal_dir(ctx, 'weekly')/<week>.md`)
+  with a per-category `## Digest`; `notes_stale_report(ctx, days=90,
+  write=False)` — list notes not updated recently, or (write=True) append the
+  report to today's daily under `## Reports`.
+- **server.py**: `_inspect_tools` builder added (keeps each builder C901-clean);
+  `build_tools` merges read + inspect + write + structure.
+
+
 

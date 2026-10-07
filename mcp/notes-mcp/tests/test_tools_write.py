@@ -15,9 +15,11 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 
 from notes_mcp import frontmatter
+from notes_mcp.errors import INDEX_UNAVAILABLE, NotesError
 from notes_mcp.git import Git
 from notes_mcp.index import VaultIndex
 from notes_mcp.paths import PathGuard
+from notes_mcp.search import SearchHit
 from notes_mcp.tools import write
 
 
@@ -47,13 +49,21 @@ qmd:
 
 
 class FakeSearch:
-    """Records ``schedule_reindex`` calls; never touches qmd."""
+    """Records ``schedule_reindex`` calls; returns canned search hits."""
 
-    def __init__(self) -> None:
+    def __init__(self, hits: list[SearchHit] | None = None) -> None:
         self.calls = 0
+        self.hits = list(hits or [])
+        self.queries: list[str] = []
 
     def schedule_reindex(self, **_kwargs: object) -> None:
         self.calls += 1
+
+    def search(
+        self, query: str, *, collection: str | None = None, limit: int = 10, rerank: bool = True
+    ) -> list[SearchHit]:
+        self.queries.append(query)
+        return self.hits[:limit]
 
 
 def make_ctx(vault, **env_overrides) -> SimpleNamespace:
@@ -458,3 +468,159 @@ def test_duplicate_check_ignores_git_dir(vault) -> None:
 
     assert result.get('ok') is not False, result
     assert result['path'] == '10 Projects/11 Project A/Decoy.md'
+
+
+# --------------------------------------------------------------------------- #
+# suggestion mode (Phase 3, W2)
+# --------------------------------------------------------------------------- #
+def test_update_suggest_mode_via_env_wraps_edit(vault) -> None:
+    ctx = make_ctx(vault, NOTES_WRITE_MODE='suggest')
+    rel = _create_note(ctx, 'Edit Target', '# Edit Target\n\nalpha beta gamma\n')
+
+    result = write.notes_update(ctx, rel, edits=[{'find': 'beta', 'replace': 'BETA'}])
+
+    assert result.get('ok') is not False, result
+    text = (vault.agent / rel).read_text(encoding='utf-8')
+    assert '{~~beta~>BETA~~}' in text
+    assert 'alpha beta gamma' not in text
+    assert 'alpha BETA gamma' not in text
+
+
+def test_update_suggest_mode_explicit_argument(vault) -> None:
+    ctx = make_ctx(vault)
+    rel = _create_note(ctx, 'Edit Target', '# Edit Target\n\nalpha beta gamma\n')
+
+    result = write.notes_update(ctx, rel, edits=[{'find': 'beta', 'replace': 'BETA'}], mode='suggest')
+
+    assert result.get('ok') is not False, result
+    assert '{~~beta~>BETA~~}' in (vault.agent / rel).read_text(encoding='utf-8')
+
+
+def test_update_suggest_mode_still_requires_unique_match(vault) -> None:
+    ctx = make_ctx(vault)
+    rel = _create_note(ctx, 'Edit Target', '# Edit Target\n\nalpha beta gamma\n')
+
+    result = write.notes_update(ctx, rel, edits=[{'find': 'a', 'replace': 'A'}], mode='suggest')
+
+    assert result['ok'] is False
+    assert result['error']['code'] == 'FIND_NOT_UNIQUE'
+
+
+def test_update_direct_mode_is_unchanged(vault) -> None:
+    ctx = make_ctx(vault)
+    rel = _create_note(ctx, 'Edit Target', '# Edit Target\n\nalpha beta gamma\n')
+
+    result = write.notes_update(ctx, rel, edits=[{'find': 'beta', 'replace': 'BETA'}], mode='direct')
+
+    assert result.get('ok') is not False, result
+    text = (vault.agent / rel).read_text(encoding='utf-8')
+    assert 'alpha BETA gamma' in text
+    assert '{~~' not in text
+
+
+def test_update_bogus_mode_falls_back_to_direct(vault) -> None:
+    ctx = make_ctx(vault)
+    rel = _create_note(ctx, 'Edit Target', '# Edit Target\n\nalpha beta gamma\n')
+
+    result = write.notes_update(ctx, rel, edits=[{'find': 'beta', 'replace': 'BETA'}], mode='bogus')
+
+    assert result.get('ok') is not False, result
+    assert 'alpha BETA gamma' in (vault.agent / rel).read_text(encoding='utf-8')
+
+
+def test_update_suggest_mode_body_applies_directly(vault) -> None:
+    ctx = make_ctx(vault)
+    rel = _create_note(ctx, 'Edit Target', '# Edit Target\n\nalpha beta gamma\n')
+
+    result = write.notes_update(ctx, rel, body='# Edit Target\n\nReplaced.\n', mode='suggest')
+
+    assert result.get('ok') is not False, result
+    text = (vault.agent / rel).read_text(encoding='utf-8')
+    assert 'Replaced.' in text
+    assert '{~~' not in text
+
+
+def test_append_suggest_mode_wraps_text(vault) -> None:
+    ctx = make_ctx(vault)
+    rel = _create_note(ctx, 'Append Target', '# Append Target\n\n## Notes\n\nfirst\n')
+
+    result = write.notes_append(ctx, path=rel, heading='Notes', text='appended line', mode='suggest')
+
+    assert result.get('ok') is not False, result
+    text = (vault.agent / rel).read_text(encoding='utf-8')
+    assert '{++appended line++}' in text
+    assert text.index('first') < text.index('{++appended line++}')
+
+
+def test_append_suggest_mode_via_env(vault) -> None:
+    ctx = make_ctx(vault, NOTES_WRITE_MODE='suggest')
+    rel = _create_note(ctx, 'Append Target', '# Append Target\n\n## Notes\n\nfirst\n')
+
+    result = write.notes_append(ctx, path=rel, heading='Notes', text='a line')
+
+    assert result.get('ok') is not False, result
+    assert '{++a line++}' in (vault.agent / rel).read_text(encoding='utf-8')
+
+
+def test_append_direct_mode_unchanged(vault) -> None:
+    ctx = make_ctx(vault)
+    rel = _create_note(ctx, 'Append Target', '# Append Target\n\n## Notes\n\nfirst\n')
+
+    result = write.notes_append(ctx, path=rel, heading='Notes', text='plain line', mode='direct')
+
+    assert result.get('ok') is not False, result
+    text = (vault.agent / rel).read_text(encoding='utf-8')
+    assert 'plain line' in text
+    assert '{++' not in text
+
+
+# --------------------------------------------------------------------------- #
+# create returns best-effort 'similar' suggestions
+# --------------------------------------------------------------------------- #
+def test_create_attaches_similar_hits(vault) -> None:
+    ctx = make_ctx(vault)
+    own = '10 Projects/11 Project A/Platform Notes.md'
+    ctx.search.hits = [
+        SearchHit(own, 'Platform Notes', 0.99, None),
+        SearchHit('20 Areas/21 Platform Engineering/21 Platform Engineering.md', 'Platform Engineering', 0.88, None),
+        SearchHit('30 Resources/33 Concepts/Johnny Decimal.md', 'Johnny Decimal', 0.77, None),
+        SearchHit('30 Resources/32 Tools/qmd.md', 'qmd', 0.66, None),
+        SearchHit('90 Archive/Old.md', 'Old', 0.55, None),
+    ]
+
+    result = write.notes_create(ctx, '11', 'Platform Notes', 'note', 'body')
+
+    assert result.get('ok') is not False, result
+    assert result['path'] == own
+    assert len(result['similar']) == 3
+    assert all(item['path'] != own for item in result['similar'])
+    assert result['similar'][0] == {
+        'path': '20 Areas/21 Platform Engineering/21 Platform Engineering.md',
+        'title': 'Platform Engineering',
+        'score': 0.88,
+    }
+    assert ctx.search.queries == ['Platform Notes']
+
+
+def test_create_similar_empty_without_search(vault) -> None:
+    ctx = make_ctx(vault)
+    ctx.search = SimpleNamespace(schedule_reindex=lambda **_kwargs: None)
+
+    result = write.notes_create(ctx, '11', 'No Searcher', 'note', 'body')
+
+    assert result.get('ok') is not False, result
+    assert result['similar'] == []
+
+
+def test_create_succeeds_when_similar_search_fails(vault, monkeypatch) -> None:
+    ctx = make_ctx(vault)
+
+    def _boom(*_args: object, **_kwargs: object) -> list[SearchHit]:
+        raise NotesError(INDEX_UNAVAILABLE, 'qmd down', 'Retry later.')
+
+    monkeypatch.setattr(ctx.search, 'search', _boom)
+
+    result = write.notes_create(ctx, '11', 'Resilient Note', 'note', 'body')
+
+    assert result.get('ok') is not False, result
+    assert result['similar'] == []

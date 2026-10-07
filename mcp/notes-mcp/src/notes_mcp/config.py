@@ -41,6 +41,7 @@ class Config:
     meetings_dir: str | None = None
     templates_dir: str | None = None
     attachments_dir: str | None = None
+    write_mode: str = 'direct'
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Config:
@@ -87,7 +88,13 @@ class Config:
             meetings_dir=env.get('NOTES_MEETINGS_DIR') or None,
             templates_dir=env.get('NOTES_TEMPLATES_DIR') or None,
             attachments_dir=env.get('NOTES_ATTACHMENTS_DIR') or None,
+            write_mode=_write_mode(env.get('NOTES_WRITE_MODE')),
         )
+
+
+def _write_mode(value: str | None) -> str:
+    """``suggest`` enables CriticMarkup; anything else falls back to ``direct``."""
+    return 'suggest' if (value or '').strip().lower() == 'suggest' else 'direct'
 
 
 def _optional_url(value: str | None) -> str | None:

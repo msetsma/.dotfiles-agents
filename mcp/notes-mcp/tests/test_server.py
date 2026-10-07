@@ -25,12 +25,32 @@ EXPECTED_TOOLS = {
     'notes_move_category',
     'notes_triage',
     'notes_lint',
+    'notes_similar',
+    'notes_suggest_links',
+    'notes_weekly_digest',
+    'notes_stale_report',
 }
 
 
-def test_registers_all_sixteen_tools(vault):
+def test_registers_all_twenty_tools(vault):
     mcp = build_server(vault.config())
     assert {tool.name for tool in asyncio.run(mcp.list_tools())} == EXPECTED_TOOLS
+
+
+def test_similar_tools_are_read_only(vault):
+    mcp = build_server(vault.config())
+    tools = {tool.name: tool for tool in asyncio.run(mcp.list_tools())}
+    for name in ('notes_similar', 'notes_suggest_links'):
+        assert tools[name].annotations is not None
+        assert tools[name].annotations.read_only_hint is True
+
+
+def test_digest_tools_are_write_tools(vault):
+    mcp = build_server(vault.config())
+    tools = {tool.name: tool for tool in asyncio.run(mcp.list_tools())}
+    for name in ('notes_weekly_digest', 'notes_stale_report'):
+        assert tools[name].annotations is not None
+        assert tools[name].annotations.read_only_hint is False
 
 
 def test_capture_is_a_write_tool(vault):

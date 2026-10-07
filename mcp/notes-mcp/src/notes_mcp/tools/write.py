@@ -19,7 +19,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from notes_mcp import frontmatter as _frontmatter, layout
+from notes_mcp import criticmarkup, frontmatter as _frontmatter, layout
 from notes_mcp.atomic import atomic_write
 from notes_mcp.errors import (
     DUPLICATE_FILENAME,
@@ -103,6 +103,7 @@ def notes_create(
 
     if result.get('ok') is not False:
         ctx.search.schedule_reindex()
+        result['similar'] = _similar_list(ctx, result.get('path', rel), title)
     return result
 
 
@@ -112,8 +113,16 @@ def notes_update(
     body: str | None = None,
     edits: list[dict[str, str]] | None = None,
     frontmatter: dict[str, Any] | None = None,
+    mode: str | None = None,
 ) -> dict[str, Any]:
-    """Update an existing note's body, apply find/replace edits, or merge frontmatter."""
+    """Update an existing note's body, apply find/replace edits, or merge frontmatter.
+
+    ``mode='suggest'`` (or ``NOTES_WRITE_MODE=suggest``) turns each ``edits``
+    entry into an inline CriticMarkup substitution: the ``find`` text is located
+    (still requiring exactly one occurrence) and swapped for
+    ``{~~find~>replace~~}`` instead of applying ``replace`` literally. ``body``
+    and ``frontmatter`` always apply directly, in either mode.
+    """
     try:
         target = ctx.guard.resolve(path, for_write=True)
         rel = ctx.guard.relpath(target)
@@ -123,7 +132,7 @@ def notes_update(
         fm, current = _frontmatter.parse(target.read_text(encoding='utf-8'))
         new_body = current if body is None else body
         if edits:
-            new_body = _apply_edits(new_body, edits)
+            new_body = _apply_edits(new_body, edits, _effective_mode(ctx, mode))
         if frontmatter:
             _merge_frontmatter(fm, frontmatter)
 
@@ -149,14 +158,22 @@ def notes_update(
 
 
 def notes_append(
-    ctx: ToolContext, path: str | None = None, daily: bool = False, heading: str | None = None, text: str = ''
+    ctx: ToolContext,
+    path: str | None = None,
+    daily: bool = False,
+    heading: str | None = None,
+    text: str = '',
+    mode: str | None = None,
 ) -> dict[str, Any]:
     """Append text to a note, optionally under a ``## heading``.
 
     ``daily=True`` targets today's daily note, seeding it from the Daily template
-    when it does not exist yet.
+    when it does not exist yet. In ``suggest`` mode the appended ``text`` is
+    wrapped as a CriticMarkup ``{++addition++}``.
     """
     try:
+        if text and _effective_mode(ctx, mode) == 'suggest':
+            text = criticmarkup.addition(text)
         if daily:
             rel = f'{layout.journal_dir(ctx, "daily")}/{_today()}.md'
         elif path:
@@ -296,6 +313,7 @@ def _update_journal(ctx: ToolContext, target: Path, rel: str, body: str) -> dict
         return exc.to_dict()
     if result.get('ok') is not False:
         ctx.search.schedule_reindex()
+        result['similar'] = _similar_list(ctx, rel, None)
     return result
 
 
@@ -311,21 +329,38 @@ def _journal_payload(target: Path, rel: str, body: str) -> dict[str, Any]:
 # --------------------------------------------------------------------------- #
 # update helpers
 # --------------------------------------------------------------------------- #
-def _apply_edits(body: str, edits: list[dict[str, str]]) -> str:
+def _apply_edits(body: str, edits: list[dict[str, str]], mode: str) -> str:
+    apply = _apply_edits_suggest if mode == 'suggest' else _apply_edits_direct
+    return apply(body, edits)
+
+
+def _apply_edits_direct(body: str, edits: list[dict[str, str]]) -> str:
     for edit in edits:
-        find = str(edit.get('find', ''))
-        replace = str(edit.get('replace', ''))
-        count = body.count(find)
-        if count != 1:
-            raise NotesError(
-                FIND_NOT_UNIQUE,
-                f'find string matches {count} times (expected exactly one)',
-                'Use a longer find string that occurs exactly once.',
-                find=find,
-                count=count,
-            )
+        find, replace = _locate_edit(body, edit)
         body = body.replace(find, replace)
     return body
+
+
+def _apply_edits_suggest(body: str, edits: list[dict[str, str]]) -> str:
+    for edit in edits:
+        find, replace = _locate_edit(body, edit)
+        body = body.replace(find, criticmarkup.substitution(find, replace))
+    return body
+
+
+def _locate_edit(body: str, edit: dict[str, str]) -> tuple[str, str]:
+    find = str(edit.get('find', ''))
+    replace = str(edit.get('replace', ''))
+    count = body.count(find)
+    if count != 1:
+        raise NotesError(
+            FIND_NOT_UNIQUE,
+            f'find string matches {count} times (expected exactly one)',
+            'Use a longer find string that occurs exactly once.',
+            find=find,
+            count=count,
+        )
+    return find, replace
 
 
 def _merge_frontmatter(fm: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
@@ -386,6 +421,35 @@ def _append_body(body: str, heading: str | None, text: str) -> str:
 def _write_payload(target: Path, text: str, rel: str) -> dict[str, Any]:
     atomic_write(target, text)
     return {'path': rel, 'needs_index_update': False}
+
+
+def _effective_mode(ctx: ToolContext, mode: str | None) -> str:
+    """Resolve the write mode: explicit argument, then config, then ``direct``."""
+    chosen = (mode or ctx.config.write_mode or 'direct').strip().lower()
+    return 'suggest' if chosen == 'suggest' else 'direct'
+
+
+def _similar_list(ctx: ToolContext, rel: str, title: str | None) -> list[dict[str, Any]]:
+    """Best-effort ``similar`` suggestions for a freshly written note.
+
+    Never fails the write: a missing or failed searcher yields an empty list.
+    The note itself is dropped and at most three hits are returned.
+    """
+    search = getattr(ctx.search, 'search', None)
+    if search is None:
+        return []
+    try:
+        hits = search(title or Path(rel).stem, limit=4, rerank=True)
+    except NotesError:
+        return []
+    similar: list[dict[str, Any]] = []
+    for hit in hits:
+        if hit.path == rel:
+            continue
+        similar.append({'path': hit.path, 'title': hit.title, 'score': hit.score})
+        if len(similar) >= 3:
+            break
+    return similar
 
 
 def _read_template(ctx: ToolContext, name: str = 'Daily') -> str:
