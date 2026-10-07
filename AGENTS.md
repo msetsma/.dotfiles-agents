@@ -18,6 +18,11 @@ agent. See [README.md](README.md) for the merge-vs-symlink model and
 config files (`~/.claude.json`, `~/.config/opencode/opencode.jsonc`,
 `~/.codex/config.toml`, the Claude Desktop config); edit the catalog instead.
 
+Tag resources that shouldn't reach every machine (`tags = ["work"]`,
+`["macos"]`); secondary machines filter them via `[profile]` in the untracked
+`catalog/local.toml` (see README "Per-machine profiles"). No profile = sync
+everything, which is the primary (Mac) behaviour.
+
 External servers carry a `[package]` block; `make agent-outdated` reports newer
 npm/uv/git versions, `make agent-update` applies them. Prefer `ref = "latest"`
 (float) unless you need a specific version.

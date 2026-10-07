@@ -3,6 +3,7 @@ description = "Databricks workspace/SQL/Genie tools, run from Databricks ai-dev-
 kind        = "local"
 origin      = "external"
 clients     = ["opencode", "claude-code", "claude-desktop", "codex"]
+tags        = ["work"]
 
 [launch]
 command = "uv"

@@ -11,6 +11,8 @@ Single source of truth
   catalog/clients.toml     where each agent keeps each kind, and how it spells it
   catalog/paths.toml       machine-specific command paths + variables
   catalog/retired.toml     resources to scrub from every client
+  catalog/local.toml       untracked per-machine overrides + [profile] selection
+                           (see bin/agent_profile.py)
 
 Behaviour
 ---------
@@ -51,6 +53,11 @@ except ModuleNotFoundError:  # pragma: no cover - py<3.11
 REPO = Path(__file__).resolve().parent.parent
 CATALOG = REPO / 'catalog'
 
+# Sibling module; the engine runs as a script and is also loaded by path in tests.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from agent_profile import deep_merge, is_selected, select_clients, split_command  # noqa: E402
+from jsonc import strip_jsonc  # noqa: E402
+
 ENV_REF = re.compile(r'\$\{([A-Za-z0-9_]+)\}')
 OPCODE_ENV_REF = re.compile(r'\{env:([A-Za-z0-9_]+)\}')
 
@@ -73,57 +80,6 @@ def die(msg: str) -> NoReturn:
 def load_toml(path: Path) -> dict:
     with open(path, 'rb') as fh:
         return tomllib.load(fh)
-
-
-def _consume_string(text: str, start: int) -> tuple[str, int]:
-    """Return the quoted literal at ``start`` and the index just past it."""
-    i = start + 1
-    n = len(text)
-    while i < n:
-        ch = text[i]
-        if ch == '\\':
-            i += 2
-            continue
-        if ch == '"':
-            return text[start : i + 1], i + 1
-        i += 1
-    return text[start:n], n
-
-
-def _skip_comment(text: str, start: int) -> int:
-    """Skip a ``//`` or ``/* */`` comment and return the index just past it."""
-    n = len(text)
-    if text[start + 1] == '/':
-        i = start
-        while i < n and text[i] not in '\r\n':
-            i += 1
-        return i
-    i = start + 2
-    while i + 1 < n and not (text[i] == '*' and text[i + 1] == '/'):
-        i += 1
-    return i + 2
-
-
-def strip_jsonc(text: str) -> str:
-    """Remove // and /* */ comments while respecting string literals.
-
-    A naive regex would eat the `//` in `https://...`, so scan character by
-    character and only strip comments outside of quoted strings.
-    """
-    out: list[str] = []
-    i, n = 0, len(text)
-    while i < n:
-        ch = text[i]
-        if ch == '"':
-            literal, i = _consume_string(text, i)
-            out.append(literal)
-            continue
-        if ch == '/' and i + 1 < n and text[i + 1] in '/*':
-            i = _skip_comment(text, i)
-            continue
-        out.append(ch)
-        i += 1
-    return ''.join(out)
 
 
 def expand(value, ctx: dict):
@@ -155,25 +111,35 @@ def opcodeify(value: str) -> str:
 # --------------------------------------------------------------------------- #
 # catalog loading
 # --------------------------------------------------------------------------- #
-def build_context() -> dict:
+def load_local() -> dict:
+    """Machine-local overrides (untracked). Keeps org-specific values and the
+    per-machine profile out of the published repo; absent means no overrides."""
+    local = CATALOG / 'local.toml'
+    return load_toml(local) if local.exists() else {}
+
+
+def build_context(local: dict | None = None) -> dict:
+    local = load_local() if local is None else local
     paths = load_toml(CATALOG / 'paths.toml')
     ctx = {'HOME': str(Path.home())}
     ctx.update(expand(paths.get('vars', {}), ctx))
     ctx['commands'] = expand(paths.get('commands', {}), ctx)
-    # Machine-local overrides (untracked). Keeps org-specific values out of the
-    # published repo while still resolving locally.
-    local = CATALOG / 'local.toml'
-    if local.exists():
-        data = load_toml(local)
-        ctx.update(expand(data.get('vars', {}), ctx))
-        ctx['commands'].update(expand(data.get('commands', {}), ctx))
+    ctx.update(expand(local.get('vars', {}), ctx))
+    ctx['commands'].update(expand(local.get('commands', {}), ctx))
     return ctx
 
 
-def load_mcp(ctx: dict) -> dict:
+def load_raw(path: Path, kind: str, local: dict | None) -> dict:
+    """Catalog TOML with any ``local.toml [<kind>.<name>]`` override merged in."""
+    raw = load_toml(path)
+    override = (local or {}).get(kind, {}).get(raw['name'], {})
+    return deep_merge(raw, override) if override else raw
+
+
+def load_mcp(ctx: dict, local: dict | None = None) -> dict:
     mcp: dict[str, dict] = {}
     for path in sorted((CATALOG / 'mcp').glob('*.toml')):
-        raw = load_toml(path)
+        raw = load_raw(path, 'mcp', local)
         name = raw['name']
         kind = raw.get('kind', 'local')
         srv = {
@@ -182,14 +148,15 @@ def load_mcp(ctx: dict) -> dict:
             'origin': raw.get('origin', 'external'),
             'description': raw.get('description', ''),
             'clients': list(raw.get('clients', [])),
+            'tags': list(raw.get('tags', [])),
             'extra': raw.get('extra', {}),
             'package': raw.get('package', {}),
         }
         if kind == 'local':
             launch = raw['launch']
             cmd = launch['command']
-            srv['command'] = ctx['commands'].get(cmd, cmd)
-            srv['args'] = [expand(a, ctx) for a in launch.get('args', [])]
+            srv['command'], prefix = split_command(ctx['commands'].get(cmd, cmd))
+            srv['args'] = prefix + [expand(a, ctx) for a in launch.get('args', [])]
             srv['env'] = {k: expand(v, ctx) for k, v in raw.get('env', {}).items()}
             pkg = raw.get('package', {})
             if pkg.get('manager') == 'npm' and pkg.get('name'):
@@ -206,11 +173,11 @@ def load_mcp(ctx: dict) -> dict:
     return mcp
 
 
-def load_skills(ctx: dict) -> dict:
+def load_skills(ctx: dict, local: dict | None = None) -> dict:
     """Each ``catalog/skills/<name>.toml`` points at ``catalog/skills/<name>/``."""
     skills: dict[str, dict] = {}
     for path in sorted((CATALOG / 'skills').glob('*.toml')):
-        raw = load_toml(path)
+        raw = load_raw(path, 'skills', local)
         name = raw['name']
         source = CATALOG / 'skills' / name
         if not (source / 'SKILL.md').is_file():
@@ -219,16 +186,17 @@ def load_skills(ctx: dict) -> dict:
             'name': name,
             'description': raw.get('description', ''),
             'clients': list(raw.get('clients', [])),
+            'tags': list(raw.get('tags', [])),
             'dir': source,
         }
     return skills
 
 
-def load_plugins(ctx: dict) -> dict:
+def load_plugins(ctx: dict, local: dict | None = None) -> dict:
     """Each ``catalog/plugins/<name>.toml`` points at ``catalog/plugins/<name>.ts``."""
     plugins: dict[str, dict] = {}
     for path in sorted((CATALOG / 'plugins').glob('*.toml')):
-        raw = load_toml(path)
+        raw = load_raw(path, 'plugins', local)
         name = raw['name']
         source = CATALOG / 'plugins' / f'{name}.ts'
         if not source.is_file():
@@ -237,15 +205,16 @@ def load_plugins(ctx: dict) -> dict:
             'name': name,
             'description': raw.get('description', ''),
             'clients': list(raw.get('clients', [])),
+            'tags': list(raw.get('tags', [])),
             'source': source,
         }
     return plugins
 
 
-def load_hooks(ctx: dict) -> dict:
+def load_hooks(ctx: dict, local: dict | None = None) -> dict:
     hooks: dict[str, dict] = {}
     for path in sorted((CATALOG / 'hooks').glob('*.toml')):
-        raw = load_toml(path)
+        raw = load_raw(path, 'hooks', local)
         name = raw['name']
         command = raw['command']
         hooks[name] = {
@@ -254,6 +223,7 @@ def load_hooks(ctx: dict) -> dict:
             'event': raw['event'],
             'matcher': raw.get('matcher', ''),
             'clients': list(raw.get('clients', [])),
+            'tags': list(raw.get('tags', [])),
             'command': expand(command['run'], ctx),
             'timeout': command.get('timeout'),
             'status_message': command.get('statusMessage'),
@@ -261,11 +231,11 @@ def load_hooks(ctx: dict) -> dict:
     return hooks
 
 
-def load_instructions(ctx: dict) -> dict:
+def load_instructions(ctx: dict, local: dict | None = None) -> dict:
     """Each ``catalog/instructions/<name>.toml`` points at ``<name>.md``."""
     instructions: dict[str, dict] = {}
     for path in sorted((CATALOG / 'instructions').glob('*.toml')):
-        raw = load_toml(path)
+        raw = load_raw(path, 'instructions', local)
         name = raw['name']
         source = CATALOG / 'instructions' / f'{name}.md'
         if not source.is_file():
@@ -274,7 +244,8 @@ def load_instructions(ctx: dict) -> dict:
             'name': name,
             'description': raw.get('description', ''),
             'clients': list(raw.get('clients', [])),
-            'text': source.read_text(),
+            'tags': list(raw.get('tags', [])),
+            'text': source.read_text(encoding='utf-8'),
         }
     return instructions
 
@@ -384,7 +355,7 @@ def report(client: str, path: Path, added, changed, removed, kind: str = 'mcp') 
 
 def write_json(path: Path, doc: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + '\n')
+    path.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
 
 
 def deep_get(doc: dict, keys: list[str]) -> dict:
@@ -396,7 +367,7 @@ def deep_get(doc: dict, keys: list[str]) -> dict:
 
 def sync_json_mcp(client: str, cli: dict, desired: dict, retired: list) -> bool:
     target = Path(cli['path']).expanduser()
-    doc = json.loads(strip_jsonc(target.read_text())) if target.exists() else {}
+    doc = json.loads(strip_jsonc(target.read_text(encoding='utf-8'))) if target.exists() else {}
     container = deep_get(doc, cli['container'])
     added, changed, removed = semantic_diff(container, desired, retired)
     dirty = report(client, target, added, changed, removed)
@@ -446,7 +417,7 @@ def sync_codex_mcp(client: str, cli: dict, desired: dict, retired: list) -> bool
         import tomlkit
     except ModuleNotFoundError:
         die('codex client needs tomlkit; run via bin/agent-sync (uv provides it)')
-    doc = tomlkit.parse(target.read_text()) if target.exists() else tomlkit.document()
+    doc = tomlkit.parse(target.read_text(encoding='utf-8')) if target.exists() else tomlkit.document()
     table = doc.get('mcp_servers')
     if table is None:
         table = tomlkit.table()
@@ -459,7 +430,7 @@ def sync_codex_mcp(client: str, cli: dict, desired: dict, retired: list) -> bool
         return dirty
 
     _write_codex_servers(tomlkit, table, desired, retired)
-    target.write_text(tomlkit.dumps(doc))
+    target.write_text(tomlkit.dumps(doc), encoding='utf-8')
     return dirty
 
 
@@ -502,7 +473,7 @@ def sync_skills(client: str, cli: dict, skills: dict, retired: list) -> bool:
     for name in removed + changed:
         (base / name).unlink()
     for name in added + changed:
-        (base / name).symlink_to(desired[name]['dir'])
+        (base / name).symlink_to(desired[name]['dir'], target_is_directory=True)
     return dirty
 
 
@@ -609,7 +580,7 @@ def sync_hooks(client: str, cli: dict, hooks: dict, retired_commands: list) -> b
     target = Path(cli['path']).expanduser()
     desired, label, managed_keys = _collect_hook_groups(client, hooks, renderer)
 
-    doc = json.loads(strip_jsonc(target.read_text())) if target.exists() else {}
+    doc = json.loads(strip_jsonc(target.read_text(encoding='utf-8'))) if target.exists() else {}
     container = deep_get(doc, cli['container'])
 
     # Existing events, minus any group the catalog owns (so re-sync and
@@ -691,7 +662,7 @@ def apply_instruction_block(document: str, block: str) -> str:
 
 
 def _load_instruction_block(target: Path) -> tuple[str, str | None, list[str], str]:
-    existing = target.read_text() if target.exists() else ''
+    existing = target.read_text(encoding='utf-8') if target.exists() else ''
     match = INSTR_REGION.search(existing)
     region = match.group(0) if match else None
     return existing, region, block_names(region) if region else [], block_body(region) if region else ''
@@ -718,7 +689,7 @@ def sync_instructions(client: str, cli: dict, instructions: dict, retired: list)
     updated = apply_instruction_block(existing, new_block)
     if updated:
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(updated)
+        target.write_text(updated, encoding='utf-8')
     elif target.exists():
         target.unlink()
     return dirty
@@ -745,6 +716,23 @@ def sync_client(client: str, kinds: dict, catalogs: dict, retired: dict) -> bool
     return dirty
 
 
+LOADERS = {
+    'mcp': load_mcp,
+    'skills': load_skills,
+    'plugins': load_plugins,
+    'hooks': load_hooks,
+    'instructions': load_instructions,
+}
+
+
+def load_catalogs(ctx: dict, local: dict, profile: dict) -> dict:
+    """Every kind, with local overrides applied and profile exclusions dropped."""
+    return {
+        kind: {name: item for name, item in loader(ctx, local).items() if is_selected(item, profile)}
+        for kind, loader in LOADERS.items()
+    }
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description='Sync the agent catalog into client configs.')
     ap.add_argument('--dry-run', action='store_true', help='show changes, write nothing')
@@ -752,26 +740,17 @@ def main() -> int:
     args = ap.parse_args()
     CONFIG.dry_run = args.dry_run
 
-    ctx = build_context()
-    catalogs = {
-        'mcp': load_mcp(ctx),
-        'skills': load_skills(ctx),
-        'plugins': load_plugins(ctx),
-        'hooks': load_hooks(ctx),
-        'instructions': load_instructions(ctx),
-    }
-    clients = load_toml(CATALOG / 'clients.toml')
+    local = load_local()
+    profile = local.get('profile', {})
+    catalogs = load_catalogs(build_context(local), local, profile)
+    clients = deep_merge(load_toml(CATALOG / 'clients.toml'), local.get('clients', {}))
     raw_retired = load_toml(CATALOG / 'retired.toml')
-    retired = {
-        'mcp': raw_retired.get('mcp', []),
-        'skills': raw_retired.get('skills', []),
-        'plugins': raw_retired.get('plugins', []),
-        'hook_commands': raw_retired.get('hook_commands', []),
-        'instructions': raw_retired.get('instructions', []),
-    }
+    retired = {key: raw_retired.get(key, []) for key in ('mcp', 'skills', 'plugins', 'hook_commands', 'instructions')}
 
-    selected = args.client or list(clients)
-    unknown = [c for c in selected if c not in clients]
+    wanted = profile.get('clients')
+    requested = args.client or (wanted if isinstance(wanted, list) else [])
+    selected = args.client or select_clients(clients, profile)
+    unknown = [c for c in requested if c not in clients]
     if unknown:
         die(f'unknown client(s): {", ".join(unknown)}')
 

@@ -3,6 +3,7 @@ description = "Entra ID org structure and access analysis (people, groups, repor
 kind        = "local"
 origin      = "custom"
 clients     = ["opencode", "claude-code", "claude-desktop", "codex"]
+tags        = ["work"]
 
 [launch]
 command = "entra-mcp"

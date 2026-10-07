@@ -3,6 +3,7 @@ description = "Apple Mail search/read via the apple-mailbox-mcp uv tool (read-on
 kind        = "local"
 origin      = "external"
 clients     = ["opencode"]
+tags        = ["macos"]
 
 [launch]
 command = "apple-mail-mcp"

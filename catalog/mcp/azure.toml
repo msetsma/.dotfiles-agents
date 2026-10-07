@@ -3,6 +3,7 @@ description = "Azure Resource Manager operations (pricing, quotas, resource heal
 kind        = "local"
 origin      = "external"
 clients     = ["opencode", "claude-code", "claude-desktop"]
+tags        = ["work"]
 
 [launch]
 command = "npx"

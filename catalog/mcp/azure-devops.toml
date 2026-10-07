@@ -3,6 +3,7 @@ description = "Azure DevOps (work items, repos, pipelines) for your Azure DevOps
 kind        = "local"
 origin      = "external"
 clients     = ["opencode", "claude-code", "claude-desktop"]
+tags        = ["work"]
 
 [launch]
 command = "npx"

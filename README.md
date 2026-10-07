@@ -124,6 +124,40 @@ Full table of what this repo manages. `custom` = source lives in this repo;
 **No secrets live here**: `github` uses `${GITHUB_TOKEN}`; machine-specific
 values live in the untracked `catalog/local.toml` (`catalog/local.toml.example`).
 
+## Per-machine profiles
+
+The Mac is the primary box: with no `[profile]` in `catalog/local.toml`,
+everything in the catalog syncs to every client. A secondary machine (e.g.
+Windows) opts into a subset in its own untracked `catalog/local.toml`:
+
+```toml
+[profile]
+clients      = ["claude-code", "claude-desktop"]   # or "auto"
+exclude_tags = ["work", "macos"]
+exclude      = ["obscura"]                         # by name, any kind
+
+[commands]
+npx = ["cmd", "/c", "npx"]                         # list = command + arg prefix
+
+[clients.claude-desktop.mcp]                       # over catalog/clients.toml
+path        = "~/AppData/Roaming/Claude/claude_desktop_config.json"
+inject_path = ""
+
+[mcp.playwright]                                   # over catalog/mcp/playwright.toml
+clients = ["claude-code", "claude-desktop"]
+```
+
+Catalog entries carry `tags`: `work` (azure, azure-devops, databricks,
+entra-mcp, teams-browser, m365-local) and `macos` (apple-mail, iMCP,
+m365-local). Excluded resources are simply not synced; nothing is scrubbed.
+`"auto"` picks clients whose config directory exists. Selection logic lives in
+[`bin/agent_profile.py`](bin/agent_profile.py); full example in
+`catalog/local.toml.example`.
+
+On Windows: install uv (`irm https://astral.sh/uv/install.ps1 | iex`), enable
+Developer Mode (skill symlinks), and run `make` from Git Bash. The
+`python-clean` hooks are bash-only, so exclude them there.
+
 ## Keeping up to date
 
 External servers carry a `[package]` block; launch args use a `{{package}}`
@@ -145,7 +179,8 @@ make agent-update     # apply, then re-sync
 
 ## Adding or changing a resource
 
-1. **Server**: add/edit `catalog/mcp/<name>.toml` (set `clients = [...]`).
+1. **Server**: add/edit `catalog/mcp/<name>.toml` (set `clients = [...]`;
+   add `tags = ["work"]` / `["macos"]` if it shouldn't reach every machine).
 2. **Skill**: add `catalog/skills/<name>.toml` + `catalog/skills/<name>/SKILL.md`.
 3. **Hook**: add `catalog/hooks/<name>.toml`.
 4. **Retire**: add the name (or, for hooks, the command) to `catalog/retired.toml`.

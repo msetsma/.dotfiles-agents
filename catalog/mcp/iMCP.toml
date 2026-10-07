@@ -3,6 +3,7 @@ description = "macOS integrations (Calendar, Reminders, Contacts, Messages, ...)
 kind        = "local"
 origin      = "external"
 clients     = ["opencode", "claude-code", "claude-desktop", "codex"]
+tags        = ["macos"]
 
 [launch]
 command = "imcp"

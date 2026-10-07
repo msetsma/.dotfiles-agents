@@ -7,3 +7,32 @@
 [vars]
 # Azure DevOps organization slug used by the azure-devops server.
 ADO_ORG = "your-ado-org"
+
+# --------------------------------------------------------------------------- #
+# Per-machine profile (optional). Leave these out on the primary machine: with
+# no [profile] every catalog item syncs to every client, exactly as before.
+# --------------------------------------------------------------------------- #
+
+# [profile]
+# clients      = ["claude-code", "claude-desktop"]  # or "auto" (config dir exists)
+# exclude_tags = ["work", "macos"]                   # catalog `tags = [...]`
+# exclude      = ["obscura", "python-clean"]         # names, any kind
+
+# Command overrides; a list becomes command + leading args (Windows needs
+# `cmd /c` in front of npx).
+# [commands]
+# uv  = "C:/Users/me/.local/bin/uv.exe"
+# npx = ["cmd", "/c", "npx"]
+
+# Deep-merged over catalog/clients.toml.
+# [clients.claude-desktop.mcp]
+# path        = "~/AppData/Roaming/Claude/claude_desktop_config.json"
+# inject_path = ""
+
+# Deep-merged over catalog/<kind>/<name>.toml (mcp, skills, plugins, hooks,
+# instructions).
+# [mcp.playwright]
+# clients = ["claude-code", "claude-desktop"]
+#
+# [mcp.notes.env]
+# VAULT_PATH = "C:/Users/me/vault"

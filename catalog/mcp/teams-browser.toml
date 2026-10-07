@@ -3,6 +3,7 @@ description = "Read-only Teams meetings, transcripts, chats, channel messages an
 kind        = "local"
 origin      = "custom"
 clients     = ["opencode", "claude-code", "claude-desktop"]
+tags        = ["work"]
 
 [launch]
 command = "uv"

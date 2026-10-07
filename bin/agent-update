@@ -4,5 +4,10 @@ set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 UV="${UV:-/opt/homebrew/bin/uv}"
+[ -x "$UV" ] || UV="$(command -v uv)"
 
-exec "$UV" run --quiet python3 "$DIR/bin/agent_update.py" "$@"
+# uv environments on Windows ship python.exe only; python3 there is the Store stub.
+PY=python3
+case "$(uname -s)" in MINGW* | MSYS* | CYGWIN*) PY=python ;; esac
+
+exec "$UV" run --quiet "$PY" "$DIR/bin/agent_update.py" "$@"

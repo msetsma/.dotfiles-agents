@@ -3,6 +3,7 @@ description = "Read-only local Outlook meetings (Calendar.app), Mail.app search,
 kind        = "local"
 origin      = "custom"
 clients     = ["opencode", "claude-code", "claude-desktop"]
+tags        = ["work", "macos"]
 
 [launch]
 command = "uv"

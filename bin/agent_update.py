@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -40,7 +41,9 @@ import agent_sync as ms
 
 
 def sh(cmd: list[str], cwd: str | None = None) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
+    # which() resolves Windows shims (npm.cmd); on POSIX it is the PATH lookup.
+    exe = shutil.which(cmd[0]) or cmd[0]
+    return subprocess.run([exe, *cmd[1:]], capture_output=True, text=True, cwd=cwd)
 
 
 def npm_latest(name: str, tag: str) -> str | None:
