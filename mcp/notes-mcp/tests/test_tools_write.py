@@ -34,8 +34,8 @@ class FakeSearch:
         self.calls += 1
 
 
-def make_ctx(vault) -> SimpleNamespace:
-    config = vault.config()
+def make_ctx(vault, **env_overrides) -> SimpleNamespace:
+    config = vault.config(**env_overrides)
     return SimpleNamespace(
         config=config,
         guard=PathGuard(config.vault_path),
@@ -276,6 +276,49 @@ def test_journal_dir_follows_index_path(vault, monkeypatch) -> None:
     assert result.get('ok') is not False, result
     assert result['path'] == f'{new_dir}/2026-03-03.md'
     assert (vault.agent / result['path']).is_file()
+
+
+def test_daily_meeting_dirs_follow_index_paths(vault, monkeypatch) -> None:
+    ctx = make_ctx(vault)
+    daily_dir = '40 Journal/41 Daily Reworked'
+    meetings_dir = '40 Journal/43 Meetings Reworked'
+    (vault.agent / daily_dir).mkdir(parents=True, exist_ok=True)
+    (vault.agent / meetings_dir).mkdir(parents=True, exist_ok=True)
+    index = vault.agent / '00 Meta/00.00 Index.md'
+    text = index.read_text(encoding='utf-8')
+    text = text.replace('| 41 | Daily | 40 Journal/41 Daily |', f'| 41 | Daily | {daily_dir} |')
+    text = text.replace('| 43 | Meetings | 40 Journal/43 Meetings |', f'| 43 | Meetings | {meetings_dir} |')
+    index.write_text(text, encoding='utf-8')
+    monkeypatch.setattr(write, '_today', lambda: '2026-05-05')
+
+    daily = write.notes_create(ctx, '41', None, 'daily', 'body')
+    meeting = write.notes_create(ctx, '43', 'Sync', 'meeting', 'body')
+
+    assert daily.get('ok') is not False, daily
+    assert daily['path'] == f'{daily_dir}/2026-05-05.md'
+    assert meeting.get('ok') is not False, meeting
+    assert meeting['path'] == f'{meetings_dir}/2026-05-05 Sync.md'
+    assert (vault.agent / daily['path']).is_file()
+    assert (vault.agent / meeting['path']).is_file()
+
+
+def test_daily_and_meeting_dirs_respect_env_override(vault, monkeypatch) -> None:
+    daily_dir = '40 Journal/41 Daily Override'
+    meetings_dir = '40 Journal/43 Meetings Override'
+    ctx = make_ctx(vault, NOTES_DAILY_DIR=daily_dir, NOTES_MEETINGS_DIR=meetings_dir)
+    monkeypatch.setattr(write, '_today', lambda: '2026-04-04')
+    # The Index category must still validate, even though the override wins.
+    (vault.agent / '40 Journal/43 Meetings').mkdir(parents=True, exist_ok=True)
+
+    daily = write.notes_create(ctx, '41', None, 'daily', 'body')
+    meeting = write.notes_create(ctx, '43', 'Standup', 'meeting', 'body')
+
+    assert daily.get('ok') is not False, daily
+    assert daily['path'] == f'{daily_dir}/2026-04-04.md'
+    assert meeting.get('ok') is not False, meeting
+    assert meeting['path'] == f'{meetings_dir}/2026-04-04 Standup.md'
+    assert (vault.agent / daily['path']).is_file()
+    assert (vault.agent / meeting['path']).is_file()
 
 
 def test_create_duplicate_creates_nothing(vault) -> None:

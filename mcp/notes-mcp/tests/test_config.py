@@ -56,6 +56,56 @@ def test_from_env_empty_optional_falls_back_to_default(tmp_path, monkeypatch):
     assert config.session == 'unknown'
 
 
+def test_from_env_dir_overrides(tmp_path):
+    env = {
+        'VAULT_PATH': str(tmp_path),
+        'NOTES_DAILY_DIR': '40 Journal/41 Daily',
+        'NOTES_WEEKLY_DIR': '40 Journal/42 Weekly',
+        'NOTES_MEETINGS_DIR': '40 Journal/43 Meetings',
+        'NOTES_TEMPLATES_DIR': '00 Meta/01 Templates',
+        'NOTES_ATTACHMENTS_DIR': '00 Meta/02 Attachments',
+    }
+
+    config = Config.from_env(env)
+
+    assert config.daily_dir == '40 Journal/41 Daily'
+    assert config.weekly_dir == '40 Journal/42 Weekly'
+    assert config.meetings_dir == '40 Journal/43 Meetings'
+    assert config.templates_dir == '00 Meta/01 Templates'
+    assert config.attachments_dir == '00 Meta/02 Attachments'
+
+
+def test_from_env_dir_overrides_default_to_none(tmp_path, monkeypatch):
+    monkeypatch.setenv('VAULT_PATH', str(tmp_path))
+
+    config = Config.from_env()
+
+    assert config.daily_dir is None
+    assert config.weekly_dir is None
+    assert config.meetings_dir is None
+    assert config.templates_dir is None
+    assert config.attachments_dir is None
+
+
+def test_from_env_empty_dir_overrides_are_none(tmp_path):
+    env = {
+        'VAULT_PATH': str(tmp_path),
+        'NOTES_DAILY_DIR': '',
+        'NOTES_WEEKLY_DIR': '',
+        'NOTES_MEETINGS_DIR': '',
+        'NOTES_TEMPLATES_DIR': '',
+        'NOTES_ATTACHMENTS_DIR': '',
+    }
+
+    config = Config.from_env(env)
+
+    assert config.daily_dir is None
+    assert config.weekly_dir is None
+    assert config.meetings_dir is None
+    assert config.templates_dir is None
+    assert config.attachments_dir is None
+
+
 def test_missing_vault_path_is_config_error():
     with pytest.raises(NotesError) as excinfo:
         Config.from_env({})

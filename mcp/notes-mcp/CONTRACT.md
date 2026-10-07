@@ -179,3 +179,24 @@ Wave 2: D=`withwrite.py`,`tools/write.py`,`test_withwrite.py`,`test_tools_write.
         E=`tools/read.py`,`test_tools_read.py`;
         F=`tools/structure.py`,`server.py`,`test_tools_structure.py`,`test_server.py`.
 Wave 3: `context.py` (read-only), `test_tools_integration.py`, `README.md`, catalog, `pyproject.toml`.
+
+## 13. v3 additions (follow-up pass)
+
+- **index.py**: `rewrite_row(category_id, *, name=None, path=None, scope=None) -> str`
+  and `apply_row(...)`; columns name=1/path=2/scope=3, only non-`None` cells
+  change, missing id -> `CATEGORY_NOT_FOUND`. `rewrite_path`/`apply_path` remain
+  thin wrappers.
+- **structure.py**: `notes_move_category(ctx, category_id, new_path, new_name=None,
+  new_scope=None, **options)` — derives the category name from the new basename,
+  renames the hub to match (`git mv` + `# H1` + `scope` + qmd mirror), rewrites
+  title + path links, updates the Index Category/Path/Scope cells, one commit.
+- **frontmatter.py**: `normalize_scalars(value)` coerces every `datetime.date`/
+  `datetime.datetime` (recursively) to an ISO string; `parse` applies it so
+  unquoted ISO dates in hand-edited notes are accepted and JSON-safe.
+- **layout.py** (new): `journal_dir(ctx, kind)`, `templates_dir(ctx)`,
+  `attachments_dir(ctx)`, `template_rel(ctx, name)`, `resolve(ctx)` — precedence
+  is config env override -> Index category -> built-in fallback.
+- **config.py**: `daily_dir`, `weekly_dir`, `meetings_dir`, `templates_dir`,
+  `attachments_dir` (env `NOTES_*_DIR`, empty -> None).
+- **read.py**: `notes_status` payload gains `layout` (`layout.resolve(ctx)`).
+

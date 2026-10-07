@@ -19,7 +19,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from notes_mcp import frontmatter as _frontmatter
+from notes_mcp import frontmatter as _frontmatter, layout
 from notes_mcp.atomic import atomic_write
 from notes_mcp.errors import (
     DUPLICATE_FILENAME,
@@ -40,14 +40,8 @@ _ALLOWED_TYPES = frozenset(
     {'note', 'project', 'decision', 'meeting', 'person', 'howto', 'reference', 'daily', 'weekly', 'hub'}
 )
 _JOURNAL_TYPES = frozenset({'daily', 'weekly'})
-# Documented fallbacks when a category is missing from (or not yet in) the Index.
-_DAILY_DIR = '40 Journal/41 Daily'
-_WEEKLY_DIR = '40 Journal/42 Weekly'
-_MEETINGS_DIR = '40 Journal/43 Meetings'
-_META_DIR = '00 Meta'
-_DAILY_TEMPLATE_NAME = '01 Templates/Daily.md'
 # Never descend into these while hunting for a duplicate filename.
-_PRUNE_DIRS = frozenset({'.git', '.obsidian', '.githooks', _META_DIR})
+_PRUNE_DIRS = frozenset({'.git', '.obsidian', '.githooks'})
 
 
 # --------------------------------------------------------------------------- #
@@ -152,7 +146,7 @@ def notes_append(
     """
     try:
         if daily:
-            rel = f'{_category_dir(ctx, "41", _DAILY_DIR)}/{_today()}.md'
+            rel = f'{layout.journal_dir(ctx, "daily")}/{_today()}.md'
         elif path:
             target = ctx.guard.resolve(path, for_write=True)
             rel = ctx.guard.relpath(target)
@@ -183,12 +177,12 @@ def notes_append(
 # --------------------------------------------------------------------------- #
 def _create_rel(ctx: ToolContext, category: Any, title: str | None, note_type: str) -> str:
     if note_type == 'daily':
-        return f'{_category_dir(ctx, "41", _DAILY_DIR)}/{_today()}.md'
+        return f'{layout.journal_dir(ctx, "daily")}/{_today()}.md'
     if note_type == 'weekly':
-        return f'{_category_dir(ctx, "42", _WEEKLY_DIR)}/{_week_stamp()}.md'
+        return f'{layout.journal_dir(ctx, "weekly")}/{_week_stamp()}.md'
     safe = ctx.guard.sanitize_filename(title or '')
     if note_type == 'meeting':
-        return f'{_category_dir(ctx, "43", _MEETINGS_DIR)}/{_today()} {safe}.md'
+        return f'{layout.journal_dir(ctx, "meetings")}/{_today()} {safe}.md'
     return f'{category.path}/{safe}.md'
 
 
@@ -235,19 +229,12 @@ def _basename_exists(ctx: ToolContext, filename: str) -> bool:
     ``rglob`` and never descends into ``.git`` (whose object store holds
     arbitrarily many files).
     """
+    prune = _PRUNE_DIRS | {Path(layout.meta_dir(ctx)).name}
     for _dirpath, dirnames, filenames in os.walk(ctx.config.vault_path):
-        dirnames[:] = [name for name in dirnames if name not in _PRUNE_DIRS]
+        dirnames[:] = [name for name in dirnames if name not in prune]
         if filename in filenames:
             return True
     return False
-
-
-def _category_dir(ctx: ToolContext, category_id: str, fallback: str) -> str:
-    """The Index category's path, or ``fallback`` when it is absent."""
-    try:
-        return ctx.index.get(category_id).path
-    except NotesError:
-        return fallback
 
 
 def _create_payload(ctx: ToolContext, target: Path, text: str, rel: str, check_duplicate: bool) -> dict[str, Any]:
@@ -369,7 +356,7 @@ def _write_payload(target: Path, text: str, rel: str) -> dict[str, Any]:
 
 
 def _read_template(ctx: ToolContext) -> str:
-    rel = f'{_category_dir(ctx, "00", _META_DIR)}/{_DAILY_TEMPLATE_NAME}'
+    rel = layout.template_rel(ctx, 'Daily')
     template = ctx.config.vault_path / rel
     try:
         return template.read_text(encoding='utf-8')

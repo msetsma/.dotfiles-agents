@@ -36,6 +36,11 @@ class Config:
     qmd_embed_on_write: bool = True
     human_name: str | None = None
     human_email: str | None = None
+    daily_dir: str | None = None
+    weekly_dir: str | None = None
+    meetings_dir: str | None = None
+    templates_dir: str | None = None
+    attachments_dir: str | None = None
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Config:
@@ -77,6 +82,11 @@ class Config:
             qmd_embed_on_write=_as_bool(env.get('QMD_EMBED_ON_WRITE'), default=True),
             human_name=env.get('HUMAN_NAME') or None,
             human_email=env.get('HUMAN_EMAIL') or None,
+            daily_dir=env.get('NOTES_DAILY_DIR') or None,
+            weekly_dir=env.get('NOTES_WEEKLY_DIR') or None,
+            meetings_dir=env.get('NOTES_MEETINGS_DIR') or None,
+            templates_dir=env.get('NOTES_TEMPLATES_DIR') or None,
+            attachments_dir=env.get('NOTES_ATTACHMENTS_DIR') or None,
         )
 
 

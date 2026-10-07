@@ -231,6 +231,21 @@ def test_status_includes_branch(vault):
     assert result['qmd'] == ctx.search.health_result
 
 
+def test_status_includes_resolved_layout(vault):
+    ctx = make_ctx(vault)
+    ctx.search = FakeSearcher()
+
+    result = read.notes_status(ctx)
+
+    assert_ok(result)
+    assert set(result['layout']) == {'daily', 'weekly', 'meetings', 'templates', 'attachments'}
+    assert result['layout']['daily'] == '40 Journal/41 Daily'
+    assert result['layout']['weekly'] == '40 Journal/42 Weekly'
+    assert result['layout']['meetings'] == '40 Journal/43 Meetings'
+    assert result['layout']['templates'] == '00 Meta/01 Templates'
+    assert result['layout']['attachments'] == '00 Meta/02 Attachments'
+
+
 # --------------------------------------------------------------------------- #
 # notes_search
 # --------------------------------------------------------------------------- #

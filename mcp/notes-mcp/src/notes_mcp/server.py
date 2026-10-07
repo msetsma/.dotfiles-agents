@@ -147,9 +147,11 @@ def _structure_tools(ctx: ToolContext) -> dict[str, Tool]:
         """Pull the vault (autostash) and report status; no commit."""
         return _call(structure_tools.notes_sync, ctx)
 
-    def notes_move_category(category_id: str, new_path: str) -> dict[str, Any]:
-        """Move a whole category folder, updating the Index and its links."""
-        return _call(structure_tools.notes_move_category, ctx, category_id, new_path)
+    def notes_move_category(
+        category_id: str, new_path: str, new_name: str | None = None, new_scope: str | None = None
+    ) -> dict[str, Any]:
+        """Move a whole category folder, updating the Index, hub, and its links."""
+        return _call(structure_tools.notes_move_category, ctx, category_id, new_path, new_name, new_scope)
 
     return {
         'notes_move': notes_move,

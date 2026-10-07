@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 from notes_mcp.errors import NOT_FOUND, NotesError, notes_error
 from notes_mcp.frontmatter import parse as parse_frontmatter
 from notes_mcp.index import INDEX_REL_PATH
+from notes_mcp.layout import resolve as resolve_layout
 
 
 if TYPE_CHECKING:
@@ -155,6 +156,7 @@ def notes_status(ctx: ToolContext) -> dict:
             **summary,
             'last_pull': summary.get('last_pull'),
             'qmd': ctx.search.health(),
+            'layout': resolve_layout(ctx),
         }
     )
 

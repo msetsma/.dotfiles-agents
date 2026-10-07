@@ -8,6 +8,7 @@ write.
 
 from __future__ import annotations
 
+import datetime
 from typing import Any
 
 import yaml
@@ -52,7 +53,27 @@ def parse(text: str) -> tuple[dict[str, Any], str]:
     if not isinstance(loaded, dict):
         raise _invalid('frontmatter is not a YAML mapping')
 
-    return loaded, body
+    return normalize_scalars(loaded), body
+
+
+def normalize_scalars(value: Any) -> Any:
+    """Recursively coerce ``date``/``datetime`` scalars to ISO strings.
+
+    ``yaml.safe_load`` turns unquoted ISO dates into ``datetime.date`` /
+    ``datetime.datetime`` objects, which ``validate`` rejects and JSON cannot
+    return. Nested dicts and lists (including the ``qmd`` block) are walked;
+    every other value is returned untouched.
+
+    ``datetime.datetime`` subclasses ``datetime.date``, so a single ``date``
+    check covers both and ``.isoformat()`` keeps the time component when set.
+    """
+    if isinstance(value, datetime.date):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {key: normalize_scalars(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [normalize_scalars(item) for item in value]
+    return value
 
 
 class _NoAliasDumper(yaml.SafeDumper):

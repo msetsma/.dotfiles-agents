@@ -18,7 +18,9 @@ from .errors import CATEGORY_NOT_FOUND, INDEX_UNAVAILABLE, NotesError
 
 INDEX_REL_PATH = '00 Meta/00.00 Index.md'
 _HEADERS = ('ID', 'Category', 'Path', 'Scope')
+_NAME_COLUMN = 1
 _PATH_COLUMN = 2
+_SCOPE_COLUMN = 3
 
 
 @dataclass(frozen=True)
@@ -83,11 +85,19 @@ class VaultIndex:
             raise self._not_found(category_id, category.path)
         return category
 
-    def rewrite_path(self, category_id: str, new_path: str) -> str:
-        """Return the Index text with ``category_id``'s Path cell replaced.
+    def rewrite_row(
+        self, category_id: str, *, name: str | None = None, path: str | None = None, scope: str | None = None
+    ) -> str:
+        """Return the Index text with the requested ``category_id`` cells replaced.
 
-        Every other character, row, and the header/separator are preserved.
+        Only the cells whose keyword is not ``None`` change; every other
+        character, row, and the header/separator are preserved.
         """
+        replacements = {
+            column: value
+            for column, value in ((_NAME_COLUMN, name), (_PATH_COLUMN, path), (_SCOPE_COLUMN, scope))
+            if value is not None
+        }
         try:
             text = self.index_path.read_text(encoding='utf-8')
         except OSError as exc:
@@ -104,16 +114,26 @@ class VaultIndex:
                 continue
             if cells[0] == category_id:
                 index = header_at + 1 + offset
-                lines[index] = _replace_cell(line, _PATH_COLUMN, new_path)
+                lines[index] = _replace_cells(line, replacements)
                 return ''.join(lines)
         raise self._not_found(category_id)
 
-    def apply_path(self, category_id: str, new_path: str) -> None:
-        """Rewrite the Index Path cell on disk and invalidate the parsed cache."""
-        text = self.rewrite_path(category_id, new_path)
+    def apply_row(
+        self, category_id: str, *, name: str | None = None, path: str | None = None, scope: str | None = None
+    ) -> None:
+        """Rewrite the requested Index cells on disk and invalidate the parsed cache."""
+        text = self.rewrite_row(category_id, name=name, path=path, scope=scope)
         atomic_write(self.index_path, text)
         self._cache = None
         self._mtime = None
+
+    def rewrite_path(self, category_id: str, new_path: str) -> str:
+        """Return the Index text with ``category_id``'s Path cell replaced."""
+        return self.rewrite_row(category_id, path=new_path)
+
+    def apply_path(self, category_id: str, new_path: str) -> None:
+        """Rewrite the Index Path cell on disk and invalidate the parsed cache."""
+        self.apply_row(category_id, path=new_path)
 
     def _category_path(self, category: Category) -> Path | None:
         """Resolve a table path, or ``None`` if it escapes the vault."""
@@ -217,6 +237,13 @@ def _replace_cell(line: str, column: int, value: str) -> str:
     leading = segment[: len(segment) - len(segment.lstrip())]
     trailing = segment[len(segment.rstrip()) :]
     return line[:start] + leading + value + trailing + line[end:]
+
+
+def _replace_cells(line: str, replacements: dict[int, str]) -> str:
+    """Replace several cells on one row, right-to-left so spans stay stable."""
+    for column in sorted(replacements, reverse=True):
+        line = _replace_cell(line, column, replacements[column])
+    return line
 
 
 def _is_separator(cells: list[str]) -> bool:

@@ -184,6 +184,45 @@ def test_rewrite_path_missing_raises(index):
     assert excinfo.value.code == CATEGORY_NOT_FOUND
 
 
+def test_rewrite_row_changes_only_requested_cells(index):
+    old_row = '| 11 | Project A | 10 Projects/11 Project A | Placeholder project — rename or delete. |'
+    new_row = '| 11 | Renamed | 10 Projects/11 Project A | New scope. |'
+
+    result = index.rewrite_row('11', name='Renamed', scope='New scope.')
+
+    assert result == INDEX_MD.replace(old_row, new_row)
+
+
+def test_rewrite_row_leaves_other_rows_byte_identical(index):
+    before = INDEX_MD.splitlines()
+    after = index.rewrite_row('11', name='Renamed').splitlines()
+
+    assert len(before) == len(after)
+    for old_line, new_line in zip(before, after, strict=True):
+        if '| 11 |' in old_line:
+            assert new_line == old_line.replace('| Project A |', '| Renamed |')
+        else:
+            assert new_line == old_line
+
+
+def test_rewrite_row_with_no_cells_is_identity(index):
+    assert index.rewrite_row('11') == INDEX_MD
+
+
+def test_rewrite_row_missing_raises(index):
+    with pytest.raises(NotesError) as excinfo:
+        index.rewrite_row('99', name='anywhere')
+
+    assert excinfo.value.code == CATEGORY_NOT_FOUND
+
+
+def test_apply_row_writes_and_refreshes_cache(index):
+    index.apply_row('11', name='Renamed', path='10 Projects/11 Renamed', scope='New scope.')
+
+    category = index.get('11')
+    assert (category.name, category.path, category.scope) == ('Renamed', '10 Projects/11 Renamed', 'New scope.')
+
+
 def test_apply_path_writes_and_refreshes_cache(index):
     assert index.get('11').path == '10 Projects/11 Project A'
 

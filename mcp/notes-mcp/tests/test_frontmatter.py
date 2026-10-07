@@ -9,6 +9,7 @@ from notes_mcp.frontmatter import (
     HUB_REQUIRED_KEYS,
     REQUIRED_KEYS,
     new_frontmatter,
+    normalize_scalars,
     parse,
     serialize,
     sync_qmd_metadata,
@@ -21,6 +22,24 @@ TODAY = '2026-10-06'
 
 def make_fm():
     return new_frontmatter(type='note', status='active', today=TODAY)
+
+
+def make_unquoted_text(*, scope: bool = False) -> str:
+    """A hand-edited note whose dates are unquoted (human-typed YAML scalars)."""
+    lines = [
+        '---',
+        'type: note',
+        'status: active',
+        'created: 2026-10-06',
+        'updated: 2026-10-06T12:00:00',
+        'tags: []',
+        'related: []',
+        'source: []',
+    ]
+    if scope:
+        lines.append('scope: Ongoing platform ownership.')
+    lines.extend(['---', 'body', ''])
+    return '\n'.join(lines)
 
 
 def test_new_frontmatter_canonical_order():
@@ -153,3 +172,60 @@ def test_validate_hub_requires_scope():
     fm['scope'] = 'Ongoing platform ownership.'
     validate(fm, hub=True)
     assert 'scope' in HUB_REQUIRED_KEYS
+
+
+def test_parse_coerces_unquoted_dates_to_iso_strings():
+    fm, body = parse(make_unquoted_text())
+
+    assert fm['created'] == '2026-10-06'
+    assert fm['updated'] == '2026-10-06T12:00:00'
+    assert isinstance(fm['created'], str)
+    assert isinstance(fm['updated'], str)
+    assert body == 'body\n'
+
+
+def test_parse_coerces_nested_dates_in_qmd_and_lists():
+    text = make_unquoted_text().replace(
+        'source: []\n', 'source: []\nqmd:\n  metadata:\n    indexed: 2026-10-06\n  history:\n    - 2026-01-02\n'
+    )
+    fm, _ = parse(text)
+
+    assert fm['qmd']['metadata']['indexed'] == '2026-10-06'
+    assert isinstance(fm['qmd']['metadata']['indexed'], str)
+    assert fm['qmd']['history'] == ['2026-01-02']
+    assert isinstance(fm['qmd']['history'][0], str)
+
+
+def test_normalize_scalars_leaves_non_dates_untouched():
+    value = {
+        'count': 3,
+        'ratio': 0.5,
+        'flag': True,
+        'nothing': None,
+        'quoted': '2026-10-06',
+        'nested': ['plain', 1, False],
+    }
+
+    assert normalize_scalars(value) == value
+    assert normalize_scalars(value)['count'] == 3
+    assert normalize_scalars(value)['flag'] is True
+
+
+def test_validate_accepts_note_parsed_from_unquoted_dates():
+    fm, _ = parse(make_unquoted_text(scope=True))
+
+    validate(fm, hub=True)
+
+
+def test_serialize_quotes_coerced_dates_and_round_trips():
+    fm, _ = parse(make_unquoted_text())
+
+    text = serialize(fm, 'body\n')
+
+    assert "created: '2026-10-06'" in text
+    assert "updated: '2026-10-06T12:00:00'" in text
+    reparsed, body = parse(text)
+    assert reparsed == fm
+    assert reparsed['created'] == '2026-10-06'
+    assert reparsed['updated'] == '2026-10-06T12:00:00'
+    assert body == 'body\n'

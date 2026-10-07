@@ -293,6 +293,62 @@ def test_move_category_relocates_and_updates_index(vault) -> None:
     assert '[[10 Projects/11 Project A/' not in text
 
 
+def test_move_category_renames_hub_and_updates_index_cells(vault) -> None:
+    ctx = make_ctx(vault)
+    hub = '10 Projects/11 Project A/11 Project A.md'
+    hub_path = vault.agent / hub
+    # Align the hub H1 with its folder basename so the rename must rewrite it.
+    aligned = hub_path.read_text(encoding='utf-8').replace('# Project A\n', '# 11 Project A\n', 1)
+    hub_path.write_text(aligned, encoding='utf-8')
+    _run([GIT, 'add', '--', hub], vault.agent)
+    _run([GIT, 'commit', '-m', 'test: align hub H1'], vault.agent)
+
+    referrer = _create_in(
+        ctx, '33', 'Title Referrer', '# Title Referrer\n\nSee [[11 Project A]] and [[11 Project A|alias]].\n'
+    )
+    before = _head(vault)
+
+    result = structure.notes_move_category(ctx, '11', '10 Projects/Renamed Project', new_scope='Renamed scope.')
+
+    new_dir = '10 Projects/11 Renamed Project'
+    assert result['ok'] is True, result
+    assert result['path'] == new_dir
+    assert result['name'] == 'Renamed Project'
+    assert result['hub'] == f'{new_dir}/11 Renamed Project.md'
+    assert _commits_since(vault, before) == 1
+
+    assert not (vault.agent / CATEGORY).exists()
+    new_hub = vault.agent / new_dir / '11 Renamed Project.md'
+    assert new_hub.is_file()
+    fm, body = frontmatter.parse(new_hub.read_text(encoding='utf-8'))
+    assert '# 11 Renamed Project' in body
+    assert '# 11 Project A' not in body
+    assert fm['updated'] == _today()
+    assert fm['scope'] == 'Renamed scope.'
+
+    index_text = (vault.agent / '00 Meta/00.00 Index.md').read_text(encoding='utf-8')
+    assert '| 11 | Renamed Project | 10 Projects/11 Renamed Project | Renamed scope. |' in index_text
+
+    text = (vault.agent / referrer).read_text(encoding='utf-8')
+    assert '[[11 Renamed Project]]' in text
+    assert '[[11 Renamed Project|alias]]' in text
+    assert '[[11 Project A' not in text
+
+    category = ctx.index.get('11')
+    assert (category.name, category.path, category.scope) == ('Renamed Project', new_dir, 'Renamed scope.')
+
+
+def test_move_category_accepts_camelcase_aliases(vault) -> None:
+    ctx = make_ctx(vault)
+
+    result = structure.notes_move_category(ctx, '11', '10 Projects/Renamed', newName='Custom', newScope='Custom scope.')
+
+    assert result['ok'] is True, result
+    assert result['name'] == 'Custom'
+    assert ctx.index.get('11').name == 'Custom'
+    assert ctx.index.get('11').scope == 'Custom scope.'
+
+
 def test_move_category_rejects_meta_destination(vault) -> None:
     ctx = make_ctx(vault)
 

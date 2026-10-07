@@ -121,18 +121,34 @@ def notes_rename(ctx: ToolContext, path: str, new_title: str | None = None, **op
     return result
 
 
-def notes_move_category(ctx: ToolContext, category_id: str, new_path: str) -> dict[str, Any]:
-    """Relocate a whole category folder, updating the Index and its links.
+def notes_move_category(
+    ctx: ToolContext,
+    category_id: str,
+    new_path: str,
+    new_name: str | None = None,
+    new_scope: str | None = None,
+    **options: object,
+) -> dict[str, Any]:
+    """Relocate a whole category folder, updating the Index, hub, and its links.
 
-    ``git mv`` moves the directory recursively; every path-qualified wikilink
-    whose target lay under the old path is rewritten, and the Index ``Path``
-    row is updated, all in one commit. Categories may not move into or out of
-    ``00 Meta``, onto an existing directory, or onto their own path.
+    ``git mv`` moves the directory recursively; the hub note is renamed to match
+    the new folder basename, every path-qualified wikilink whose target lay under
+    the old path (plus title links to the old hub basename) is rewritten, and the
+    Index ``Category``/``Path``/``Scope`` cells are updated, all in one commit.
+
+    ``newName``/``newScope`` are accepted as camelCase aliases for ``new_name``/
+    ``new_scope``. Categories may not move into or out of ``00 Meta``, onto an
+    existing directory, or onto their own path.
     """
+    new_name = _alias(options, 'newName', new_name)
+    new_scope = _alias(options, 'newScope', new_scope)
     try:
         category = ctx.index.validate(category_id)
         old_dir = category.path
         new_dir = _normalize_new_dir(ctx, category.id, old_dir, new_path)
+        old_basename = PurePosixPath(old_dir).name
+        new_basename = PurePosixPath(new_dir).name
+        category_name = new_name or new_basename.removeprefix(f'{category.id} ')
         old_files = _category_files(ctx, old_dir)
         new_files = [_relocate(rel, old_dir, new_dir) for rel in old_files]
         paths = list(dict.fromkeys([*old_files, *new_files, INDEX_REL_PATH]))
@@ -143,7 +159,9 @@ def notes_move_category(ctx: ToolContext, category_id: str, new_path: str) -> di
             paths=paths,
             tool='notes_move_category',
             summary=f'{old_dir} -> {new_dir}',
-            fn=lambda: _move_category_payload(ctx, category_id, old_dir, new_dir),
+            fn=lambda: _move_category_payload(
+                ctx, category_id, old_dir, new_dir, old_basename, new_basename, category_name, new_scope, paths
+            ),
         )
     except NotesError as exc:
         return exc.to_dict()
@@ -210,11 +228,33 @@ def _rename_payload(
     return {'path': new_rel, 'rewritten': len(changed), 'needs_index_update': False}
 
 
-def _move_category_payload(ctx: ToolContext, category_id: str, old_dir: str, new_dir: str) -> dict[str, Any]:
+def _move_category_payload(
+    ctx: ToolContext,
+    category_id: str,
+    old_dir: str,
+    new_dir: str,
+    old_basename: str,
+    new_basename: str,
+    category_name: str,
+    new_scope: str | None,
+    paths: list[str],
+) -> dict[str, Any]:
     ctx.git.run(['git', 'mv', old_dir, new_dir])
-    changed = _rewrite_links(ctx, _prefix_patterns(old_dir, new_dir))
-    ctx.index.apply_path(category_id, new_dir)
-    return {'path': new_dir, 'index_path': INDEX_REL_PATH, 'rewritten': len(changed), 'needs_index_update': False}
+    renamed_hub = _rename_hub(ctx, new_dir, old_basename, new_basename)
+    if renamed_hub is not None:
+        _swap_path(paths, f'{new_dir}/{old_basename}.md', renamed_hub)
+    changed = _rewrite_links(ctx, _move_category_patterns(old_dir, new_dir, old_basename, new_basename))
+    _extend_paths(paths, changed)
+    hub_rel = _update_hub(ctx, new_dir, old_basename, new_basename, new_scope)
+    ctx.index.apply_row(category_id, name=category_name, path=new_dir, scope=new_scope)
+    return {
+        'path': new_dir,
+        'name': category_name,
+        'index_path': INDEX_REL_PATH,
+        'hub': hub_rel,
+        'rewritten': len(changed),
+        'needs_index_update': False,
+    }
 
 
 # --------------------------------------------------------------------------- #
@@ -306,6 +346,67 @@ def _prefix_patterns(old_dir: str, new_dir: str) -> list[tuple[re.Pattern[str], 
     """Prefix replacement for every link whose target was under ``old_dir/``."""
     pattern = re.compile(r'\[\[' + re.escape(old_dir + '/'))
     return [(pattern, f'[[{new_dir}/')]
+
+
+def _move_category_patterns(
+    old_dir: str, new_dir: str, old_basename: str, new_basename: str
+) -> list[tuple[re.Pattern[str], str]]:
+    """Path-prefix pairs plus, when the hub basename changed, the title link."""
+    patterns = _prefix_patterns(old_dir, new_dir)
+    if new_basename != old_basename:
+        patterns.append((_link_pattern(old_basename), f'[[{new_basename}'))
+    return patterns
+
+
+def _rename_hub(ctx: ToolContext, new_dir: str, old_basename: str, new_basename: str) -> str | None:
+    """Rename a moved category's hub note to the new basename; return its rel path."""
+    if new_basename == old_basename:
+        return None
+    old_rel = f'{new_dir}/{old_basename}.md'
+    if not (ctx.config.vault_path / old_rel).is_file():
+        return None
+    new_rel = f'{new_dir}/{new_basename}.md'
+    ctx.git.run(['git', 'mv', old_rel, new_rel])
+    return new_rel
+
+
+def _update_hub(
+    ctx: ToolContext, new_dir: str, old_basename: str, new_basename: str, new_scope: str | None
+) -> str | None:
+    """Rewrite a moved category's hub H1/updated/scope; return its rel path or ``None``."""
+    hub_rel = f'{new_dir}/{new_basename}.md'
+    target = ctx.config.vault_path / hub_rel
+    if not target.is_file():
+        return None
+    fm, body = frontmatter.parse(target.read_text(encoding='utf-8'))
+    body = _replace_h1(body, old_basename, new_basename)
+    fm['updated'] = _today()
+    if new_scope is not None:
+        fm['scope'] = new_scope
+    frontmatter.sync_qmd_metadata(fm)
+    frontmatter.validate(fm, hub=True)
+    atomic_write(target, frontmatter.serialize(fm, body))
+    return hub_rel
+
+
+def _replace_h1(body: str, old_basename: str, new_basename: str) -> str:
+    """Replace the first ``# <old_basename>`` heading with ``# <new_basename>``."""
+    if old_basename == new_basename:
+        return body
+    lines = body.split('\n')
+    for index, line in enumerate(lines):
+        if line.strip() == f'# {old_basename}':
+            lines[index] = f'# {new_basename}'
+            break
+    return '\n'.join(lines)
+
+
+def _swap_path(paths: list[str], old_rel: str, new_rel: str) -> None:
+    """Drop a stale path and add its replacement, preserving order of the rest."""
+    if old_rel in paths:
+        paths.remove(old_rel)
+    if new_rel not in paths:
+        paths.append(new_rel)
 
 
 def _strip_md(rel: str) -> str:
