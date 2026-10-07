@@ -1,0 +1,4 @@
+name        = "pi-subagents"
+description = "Single-agent delegation and scripted multi-agent workflows (subagents)."
+source      = "npm:pi-subagents"
+clients     = ["pi"]

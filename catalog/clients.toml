@@ -21,6 +21,10 @@
 #
 #   [<client>.instructions]  global instruction file (managed markdown block)
 #       path        = the client's global instruction file (AGENTS.md / CLAUDE.md)
+#
+#   [<client>.packages]  pi packages (merged into the settings `packages` list)
+#       path        = the client's settings.json
+#       install     = command run after packages are added/changed
 
 [opencode.mcp]
 path      = "~/.config/opencode/opencode.jsonc"
@@ -76,3 +80,11 @@ path      = "~/.codex/hooks.json"
 format    = "json"
 container = ["hooks"]
 style     = "codex"
+
+# pi rewrites settings.json itself (changelog version, `pi install`, `pi config`),
+# so agent-sync only merges the `packages` list: catalog entries are replaced by
+# identity (source minus @version), hand-installed packages are left alone.
+# Declaring a package doesn't download it; `install` reconciles node_modules.
+[pi.packages]
+path    = "~/.pi/agent/settings.json"
+install = ["pi", "update", "--extensions"]

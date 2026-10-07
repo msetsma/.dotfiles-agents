@@ -1,9 +1,9 @@
-# Agent configs: MCP servers, skills, plugins, hooks & instructions
+# Agent configs: MCP servers, skills, plugins, hooks, instructions & pi packages
 
 [![License: Apache-2.0](https://img.shields.io/github/license/msetsma/.dotfiles-agents?style=flat-square)](https://github.com/msetsma/.dotfiles-agents/blob/main/LICENSE) [![Last commit](https://img.shields.io/github/last-commit/msetsma/.dotfiles-agents?style=flat-square)](https://github.com/msetsma/.dotfiles-agents/commits/main)
 
 A catalog-driven config for coding agents. MCP servers (custom and third-party),
-skills, plugins, hooks, and per-tool instructions are declared once in
+skills, plugins, hooks, per-tool instructions, and pi packages are declared once in
 [`catalog/`](catalog/) and synced into each agent by one command.
 
 ---
@@ -29,6 +29,7 @@ make sync         # render + merge into every agent
 │   ├── plugins/<name>.toml # opencode plugins (content in <name>.ts)
 │   ├── hooks/<name>.toml   # Claude Code / Codex event hooks
 │   ├── instructions/*.toml # per-tool prompts (content in <name>.md)
+│   ├── packages/*.toml     # pi packages (npm / git / local source)
 │   ├── clients.toml        # where each agent keeps each kind
 │   ├── paths.toml          # machine paths + ${VARS}
 │   └── retired.toml        # resources to scrub from every client
@@ -55,7 +56,7 @@ client with one of three strategies:
 
 | Strategy    | Used for           | Behaviour                                                          |
 |-------------|--------------------|--------------------------------------------------------------------|
-| **merge**   | MCP servers, hooks | rewrite only the managed subtree; leave the rest of the file alone |
+| **merge**   | MCP servers, hooks, pi packages | rewrite only the managed subtree; leave the rest of the file alone |
 | **symlink** | skills, plugins    | link one item per file/dir into the client's directory             |
 | **block**   | instructions       | replace one marked region in the client's global file              |
 
@@ -75,6 +76,7 @@ no block is skipped.
 | Claude Desktop | mcp          | `~/Library/Application Support/Claude/claude_desktop_config.json` | merge    |
 | Codex          | mcp          | `~/.codex/config.toml` → `[mcp_servers]`                          | merge    |
 | Codex          | hooks        | `~/.codex/hooks.json` → `hooks`                                   | merge    |
+| pi             | packages     | `~/.pi/agent/settings.json` → `packages`                          | merge    |
 
 opencode has no `skills` row; it inherits `~/.claude/skills/`.
 
@@ -85,11 +87,18 @@ catalog/skills/<name>.toml       # + <name>/SKILL.md
 catalog/plugins/<name>.toml      # + <name>.ts
 catalog/hooks/<name>.toml        # event + matcher + command
 catalog/instructions/<name>.toml # + <name>.md
+catalog/packages/<name>.toml     # source + optional resource filters
 ```
 
 - **Skills / plugins**: symlinked per item.
 - **Hooks**: merged additively; retire one via `hook_commands` in `catalog/retired.toml`.
 - **Instructions**: per-client, wrapped in a `<!-- dotfiles-agents:begin/end -->` block.
+- **Packages** (pi): merged into the `packages` list by identity (source minus
+  `@version`), so packages you `pi install` by hand stay put. Optional
+  `extensions` / `skills` / `prompts` / `themes` arrays become pi's resource
+  filters. Sync runs `pi update --extensions` when a package is added or
+  changed. Edits made with `pi config` to a catalog package are overwritten on
+  the next sync, so copy them into the TOML.
 
 `catalog/skills/github-glowup/` is a real skill; `example-skill/` and
 `hooks/example-hook.toml` are templates.
@@ -118,6 +127,16 @@ Full table of what this repo manages. `custom` = source lives in this repo;
 | `playwright`                                 | external | `npx @playwright/mcp@latest`                                            | opencode                                     |
 
 </details>
+
+### pi packages
+
+| Package | Source | Purpose |
+|---|---|---|
+| `pi-subagents` | `npm:pi-subagents` | single-agent delegation and scripted multi-agent workflows |
+| `rpiv-ask-user-question` | `npm:@juicesharp/rpiv-ask-user-question` | structured questions with typed options instead of guessing |
+| `rpiv-todo` | `npm:@juicesharp/rpiv-todo` | model-managed todo list as a live overlay |
+| `pi-goal-x` | `npm:pi-goal-x` | `/goal`: goal planning, persistent progress, completion auditor |
+| `pi-zentui` | `npm:pi-zentui` | UI components: editors, messages, progress, statuslines |
 
 ## Secrets
 
@@ -183,6 +202,8 @@ make agent-update     # apply, then re-sync
    add `tags = ["work"]` / `["macos"]` if it shouldn't reach every machine).
 2. **Skill**: add `catalog/skills/<name>.toml` + `catalog/skills/<name>/SKILL.md`.
 3. **Hook**: add `catalog/hooks/<name>.toml`.
-4. **Retire**: add the name (or, for hooks, the command) to `catalog/retired.toml`.
-5. `make agent-check`, then `make sync`.
-6. New server? Add a row to the Inventory table above.
+4. **pi package**: add `catalog/packages/<name>.toml` (`source = "npm:..."`,
+   `clients = ["pi"]`) instead of running `pi install`.
+5. **Retire**: add the name (for hooks the command, for packages the source) to `catalog/retired.toml`.
+6. `make agent-check`, then `make sync`.
+7. New server or package? Add a row to the Inventory tables above.

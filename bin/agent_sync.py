@@ -8,6 +8,7 @@ Single source of truth
   catalog/plugins/*.toml   one file per plugin (content in catalog/plugins/<name>.ts)
   catalog/hooks/*.toml     one file per event hook
   catalog/instructions/*.toml  one file per instruction overlay (content in <name>.md)
+  catalog/packages/*.toml  one file per pi package (npm / git / local source)
   catalog/clients.toml     where each agent keeps each kind, and how it spells it
   catalog/paths.toml       machine-specific command paths + variables
   catalog/retired.toml     resources to scrub from every client
@@ -19,7 +20,7 @@ Behaviour
 Each client declares one block per *kind* it supports. Three strategies:
 
 * ``merge``     rewrite a subtree of a shared config in place, leaving every
-                other key alone (MCP maps; hook event maps).
+                other key alone (MCP maps; hook event maps; pi package list).
 * ``symlink``   link each catalog item into a client directory (skills, plugins).
 * ``block``     swap a marked region inside a shared markdown file, leaving the
                 rest of the file alone (instructions).
@@ -40,6 +41,8 @@ import argparse
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import NoReturn
@@ -248,6 +251,27 @@ def load_instructions(ctx: dict, local: dict | None = None) -> dict:
             'text': source.read_text(encoding='utf-8'),
         }
     return instructions
+
+
+PACKAGE_FILTERS = ('extensions', 'skills', 'prompts', 'themes')
+
+
+def load_packages(ctx: dict, local: dict | None = None) -> dict:
+    """Each ``catalog/packages/<name>.toml`` names one pi package ``source``,
+    plus optional resource filters (see pi docs/packages.md)."""
+    packages: dict[str, dict] = {}
+    for path in sorted((CATALOG / 'packages').glob('*.toml')):
+        raw = load_raw(path, 'packages', local)
+        name = raw['name']
+        packages[name] = {
+            'name': name,
+            'description': raw.get('description', ''),
+            'clients': list(raw.get('clients', [])),
+            'tags': list(raw.get('tags', [])),
+            'source': expand(raw['source'], ctx),
+            'filters': {k: list(raw[k]) for k in PACKAGE_FILTERS if k in raw},
+        }
+    return packages
 
 
 # --------------------------------------------------------------------------- #
@@ -507,6 +531,64 @@ def sync_plugins(client: str, cli: dict, plugins: dict, retired: list) -> bool:
 
 
 # --------------------------------------------------------------------------- #
+# packages (merge into pi's settings.json package list)
+# --------------------------------------------------------------------------- #
+def package_id(source: str) -> str:
+    """Pi's package identity: the source minus any ``@version`` / ``@ref``."""
+    for prefix in ('npm:', 'git:'):
+        if source.startswith(prefix):
+            body = source[len(prefix) :]
+            at = body.rfind('@')
+            # npm scopes and git@host URLs keep their leading/host ``@``.
+            if at > 0 and '/' not in body[at:] and ':' not in body[at:]:
+                body = body[:at]
+            return prefix + body
+    return source
+
+
+def render_package(pkg: dict) -> str | dict:
+    return {'source': pkg['source'], **pkg['filters']} if pkg['filters'] else pkg['source']
+
+
+def _entry_source(entry) -> str:
+    return entry['source'] if isinstance(entry, dict) else entry
+
+
+def sync_packages(client: str, cli: dict, packages: dict, retired: list) -> bool:
+    target = Path(cli['path']).expanduser()
+    doc = json.loads(strip_jsonc(target.read_text(encoding='utf-8'))) if target.exists() else {}
+    current = doc.get('packages', [])
+    desired = {package_id(p['source']): render_package(p) for p in packages.values() if client in p['clients']}
+    retired_ids = {package_id(r) for r in retired}
+
+    existing = {package_id(_entry_source(e)): e for e in current}
+    added = sorted(i for i in desired if i not in existing)
+    changed = sorted(i for i in desired if i in existing and existing[i] != desired[i])
+    removed = sorted(i for i in existing if i in retired_ids and i not in desired)
+    dirty = report(client, target, added, changed, removed, kind='packages')
+    if CONFIG.dry_run or not dirty:
+        return dirty
+
+    # Keep hand-installed packages in place; replace managed ones, append new.
+    merged = []
+    for entry in current:
+        pid = package_id(_entry_source(entry))
+        if pid in retired_ids and pid not in desired:
+            continue
+        merged.append(desired.pop(pid, entry))
+    merged.extend(desired[i] for i in sorted(desired))
+    doc['packages'] = merged
+    write_json(target, doc)
+    install = cli.get('install')
+    if install and (added or changed):
+        if shutil.which(install[0]):
+            subprocess.run(install, check=False)
+        else:
+            print(f'  {install[0]} not on PATH; run `{" ".join(install)}` to install')
+    return dirty
+
+
+# --------------------------------------------------------------------------- #
 # hooks (additive merge into a shared event map)
 # --------------------------------------------------------------------------- #
 def _canon(obj) -> str:
@@ -711,6 +793,8 @@ def sync_client(client: str, kinds: dict, catalogs: dict, retired: dict) -> bool
         dirty |= sync_plugins(client, kinds['plugins'], catalogs['plugins'], retired['plugins'])
     if 'hooks' in kinds:
         dirty |= sync_hooks(client, kinds['hooks'], catalogs['hooks'], retired['hook_commands'])
+    if 'packages' in kinds:
+        dirty |= sync_packages(client, kinds['packages'], catalogs['packages'], retired['packages'])
     if 'instructions' in kinds:
         dirty |= sync_instructions(client, kinds['instructions'], catalogs['instructions'], retired['instructions'])
     return dirty
@@ -722,6 +806,7 @@ LOADERS = {
     'plugins': load_plugins,
     'hooks': load_hooks,
     'instructions': load_instructions,
+    'packages': load_packages,
 }
 
 
@@ -745,7 +830,7 @@ def main() -> int:
     catalogs = load_catalogs(build_context(local), local, profile)
     clients = deep_merge(load_toml(CATALOG / 'clients.toml'), local.get('clients', {}))
     raw_retired = load_toml(CATALOG / 'retired.toml')
-    retired = {key: raw_retired.get(key, []) for key in ('mcp', 'skills', 'plugins', 'hook_commands', 'instructions')}
+    retired = {key: raw_retired.get(key, []) for key in ('mcp', 'skills', 'plugins', 'hook_commands', 'instructions', 'packages')}
 
     wanted = profile.get('clients')
     requested = args.client or (wanted if isinstance(wanted, list) else [])

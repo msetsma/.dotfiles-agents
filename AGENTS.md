@@ -56,9 +56,9 @@ README is the detail.
 
 Tool-level detail lives in each directory's `README.md`. Don't duplicate it here.
 
-## Skills, plugins, hooks & instructions
+## Skills, plugins, hooks, instructions & packages
 
-Alongside servers, the catalog owns four more kinds:
+Alongside servers, the catalog owns five more kinds:
 
 - **Skills**: `catalog/skills/<name>.toml` (definition) plus
   `catalog/skills/<name>/SKILL.md` (content), symlinked into each listed client's
@@ -77,6 +77,11 @@ Alongside servers, the catalog owns four more kinds:
   outside it survive. Instructions are deliberately per-client: each tool's
   vocabulary and agent names differ.
 
+- **Packages** (pi only): `catalog/packages/<name>.toml` with a `source`
+  (`npm:` / `git:` / local path) and optional resource filters, merged into
+  `~/.pi/agent/settings.json` → `packages`. Add packages here, not with
+  `pi install`; sync runs `pi update --extensions` to download them.
+
 The `python-clean` gate is the worked example: a Claude Code hook plus an
 opencode plugin over `bin/clean-python`.
 
@@ -88,7 +93,8 @@ client supports; a kind with no block is skipped for that client.
 > The snippets below are a fallback for a machine without this repo; prefer the
 > catalog.
 
-Configured clients: **opencode**, **Claude Code**, **Claude Desktop**, **Codex**.
+Configured clients: **opencode**, **Claude Code**, **Claude Desktop**, **Codex**
+(MCP), plus **pi** (packages only so far).
 
 Always use an **absolute path to `uv`** (`/opt/homebrew/bin/uv`) in GUI apps;
 they don't inherit your shell `PATH`. Replace the command/args with the new
