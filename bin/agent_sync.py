@@ -53,13 +53,15 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - py<3.11
     import tomli as tomllib  # type: ignore[import-not-found]
 
+# Sibling module; the engine runs as a script and is also loaded by path in tests.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from agent_profile import deep_merge, is_selected, select_clients, split_command
+from jsonc import strip_jsonc
+
+
 REPO = Path(__file__).resolve().parent.parent
 CATALOG = REPO / 'catalog'
 
-# Sibling module; the engine runs as a script and is also loaded by path in tests.
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from agent_profile import deep_merge, is_selected, select_clients, split_command  # noqa: E402
-from jsonc import strip_jsonc  # noqa: E402
 
 ENV_REF = re.compile(r'\$\{([A-Za-z0-9_]+)\}')
 OPCODE_ENV_REF = re.compile(r'\{env:([A-Za-z0-9_]+)\}')
