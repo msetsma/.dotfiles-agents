@@ -1,6 +1,7 @@
 import json
 
 import pytest
+
 from teams_browser.mcp import install
 
 
@@ -34,12 +35,12 @@ def test_install_print_only_does_not_write(tmp_path):
 def test_install_rejects_invalid_json(tmp_path):
     config = tmp_path / 'config.json'
     config.write_text('{ not json')
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match='is not valid JSON'):
         install.install('claude-code', path=config)
 
 
 def test_unknown_client():
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Unknown client 'nope'"):
         install.snippet('nope')
 
 

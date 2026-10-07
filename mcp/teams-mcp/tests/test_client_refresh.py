@@ -1,11 +1,12 @@
 """Refresh behaviour: the MCP server must never block on a browser."""
 
 import pytest
+
 from teams_browser.auth import login as login_module, refresh as refresh_module
 from teams_browser.auth.session import save_session
 from teams_browser.client import TeamsClient
 from teams_browser.config import Paths
-from teams_browser.errors import AuthRequired
+from teams_browser.errors import AuthRequiredError
 from teams_browser.mcp import server as mcp_server
 
 from .helpers import make_session
@@ -34,7 +35,7 @@ def test_refresh_without_browser_fallback_fails_fast(tmp_path, monkeypatch):
     monkeypatch.setattr(login_module, 'refresh_session_headless', _forbidden)
 
     client = TeamsClient(paths=paths, browser_refresh=False)
-    with pytest.raises(AuthRequired, match='teams-browser login'):
+    with pytest.raises(AuthRequiredError, match='teams-browser login'):
         client.refresh()
 
 
@@ -71,7 +72,7 @@ def test_start_login_spawns_detached_process(monkeypatch):
             return None  # still running
 
     monkeypatch.setattr(mcp_server.subprocess, 'Popen', FakePopen)
-    monkeypatch.setattr(mcp_server, '_login_process', None)
+    monkeypatch.setitem(mcp_server._login, 'process', None)
 
     result = mcp_server.start_login()
     assert result['started'] is True

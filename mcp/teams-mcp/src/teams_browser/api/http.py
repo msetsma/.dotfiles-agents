@@ -14,7 +14,7 @@ from typing import Any
 import httpx
 
 from ..config import MAX_RETRIES, request_timeout
-from ..errors import ApiError, RateLimited, TokenExpired
+from ..errors import ApiError, RateLimitedError, TokenExpiredError
 from ..models import TokenSet
 
 
@@ -27,7 +27,7 @@ _SUBSTRATE_PREFER = 'substrate.flexibleschema,outlook.data-source="Substrate",ex
 def substrate_headers(tokens: TokenSet) -> dict[str, str]:
     """Auth + content negotiation for the Substrate ``WorkingSetFiles`` API."""
     if not tokens.substrate:
-        raise TokenExpired('No Substrate token in the session. Run `teams-browser login` to refresh.')
+        raise TokenExpiredError('No Substrate token in the session. Run `teams-browser login` to refresh.')
     return {
         'Authorization': f'Bearer {tokens.substrate.token}',
         'Accept': 'application/json',
@@ -76,11 +76,11 @@ class HttpClient:
                     time.sleep(min(retry_after, 30))
                 else:
                     self._sleep(attempt)
-                last_error = RateLimited('upstream throttled', retry_after)
+                last_error = RateLimitedError('upstream throttled', retry_after)
                 continue
 
             if response.status_code == 401:
-                raise TokenExpired(
+                raise TokenExpiredError(
                     'Upstream returned 401 - the session token is no longer valid. '
                     'Run `teams-browser login` (or let it auto-refresh).'
                 )

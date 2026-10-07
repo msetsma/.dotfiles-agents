@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -24,7 +24,7 @@ from ..analytics import analyse, render_digest
 from ..client import TeamsClient
 from ..config import Paths
 from ..digest import build_digest
-from ..errors import AuthRequired, ResourceNotFound
+from ..errors import AuthRequiredError, ResourceNotFoundError
 from ..store import Store
 from ..transcript_text import to_markdown
 
@@ -44,7 +44,7 @@ def _parse_day(value: str | None) -> datetime | None:
         parsed = date.fromisoformat(value)
     except ValueError:
         return None
-    return datetime.combine(parsed, time.min, tzinfo=timezone.utc)
+    return datetime.combine(parsed, time.min, tzinfo=UTC)
 
 
 def _dump(model: Any) -> dict[str, Any]:
@@ -76,7 +76,7 @@ def list_meetings(start_date: str | None = None, end_date: str | None = None, li
         limit: Maximum number of meetings to return.
     """
     with _client() as client:
-        start = _parse_day(start_date) or datetime.now(tz=timezone.utc)
+        start = _parse_day(start_date) or datetime.now(tz=UTC)
         end = _parse_day(end_date) or (start + timedelta(days=7))
         meetings = client.list_meetings(start=start, end=end, limit=limit)
         return {'count': len(meetings), 'meetings': [_dump(m) for m in meetings]}
@@ -92,7 +92,7 @@ def get_meeting(subject: str, date_str: str | None = None) -> dict[str, Any]:
     with _client() as client:
         matches = client.find_meetings(subject, on_date=_parse_day(date_str))
         if not matches:
-            raise ResourceNotFound(f"No meetings matched '{subject}'.")
+            raise ResourceNotFoundError(f"No meetings matched '{subject}'.")
         return {'count': len(matches), 'meetings': [_dump(m) for m in matches]}
 
 
@@ -157,7 +157,7 @@ def list_calls(
             none (False). Omit for all calls.
         limit: Maximum number of calls to return.
     """
-    until = datetime.now(tz=timezone.utc) + timedelta(days=1)
+    until = datetime.now(tz=UTC) + timedelta(days=1)
     since = until - timedelta(days=days) if days else None
     with _client() as client:
         calls = client.list_calls(
@@ -178,7 +178,7 @@ def get_meeting_attachments(subject: str, date_str: str | None = None) -> dict[s
     with _client() as client:
         meeting = client.find_online_meeting(subject, on_date=_parse_day(date_str))
         if meeting is None:
-            raise ResourceNotFound(f"No online meeting matched '{subject}'.")
+            raise ResourceNotFoundError(f"No online meeting matched '{subject}'.")
         files = client.get_meeting_files(meeting.thread_id, include_recordings=False)
         return {
             'meeting_subject': meeting.subject,
@@ -237,7 +237,7 @@ def get_archive_digest(days: int = 7) -> dict[str, Any]:
     Args:
         days: Size of the window in days.
     """
-    end = datetime.now(tz=timezone.utc)
+    end = datetime.now(tz=UTC)
     start = end - timedelta(days=days)
     with Store(Paths.default().db_file) as store:
         title, sections = build_digest(store, start=start, end=end)
@@ -289,30 +289,31 @@ def session_status() -> dict[str, Any]:
     try:
         with _client() as client:
             return client.status()
-    except AuthRequired as exc:
+    except AuthRequiredError as exc:
         return {'authenticated': False, 'error': str(exc), 'hint': 'Run `teams-browser login`.'}
 
 
-_login_process: subprocess.Popen | None = None
+# The detached login process, if one was started; held in a dict so it can be rebound without `global`.
+_login: dict[str, subprocess.Popen | None] = {'process': None}
 
 
 def start_login() -> dict[str, Any]:
     """Open a browser window on the user's machine for interactive Teams sign-in.
 
-    Use this when other tools fail with AuthRequired ("run teams-browser
+    Use this when other tools fail with AuthRequiredError ("run teams-browser
     login"). The login runs in a detached background process so this call
     returns immediately; the window stays open for the user to complete
     sign-in, including MFA/Conditional Access prompts. Afterwards call
     session_status to confirm, then retry the tool that failed.
     """
-    global _login_process
-    if _login_process is not None and _login_process.poll() is None:
+    process = _login['process']
+    if process is not None and process.poll() is None:
         return {
             'started': False,
             'already_running': True,
             'hint': 'A login window is already open. Complete sign-in there, then call session_status.',
         }
-    _login_process = subprocess.Popen(
+    process = _login['process'] = subprocess.Popen(
         [sys.executable, '-m', 'teams_browser.cli', 'login'],
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
@@ -321,7 +322,7 @@ def start_login() -> dict[str, Any]:
     )
     return {
         'started': True,
-        'pid': _login_process.pid,
+        'pid': process.pid,
         'hint': (
             "A browser window opened on the user's machine for Teams sign-in. "
             'Ask the user to complete it, then call session_status to confirm.'
@@ -348,7 +349,7 @@ def _meetings_markdown(items: list) -> str:
 def resource_meetings_today() -> str:
     """Today's Teams meetings."""
     with _client() as client:
-        start = datetime.now(tz=timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        start = datetime.now(tz=UTC).replace(hour=0, minute=0, second=0, microsecond=0)
         return _meetings_markdown(client.list_meetings(start=start, end=start + timedelta(days=1)))
 
 
@@ -374,8 +375,7 @@ def resource_recent_transcripts() -> str:
     if not rows:
         return '_No transcripts archived yet. Run `sync_archive`._'
     lines = ['| Date | Meeting | Entries |', '| --- | --- | --- |']
-    for r in rows:
-        lines.append(f'| {(r["recording_start"] or "")[:10]} | {r["meeting_subject"]} | {r["entry_count"]} |')
+    lines.extend(f'| {(r["recording_start"] or "")[:10]} | {r["meeting_subject"]} | {r["entry_count"]} |' for r in rows)
     return '\n'.join(lines)
 
 
@@ -419,7 +419,7 @@ def weekly_digest(days: str = '7') -> str:
     # failing schema validation.
     try:
         window = max(1, int(str(days).strip()))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         window = 7
     return (
         f'Build a digest of my Teams meetings from the last {window} days.\n\n'

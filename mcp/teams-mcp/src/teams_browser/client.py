@@ -7,7 +7,8 @@ matter of reimplementing this class against the same method surface.
 
 from __future__ import annotations
 
-from datetime import date, datetime, time, timedelta, timezone
+import contextlib
+from datetime import UTC, date, datetime, time, timedelta
 
 from .api import (
     calendar as calendar_api,
@@ -21,7 +22,7 @@ from .auth import login as login_module, refresh as refresh_module
 from .auth.session import Paths, SessionState, load_session
 from .auth.tokens import extract_region_config, extract_tokens, get_identity, require_region
 from .config import region_override
-from .errors import AuthRequired, ResourceNotFound, TeamsBrowserError
+from .errors import AuthRequiredError, ResourceNotFoundError, TeamsBrowserError
 from .models import (
     Call,
     ChatMessage,
@@ -62,7 +63,7 @@ class TeamsClient:
         if self._session is None:
             state = load_session(self.paths)
             if state is None:
-                raise AuthRequired('No Teams session found. Run `teams-browser login` first.')
+                raise AuthRequiredError('No Teams session found. Run `teams-browser login` first.')
             self._session = state
         return self._session
 
@@ -90,32 +91,31 @@ class TeamsClient:
         if not stale:
             return
         if not self.auto_refresh:
-            from .errors import TokenExpired
+            from .errors import TokenExpiredError
 
-            raise TokenExpired('Session tokens are expired. Run `teams-browser login`.')
+            raise TokenExpiredError('Session tokens are expired. Run `teams-browser login`.')
         self.refresh()
         self.reload()
 
     def refresh(self) -> str:
         """Attempt a silent, browserless refresh, then fall back to headless browser."""
         state = self._load()
-        try:
+        with contextlib.suppress(Exception):
             if refresh_module.refresh_via_http(state, self.paths):
                 return 'http'
-        except Exception:
-            pass
         if not self.browser_refresh:
-            raise AuthRequired(
+            raise AuthRequiredError(
                 'Session tokens are stale and the silent refresh failed. '
                 'Run `teams-browser login` (or `teams-browser refresh`).'
             )
         try:
             login_module.refresh_session_headless(paths=self.paths)
-            return 'browser'
         except Exception as exc:  # pragma: no cover - environment dependent
-            raise AuthRequired(
+            raise AuthRequiredError(
                 'Automatic token refresh failed (the sign-in is no longer valid). Run `teams-browser login` again.'
             ) from exc
+        else:
+            return 'browser'
 
     # -- context ------------------------------------------------------------ #
 
@@ -172,7 +172,7 @@ class TeamsClient:
         limit: int = 100,
     ) -> list[Meeting]:
         if on_date is not None:
-            start = datetime.combine(on_date, time.min, tzinfo=timezone.utc)
+            start = datetime.combine(on_date, time.min, tzinfo=UTC)
             end = start + timedelta(days=1)
         meetings = self.list_meetings(start=start, end=end, limit=limit)
         needle = subject.lower()
@@ -230,7 +230,7 @@ class TeamsClient:
         self, subject: str, *, on_date: date | None = None, start: datetime | None = None, end: datetime | None = None
     ) -> Transcript:
         if on_date is not None:
-            start = datetime.combine(on_date, time.min, tzinfo=timezone.utc)
+            start = datetime.combine(on_date, time.min, tzinfo=UTC)
             end = start + timedelta(days=1)
         meeting = self.find_online_meeting(subject, start=start, end=end)
         if meeting:
@@ -239,7 +239,7 @@ class TeamsClient:
         call = self._find_call(subject, since=start, until=end)
         if call:
             return self.get_transcript(call.thread_id, subject=call.title or subject, meeting_date=call.start_time)
-        raise ResourceNotFound(f"No meetings or calls with a transcript matched '{subject}'.")
+        raise ResourceNotFoundError(f"No meetings or calls with a transcript matched '{subject}'.")
 
     def _find_call(self, needle: str, *, since: datetime | None = None, until: datetime | None = None) -> Call | None:
         try:
@@ -319,9 +319,7 @@ def _in_window(value: datetime | None, since: datetime | None, until: datetime |
         return since is None and until is None
     if since is not None and value < since:
         return False
-    if until is not None and value >= until:
-        return False
-    return True
+    return not (until is not None and value >= until)
 
 
 def _tok(info) -> dict | None:

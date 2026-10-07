@@ -3,6 +3,7 @@
 import json
 
 import pytest
+
 from teams_browser.api.chats import (
     conversation_kind,
     find_conversation,
@@ -12,7 +13,7 @@ from teams_browser.api.chats import (
     parse_conversation,
     parse_message,
 )
-from teams_browser.errors import ResourceNotFound
+from teams_browser.errors import ResourceNotFoundError
 from teams_browser.models import RegionConfig, TokenSet
 
 from .helpers import make_jwt
@@ -153,7 +154,7 @@ def test_find_conversation_by_topic():
 
 def test_find_conversation_missing_raises():
     client = _StubClient(_fixture('chatsvc_conversations.json'))
-    with pytest.raises(ResourceNotFound):
+    with pytest.raises(ResourceNotFoundError):
         find_conversation(_region(), _tokens(), 'nonexistent', client=client)
 
 
@@ -165,7 +166,7 @@ def test_find_conversation_by_thread_id_checks_access():
 
 
 def test_missing_skype_token_raises():
-    from teams_browser.errors import TokenExpired
+    from teams_browser.errors import TokenExpiredError
 
-    with pytest.raises(TokenExpired):
+    with pytest.raises(TokenExpiredError):
         list_conversations(_region(), TokenSet(), client=_StubClient({}))

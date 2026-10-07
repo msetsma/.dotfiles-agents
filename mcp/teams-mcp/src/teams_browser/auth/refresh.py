@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Iterator
 from typing import Any
 from urllib.parse import quote
 
@@ -22,7 +23,7 @@ from ..config import request_timeout
 from .session import Paths, SessionState, get_teams_origin, save_session
 
 
-_TOKEN_ENDPOINT = 'https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token'
+_ENTRA_GRANT_URL = 'https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token'
 _AUTHSVC_ENDPOINT = 'https://authsvc.teams.microsoft.com/v1.0/authz'
 
 # resource marker -> requested scope
@@ -79,17 +80,29 @@ def refresh_via_http(state: SessionState, paths: Paths | None = None) -> bool:
     return True
 
 
+def _parse_entry(item: dict[str, str]) -> tuple[bool, Any]:
+    """``(True, value)`` when the storage item holds JSON, else ``(False, None)``."""
+    try:
+        return True, json.loads(item.get('value', ''))
+    except Exception:
+        return False, None
+
+
+def _json_entries(local_storage: list[dict[str, str]]) -> Iterator[tuple[dict[str, str], Any]]:
+    """Yield ``(item, parsed)`` for each storage item whose value is JSON; others are skipped."""
+    for item in local_storage:
+        ok, entry = _parse_entry(item)
+        if ok:
+            yield item, entry
+
+
 def _extract_msal_cache(local_storage: list[dict[str, str]]) -> dict[str, Any] | None:
     refresh_token = None
     refresh_key = None
     client_id = None
     tenant_id = None
 
-    for item in local_storage:
-        try:
-            entry = json.loads(item.get('value', ''))
-        except Exception:
-            continue
+    for item, entry in _json_entries(local_storage):
         if entry.get('credentialType') == 'RefreshToken' and entry.get('secret'):
             refresh_token = entry['secret']
             refresh_key = item['name']
@@ -110,11 +123,7 @@ def _extract_msal_cache(local_storage: list[dict[str, str]]) -> dict[str, Any] |
 
 
 def entry_home_account(local_storage: list[dict[str, str]]) -> str | None:
-    for item in local_storage:
-        try:
-            entry = json.loads(item.get('value', ''))
-        except Exception:
-            continue
+    for _item, entry in _json_entries(local_storage):
         if entry.get('homeAccountId'):
             return entry['homeAccountId']
     return None
@@ -123,7 +132,7 @@ def entry_home_account(local_storage: list[dict[str, str]]) -> str | None:
 def _refresh_access_token(
     client: httpx.Client, tenant_id: str, client_id: str, refresh_token: str, scope: str
 ) -> dict[str, Any] | None:
-    url = _TOKEN_ENDPOINT.format(tenant=tenant_id)
+    url = _ENTRA_GRANT_URL.format(tenant=tenant_id)
     try:
         response = client.post(
             url,
@@ -172,11 +181,7 @@ def _update_access_token(
     expires_on = str(now + int(token_response.get('expires_in', 3600)))
     extended = str(now + int(token_response.get('ext_expires_in', token_response.get('expires_in', 3600))))
 
-    for item in local_storage:
-        try:
-            entry = json.loads(item.get('value', ''))
-        except Exception:
-            continue
+    for item, entry in _json_entries(local_storage):
         if entry.get('credentialType') != 'AccessToken':
             continue
         target = entry.get('target', '')

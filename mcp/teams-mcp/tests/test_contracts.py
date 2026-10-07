@@ -50,7 +50,8 @@ def test_message_contract():
     rich = messages[0]
     for field in ('id', 'conversationid', 'messagetype', 'contenttype', 'imdisplayname', 'composetime', 'content'):
         assert field in rich, f'chatsvc message lost required field {field!r}'
-    assert '<at' in rich['content'] and '<blockquote' in rich['content']
+    assert '<at' in rich['content']
+    assert '<blockquote' in rich['content']
     # `files` arrives as a JSON *string*, not an object - parsers rely on that.
     assert isinstance(rich['properties']['files'], str)
     json.loads(rich['properties']['files'])

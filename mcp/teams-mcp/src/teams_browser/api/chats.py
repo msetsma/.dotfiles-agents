@@ -20,7 +20,7 @@ import re
 from typing import Any
 from urllib.parse import unquote
 
-from ..errors import ApiError, ResourceNotFound
+from ..errors import ApiError, ResourceNotFoundError
 from ..models import ChatMessage, Conversation, MessageAttachment, RegionConfig, TokenSet
 from .http import HttpClient
 from .util import parse_dt
@@ -43,9 +43,9 @@ _BREAK = re.compile(r'<\s*(br|/p|/div|/li)\s*/?>', re.IGNORECASE)
 
 def _headers(tokens: TokenSet) -> dict[str, str]:
     if not tokens.skype_token:
-        from ..errors import TokenExpired
+        from ..errors import TokenExpiredError
 
-        raise TokenExpired('No skypetoken in the session. Run `teams-browser login` to refresh.')
+        raise TokenExpiredError('No skypetoken in the session. Run `teams-browser login` to refresh.')
     return {'Authentication': f'skypetoken={tokens.skype_token}', 'Accept': 'application/json'}
 
 
@@ -109,7 +109,7 @@ def _extract_files(properties: dict[str, Any] | None) -> list[MessageAttachment]
         return []
     try:
         parsed = json.loads(raw)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return []
     out: list[MessageAttachment] = []
     for item in parsed if isinstance(parsed, list) else []:
@@ -211,7 +211,7 @@ def list_conversations(
             )
         except ApiError as exc:
             if exc.status in (401, 403):
-                raise ResourceNotFound(
+                raise ResourceNotFoundError(
                     'The chatsvc service rejected the skypetoken. Run `teams-browser login`.'
                 ) from exc
             raise
@@ -272,15 +272,16 @@ def find_conversation(
         candidate = Conversation(id=needle, kind='group')
         try:
             list_messages(region, tokens, needle, page_size=1, client=client)
-            return candidate
         except ApiError as exc:
-            raise ResourceNotFound(f"Conversation '{needle}' is not accessible.") from exc
+            raise ResourceNotFoundError(f"Conversation '{needle}' is not accessible.") from exc
+        else:
+            return candidate
 
     lowered = unquote(needle).lower()
     matches = [
         c for c in list_conversations(region, tokens, top=top, client=client) if lowered in (c.topic or '').lower()
     ]
     if not matches:
-        raise ResourceNotFound(f"No conversation matched '{needle}'.")
+        raise ResourceNotFoundError(f"No conversation matched '{needle}'.")
     matches.sort(key=lambda c: (c.last_message_at is None, c.last_message_at), reverse=True)
     return matches[0]

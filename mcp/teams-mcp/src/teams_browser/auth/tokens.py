@@ -15,10 +15,11 @@ Messaging/calendar auth additionally uses cookies (``skypetoken_asm``,
 from __future__ import annotations
 
 import base64
+import contextlib
 import json
 import re
 from collections.abc import Iterable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import unquote, urlparse
 
@@ -61,7 +62,7 @@ def jwt_expiry(token: str) -> datetime | None:
     exp = payload.get('exp') if payload else None
     if not isinstance(exp, (int, float)):
         return None
-    return datetime.fromtimestamp(exp, tz=timezone.utc)
+    return datetime.fromtimestamp(exp, tz=UTC)
 
 
 def is_jwt(value: Any) -> bool:
@@ -77,25 +78,26 @@ def extract_encryption_key(entries: Iterable[dict[str, str]]) -> bytes | None:
     for item in entries:
         if 'ExportedEncryptionKey' not in item.get('name', ''):
             continue
-        try:
-            parsed = json.loads(item.get('value', ''))
-            key_b64 = (parsed.get('item') or {}).get('exportedKey')
-            if not key_b64:
-                continue
-            key = b64url_or_std_b64decode(key_b64)
-            if key and len(key) == 32:
-                return key
-        except Exception:
-            continue
+        key = _exported_key(item)
+        if key:
+            return key
     return None
+
+
+def _exported_key(item: dict[str, str]) -> bytes | None:
+    try:
+        parsed = json.loads(item.get('value', ''))
+        key_b64 = (parsed.get('item') or {}).get('exportedKey')
+        key = b64url_or_std_b64decode(key_b64) if key_b64 else None
+    except Exception:
+        return None
+    return key if key and len(key) == 32 else None
 
 
 def b64url_or_std_b64decode(data: str) -> bytes | None:
     for decoder in (base64.b64decode, base64.urlsafe_b64decode):
-        try:
+        with contextlib.suppress(Exception):
             return decoder(data + '=' * (-len(data) % 4))
-        except Exception:
-            continue
     return None
 
 
@@ -119,15 +121,15 @@ def decrypt_tmp_auth_token(encrypted_b64: str, iv_b64: str, key: bytes) -> str |
 
 def _resolve_tmp_auth_item(item: dict[str, Any], key: bytes | None) -> TokenInfo | None:
     expires = item.get('expires')
-    expiry = datetime.fromtimestamp(expires, tz=timezone.utc) if isinstance(expires, (int, float)) else None
-    if expiry and expiry <= datetime.now(tz=timezone.utc):
+    expiry = datetime.fromtimestamp(expires, tz=UTC) if isinstance(expires, (int, float)) else None
+    if expiry and expiry <= datetime.now(tz=UTC):
         return None
 
-    token = item.get('token')
-    if is_jwt(token):
-        return TokenInfo(token=token, expires_at=jwt_expiry(token) or expiry)
+    raw = item.get('token')
+    if is_jwt(raw):
+        return TokenInfo(token=raw, expires_at=jwt_expiry(raw) or expiry)
 
-    if token == 'dummy-token':
+    if raw == 'dummy-token':
         return None
 
     if key and item.get('encryptedToken') and item.get('iv'):
@@ -166,31 +168,40 @@ def find_token(state: SessionState, markers: tuple[str, ...]) -> TokenInfo | Non
         if '.Token.' in name:
             resource = name.split('.Token.', 1)[1]
             if any(m in resource.lower() for m in lowered):
-                try:
-                    parsed = json.loads(value)
-                except Exception:
-                    continue
-                info = _resolve_tmp_auth_item(parsed.get('item') or {}, key)
-                if info:
-                    info.resource = resource
-                consider(info)
+                consider(_tmp_auth_entry_token(resource, value, key))
             continue
 
-        # Classic MSAL entry.
-        if not value.startswith('{'):
-            continue
-        try:
-            entry = json.loads(value)
-        except Exception:
-            continue
-        target = entry.get('target')
-        secret = entry.get('secret')
-        if not isinstance(target, str) or not is_jwt(secret):
-            continue
-        if any(m in target.lower() for m in lowered):
-            consider(TokenInfo(token=secret, expires_at=jwt_expiry(secret), resource=target))
+        consider(_msal_entry_token(value, lowered))
 
     return best
+
+
+def _tmp_auth_entry_token(resource: str, value: str, key: bytes | None) -> TokenInfo | None:
+    try:
+        parsed = json.loads(value)
+    except Exception:
+        return None
+    info = _resolve_tmp_auth_item(parsed.get('item') or {}, key)
+    if info:
+        info.resource = resource
+    return info
+
+
+def _msal_entry_token(value: str, lowered: tuple[str, ...]) -> TokenInfo | None:
+    """Classic MSAL entry: JSON with a ``target`` scope and a JWT ``secret``."""
+    if not value.startswith('{'):
+        return None
+    try:
+        entry = json.loads(value)
+    except Exception:
+        return None
+    target = entry.get('target')
+    secret = entry.get('secret')
+    if not isinstance(target, str) or not is_jwt(secret):
+        return None
+    if any(m in target.lower() for m in lowered):
+        return TokenInfo(token=secret, expires_at=jwt_expiry(secret), resource=target)
+    return None
 
 
 def extract_tokens(state: SessionState) -> TokenSet:
@@ -249,9 +260,8 @@ def extract_region_config(state: SessionState) -> RegionConfig | None:
     for item in local_storage(state):
         if 'DISCOVER-REGION-GTM' not in item.get('name', ''):
             continue
-        try:
-            data = json.loads(item.get('value', '')).get('item') or {}
-        except Exception:
+        data = _discovery_item(item)
+        if data is None:
             continue
         chat_service_url = data.get('chatServiceAfd')
         if not chat_service_url:
@@ -260,6 +270,14 @@ def extract_region_config(state: SessionState) -> RegionConfig | None:
             chat_service_url, data.get('middleTier', '') or '', data.get('chatSvcAggAfd', '') or ''
         )
     return None
+
+
+def _discovery_item(item: dict[str, str]) -> dict[str, Any] | None:
+    """The ``item`` payload of a ``DISCOVER-*`` entry; ``None`` when the value is not usable JSON."""
+    try:
+        return json.loads(item.get('value', '')).get('item') or {}
+    except Exception:
+        return None
 
 
 def _region_from_discovery(chat_service_url: str, middle_tier_url: str, csa_service_url: str) -> RegionConfig | None:
@@ -298,9 +316,8 @@ def extract_user_details(state: SessionState) -> UserDetails | None:
     for item in local_storage(state):
         if 'DISCOVER-USER-DETAILS' not in item.get('name', ''):
             continue
-        try:
-            data = json.loads(item.get('value', '')).get('item') or {}
-        except Exception:
+        data = _discovery_item(item)
+        if data is None:
             continue
         mri = data.get('id')
         if not mri:

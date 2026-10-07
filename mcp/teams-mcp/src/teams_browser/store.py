@@ -15,7 +15,7 @@ import json
 import sqlite3
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -131,7 +131,7 @@ def _fts_query(text: str) -> str:
 
 
 def _now() -> str:
-    return iso_utc(datetime.now(tz=timezone.utc))
+    return iso_utc(datetime.now(tz=UTC))
 
 
 class Store:
@@ -359,7 +359,7 @@ class Store:
 
         try:
             raw_entries = json.loads(row['entries'] or '[]')
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             raw_entries = []
         return Transcript(
             meeting_subject=row['meeting_subject'],
@@ -550,7 +550,7 @@ class Store:
 
     def stats(self) -> dict[str, Any]:
         def count(table: str) -> int:
-            return int(self._conn.execute(f'SELECT COUNT(*) AS n FROM {table}').fetchone()['n'])
+            return int(self._conn.execute(_COUNT_SQL[table]).fetchone()['n'])
 
         return {
             'path': str(self.path),
@@ -561,6 +561,16 @@ class Store:
             'files': count('files'),
             'last_sync': self.get_state('last_sync'),
         }
+
+
+# Table names cannot be bound as SQL parameters, so each count query is a fixed literal.
+_COUNT_SQL = {
+    'meetings': 'SELECT COUNT(*) AS n FROM meetings',
+    'transcripts': 'SELECT COUNT(*) AS n FROM transcripts',
+    'conversations': 'SELECT COUNT(*) AS n FROM conversations',
+    'messages': 'SELECT COUNT(*) AS n FROM messages',
+    'files': 'SELECT COUNT(*) AS n FROM files',
+}
 
 
 def _row_meeting(row: sqlite3.Row) -> Meeting:

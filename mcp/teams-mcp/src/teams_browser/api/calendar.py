@@ -12,7 +12,7 @@ client makes to render the calendar, so it needs no Graph permission.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from ..models import Meeting, RegionConfig, TokenSet
@@ -77,7 +77,7 @@ def list_meetings(
     limit: int = 50,
     client: HttpClient | None = None,
 ) -> list[Meeting]:
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     start = start or now
     end = end or (start + timedelta(days=7))
 

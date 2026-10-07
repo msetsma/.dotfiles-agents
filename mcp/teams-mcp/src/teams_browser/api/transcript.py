@@ -19,23 +19,21 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from ..config import substrate_base_url
-from ..errors import TranscriptUnavailable
+from ..errors import TranscriptUnavailableError
 from ..models import TokenSet, Transcript, TranscriptEntry
 from .http import HttpClient, substrate_headers
 from .util import iso_utc, parse_dt
 
 
-_SELECT = ','.join(
-    [
-        'SharePointItem',
-        'Visualization',
-        'ItemProperties/Default/MeetingCallId',
-        'ItemProperties/Default/DriveId',
-        'ItemProperties/Default/RecordingStartDateTime',
-        'ItemProperties/Default/RecordingEndDateTime',
-        'ItemProperties/Default/TranscriptJson',
-        'ItemProperties/Default/DocumentLink',
-    ]
+_SELECT = (
+    'SharePointItem,'
+    'Visualization,'
+    'ItemProperties/Default/MeetingCallId,'
+    'ItemProperties/Default/DriveId,'
+    'ItemProperties/Default/RecordingStartDateTime,'
+    'ItemProperties/Default/RecordingEndDateTime,'
+    'ItemProperties/Default/TranscriptJson,'
+    'ItemProperties/Default/DocumentLink'
 )
 
 
@@ -50,7 +48,7 @@ def get_transcript(
     data = _fetch_carrier(tokens, thread_id, meeting_date, client)
     items = data.get('value') or []
     if not items:
-        raise TranscriptUnavailable(
+        raise TranscriptUnavailableError(
             'No recording/transcript found for this meeting. Transcription may not have '
             'been enabled, or the recording has not finished processing.'
         )
@@ -88,18 +86,18 @@ def _parse_carrier(item: dict[str, Any], thread_id: str, thread_subject: str | N
     visualization = item.get('Visualization') or {}
     transcript_json = props.get('TranscriptJson')
     if not transcript_json:
-        raise TranscriptUnavailable(
+        raise TranscriptUnavailableError(
             'A recording exists but has no transcript. Transcription may not have been enabled for this meeting.'
         )
 
     try:
         parsed = json.loads(transcript_json)
     except (TypeError, ValueError) as exc:
-        raise TranscriptUnavailable(f'Could not parse transcript payload: {exc}') from exc
+        raise TranscriptUnavailableError(f'Could not parse transcript payload: {exc}') from exc
 
     entries = [_entry(e) for e in parsed.get('entries') or []]
     if not entries:
-        raise TranscriptUnavailable('The transcript is empty - no speech was detected.')
+        raise TranscriptUnavailableError('The transcript is empty - no speech was detected.')
 
     return Transcript(
         meeting_subject=visualization.get('Title') or thread_subject,

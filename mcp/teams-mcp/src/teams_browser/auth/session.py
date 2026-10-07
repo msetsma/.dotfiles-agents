@@ -8,21 +8,23 @@ available, falling back to a 0600 key file in the cache directory.
 from __future__ import annotations
 
 import base64
+import contextlib
 import json
-import os
+import pathlib
 from typing import Any
 
 from cryptography.fernet import Fernet, InvalidToken
 
 from ..config import APP_NAME, TEAMS_ORIGINS, Paths
-from ..errors import AuthRequired
+from ..errors import AuthRequiredError
 
 
 _KEYRING_SERVICE = APP_NAME
 _KEYRING_USER = 'session-key'
 
 
-def _load_or_create_key(paths: Paths) -> bytes:
+def _keyring_key() -> bytes | None:
+    """Read (or create) the key in the OS keychain; ``None`` when the keychain is unusable."""
     try:
         import keyring
 
@@ -31,19 +33,23 @@ def _load_or_create_key(paths: Paths) -> bytes:
             return stored.encode()
         key = Fernet.generate_key()
         keyring.set_password(_KEYRING_SERVICE, _KEYRING_USER, key.decode())
-        return key
     except Exception:
-        pass
+        return None
+    return key
+
+
+def _load_or_create_key(paths: Paths) -> bytes:
+    key = _keyring_key()
+    if key is not None:
+        return key
 
     if paths.key_file.exists():
         return paths.key_file.read_bytes().strip()
 
     key = Fernet.generate_key()
     paths.key_file.write_bytes(key)
-    try:
-        os.chmod(paths.key_file, 0o600)
-    except OSError:
-        pass
+    with contextlib.suppress(OSError):
+        pathlib.Path(paths.key_file).chmod(0o600)
     return key
 
 
@@ -74,10 +80,8 @@ def save_session(state: SessionState, paths: Paths | None = None) -> None:
     paths.ensure()
     payload = json.dumps(state).encode('utf-8')
     paths.session_file.write_bytes(encrypt(payload, paths))
-    try:
-        os.chmod(paths.session_file, 0o600)
-    except OSError:
-        pass
+    with contextlib.suppress(OSError):
+        pathlib.Path(paths.session_file).chmod(0o600)
 
 
 def load_session(paths: Paths | None = None) -> SessionState | None:
@@ -86,10 +90,10 @@ def load_session(paths: Paths | None = None) -> SessionState | None:
         return None
     try:
         raw = decrypt(paths.session_file.read_bytes(), paths)
-    except (InvalidToken, ValueError):
-        raise AuthRequired(
+    except (InvalidToken, ValueError) as exc:
+        raise AuthRequiredError(
             'Stored session could not be decrypted (key changed or file corrupt). Run `teams-browser login` again.'
-        )
+        ) from exc
     return json.loads(raw)
 
 
@@ -116,18 +120,8 @@ def get_teams_origin(state: SessionState) -> dict[str, Any] | None:
     if not origins:
         return None
 
-    def has_substrate(origin: dict[str, Any]) -> bool:
-        for item in origin.get('localStorage') or []:
-            name = item.get('name', '')
-            if 'SubstrateSearch' in name:
-                return True
-            value = item.get('value', '')
-            if isinstance(value, str) and 'SubstrateSearch' in value and value.startswith('{'):
-                return True
-        return False
-
     for origin in origins:
-        if origin.get('origin') in TEAMS_ORIGINS and has_substrate(origin):
+        if origin.get('origin') in TEAMS_ORIGINS and _has_substrate(origin):
             return origin
 
     for known in TEAMS_ORIGINS:
@@ -141,6 +135,17 @@ def get_teams_origin(state: SessionState) -> dict[str, Any] | None:
             return origin
 
     return None
+
+
+def _has_substrate(origin: dict[str, Any]) -> bool:
+    for item in origin.get('localStorage') or []:
+        name = item.get('name', '')
+        if 'SubstrateSearch' in name:
+            return True
+        value = item.get('value', '')
+        if isinstance(value, str) and 'SubstrateSearch' in value and value.startswith('{'):
+            return True
+    return False
 
 
 def local_storage(state: SessionState) -> list[dict[str, str]]:

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -130,7 +130,7 @@ def meetings(
         if start_dt and not end_dt:
             end_dt = start_dt + timedelta(days=1)
         if end_dt is None and days:
-            end_dt = (start_dt or datetime.now(tz=timezone.utc)) + timedelta(days=days)
+            end_dt = (start_dt or datetime.now(tz=UTC)) + timedelta(days=days)
 
         with TeamsClient() as client:
             result = client.list_meetings(start=start_dt, end=end_dt, limit=limit)
@@ -170,12 +170,7 @@ def transcript(
     try:
         with TeamsClient() as client:
             day = _parse_day(date_str) if date_str else None
-            if thread:
-                result = client.get_transcript(thread, subject=query, meeting_date=day)
-            elif query:
-                result = client.get_transcript_for(query, on_date=day)
-            else:
-                raise TeamsBrowserError('Provide a subject or --thread.')
+            result = _fetch_transcript(client, thread, query, day)
     except TeamsBrowserError as exc:
         _fail(exc)
         return
@@ -237,7 +232,7 @@ def calls(
     json_out: bool = typer.Option(False, '--json'),
 ) -> None:
     """List recent calls, including ad-hoc calls absent from the calendar."""
-    until = datetime.now(tz=timezone.utc) + timedelta(days=1)
+    until = datetime.now(tz=UTC) + timedelta(days=1)
     since = until - timedelta(days=days) if days else None
     try:
         with TeamsClient() as client:
@@ -311,9 +306,7 @@ def attachments(
     """List files shared in a specific meeting."""
     try:
         with TeamsClient() as client:
-            meeting = client.find_online_meeting(query, on_date=_parse_day(date_str) if date_str else None)
-            if meeting is None:
-                raise TeamsBrowserError(f"No online meeting matched '{query}'.")
+            meeting = _require_online_meeting(client, query, _parse_day(date_str) if date_str else None)
             items = client.get_meeting_files(meeting.thread_id, include_recordings=recordings)
     except TeamsBrowserError as exc:
         _fail(exc, json_out)
@@ -392,7 +385,7 @@ def digest(
     from .analytics import render_digest
     from .digest import build_digest
 
-    end = datetime.now(tz=timezone.utc)
+    end = datetime.now(tz=UTC)
     start = end - timedelta(days=days)
     try:
         with TeamsClient() as client:
@@ -439,12 +432,17 @@ def doctor(json_out: bool = typer.Option(False, '--json')) -> None:
 
     if state is not None:
         with TeamsClient() as client:
+
+            def archive_stats():
+                # Resolve the lazy store inside check() so an open failure is reported, not raised.
+                return client.store.stats()
+
             check('region', lambda: client.region().region_partition)
             check('identity', lambda: client.identity()[1] or 'unknown')
             check('meetings endpoint', lambda: f'{len(client.list_meetings(limit=1))} row(s)')
             check('chats endpoint', lambda: f'{len(client.list_conversations(top=1))} conversation(s)')
             check('files endpoint', lambda: f'{len(client.list_files(top=1))} file(s)')
-            check('archive', lambda: client.store.stats())
+            check('archive', archive_stats)
 
     ok = all(c['ok'] for c in checks)
     _emit({'ok': ok, 'checks': checks}, json_out)
@@ -575,7 +573,7 @@ def _render_meetings(items: list) -> None:
 
 def _parse_day(value: str) -> datetime:
     lowered = value.strip().lower()
-    today = datetime.now(tz=timezone.utc)
+    today = datetime.now(tz=UTC)
     if lowered == 'today':
         return today.replace(hour=0, minute=0, second=0, microsecond=0)
     if lowered == 'yesterday':
@@ -584,7 +582,22 @@ def _parse_day(value: str) -> datetime:
         parsed: date = date.fromisoformat(value)
     except ValueError as exc:
         raise TeamsBrowserError(f"Invalid date '{value}' (expected YYYY-MM-DD).") from exc
-    return datetime.combine(parsed, datetime.min.time(), tzinfo=timezone.utc)
+    return datetime.combine(parsed, datetime.min.time(), tzinfo=UTC)
+
+
+def _fetch_transcript(client: TeamsClient, thread: str | None, query: str | None, day: datetime | None):
+    if thread:
+        return client.get_transcript(thread, subject=query, meeting_date=day)
+    if query:
+        return client.get_transcript_for(query, on_date=day)
+    raise TeamsBrowserError('Provide a subject or --thread.')
+
+
+def _require_online_meeting(client: TeamsClient, query: str, day: datetime | None):
+    meeting = client.find_online_meeting(query, on_date=day)
+    if meeting is None:
+        raise TeamsBrowserError(f"No online meeting matched '{query}'.")
+    return meeting
 
 
 if __name__ == '__main__':

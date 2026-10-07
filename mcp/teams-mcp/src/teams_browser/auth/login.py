@@ -10,13 +10,14 @@ that subsequent runs usually only need a silent, headless refresh.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import time
 from collections.abc import Callable
 from typing import Any
 
 from ..config import DEFAULT_TEAMS_LOGIN_URL, Paths, login_timeout
-from ..errors import AuthRequired
+from ..errors import AuthRequiredError
 from .session import SessionState, save_session
 from .tokens import decode_jwt_payload, extract_region_config, extract_tokens, find_token, is_jwt
 
@@ -42,11 +43,9 @@ _MARKER_JS = (
 
 def _spaces_token_marker_present(context: Any) -> bool:
     for page in context.pages:
-        try:
+        with contextlib.suppress(Exception):  # page mid-navigation or on another origin
             if page.evaluate(_MARKER_JS):
                 return True
-        except Exception:
-            continue  # page mid-navigation or on another origin
     return False
 
 
@@ -83,11 +82,11 @@ def interactive_login(
     try:
         from playwright.sync_api import sync_playwright
     except ImportError as exc:  # pragma: no cover - environment dependent
-        raise AuthRequired(
+        raise AuthRequiredError(
             'Playwright is not installed. Run `uv sync` and `uv run playwright install chromium`.'
         ) from exc
 
-    notify = on_wait or (lambda msg: None)
+    notify = on_wait or (lambda _msg: None)
 
     with sync_playwright() as p:
         context = p.chromium.launch_persistent_context(
@@ -106,7 +105,7 @@ def interactive_login(
             context.close()
 
     if state is None:
-        raise AuthRequired(
+        raise AuthRequiredError(
             f'Timed out after {timeout}s waiting for Teams sign-in. '
             'Complete the login in the opened browser window and try again.'
         )

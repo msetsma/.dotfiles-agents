@@ -11,15 +11,15 @@ class TeamsBrowserError(Exception):
     """Base class for all errors raised by teams_browser."""
 
 
-class AuthRequired(TeamsBrowserError):
+class AuthRequiredError(TeamsBrowserError):
     """No usable session exists; an interactive login is required."""
 
 
-class TokenExpired(TeamsBrowserError):
+class TokenExpiredError(TeamsBrowserError):
     """A session exists but its tokens are no longer valid.
 
     Usually recoverable by a silent refresh; if the refresh token is dead, this
-    escalates to :class:`AuthRequired`.
+    escalates to :class:`AuthRequiredError`.
     """
 
 
@@ -32,7 +32,7 @@ class ApiError(TeamsBrowserError):
         self.body = body
 
 
-class RateLimited(ApiError):
+class RateLimitedError(ApiError):
     """Upstream returned 429; ``retry_after`` carries the wait, if provided."""
 
     def __init__(self, message: str, retry_after: float | None = None):
@@ -40,11 +40,11 @@ class RateLimited(ApiError):
         self.retry_after = retry_after
 
 
-class ResourceNotFound(TeamsBrowserError):
+class ResourceNotFoundError(TeamsBrowserError):
     """The requested meeting/transcript does not exist (or is not visible)."""
 
 
-class TranscriptUnavailable(ResourceNotFound):
+class TranscriptUnavailableError(ResourceNotFoundError):
     """The meeting exists but has no transcript (recording off, not processed)."""
 
 

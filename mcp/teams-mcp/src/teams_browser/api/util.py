@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 _FRACTION = re.compile(r'(\.\d{6})\d+')
@@ -26,7 +26,7 @@ def parse_dt(value: object) -> datetime | None:
 
 
 def iso_utc(dt: datetime) -> str:
-    return dt.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
+    return dt.astimezone(UTC).isoformat().replace('+00:00', 'Z')
 
 
 def from_epoch_ms(value: object) -> datetime | None:
@@ -36,4 +36,4 @@ def from_epoch_ms(value: object) -> datetime | None:
         value = int(value)
     if value <= 0:
         return None
-    return datetime.fromtimestamp(value / 1000, tz=timezone.utc)
+    return datetime.fromtimestamp(value / 1000, tz=UTC)

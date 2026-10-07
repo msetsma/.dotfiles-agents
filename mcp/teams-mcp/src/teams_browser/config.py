@@ -6,6 +6,7 @@ standalone, from tests, or embedded in an MCP server.
 
 from __future__ import annotations
 
+import contextlib
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -56,10 +57,8 @@ class Paths:
 
     def ensure(self) -> None:
         self.root.mkdir(parents=True, exist_ok=True)
-        try:
-            os.chmod(self.root, 0o700)
-        except OSError:
-            pass
+        with contextlib.suppress(OSError):
+            Path(self.root).chmod(0o700)
 
 
 def teams_base_url() -> str:

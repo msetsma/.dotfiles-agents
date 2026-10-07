@@ -6,10 +6,12 @@ Never runs in CI by default.
 
 from __future__ import annotations
 
+import contextlib
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
+
 from teams_browser.analytics import analyse
 from teams_browser.client import TeamsClient
 
@@ -23,9 +25,7 @@ pytestmark = pytest.mark.live
 def test_live_list_meetings():
     with TeamsClient() as client:
         meetings = client.list_meetings(
-            start=datetime.now(tz=timezone.utc) - timedelta(days=14),
-            end=datetime.now(tz=timezone.utc) + timedelta(days=14),
-            limit=5,
+            start=datetime.now(tz=UTC) - timedelta(days=14), end=datetime.now(tz=UTC) + timedelta(days=14), limit=5
         )
     assert isinstance(meetings, list)
 
@@ -67,16 +67,17 @@ def test_live_files_are_classified():
 def test_live_transcript_analytics():
     with TeamsClient() as client:
         meetings = client.list_meetings(
-            start=datetime.now(tz=timezone.utc) - timedelta(days=14), end=datetime.now(tz=timezone.utc), limit=50
+            start=datetime.now(tz=UTC) - timedelta(days=14), end=datetime.now(tz=UTC), limit=50
         )
         for meeting in meetings:
             if not meeting.thread_id or not meeting.start_time:
                 continue
-            try:
+            transcript = None
+            with contextlib.suppress(Exception):
                 transcript = client.get_transcript(
                     meeting.thread_id, subject=meeting.subject, meeting_date=meeting.start_time
                 )
-            except Exception:
+            if transcript is None:
                 continue
             analytics = analyse(transcript)
             assert analytics.entry_count == len(transcript.entries)

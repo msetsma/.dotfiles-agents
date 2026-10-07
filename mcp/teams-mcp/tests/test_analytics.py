@@ -1,6 +1,6 @@
 """Transcript analytics: timecodes, merging, slicing, talk time, digest."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from teams_browser.analytics import (
     analyse,
@@ -79,8 +79,8 @@ def test_analyse_uses_recording_span_for_duration():
     transcript = Transcript(
         thread_id='19:t@thread.v2',
         meeting_subject='Design Review',
-        recording_start=datetime(2026, 9, 15, 20, 30, tzinfo=timezone.utc),
-        recording_end=datetime(2026, 9, 15, 21, 30, tzinfo=timezone.utc),
+        recording_start=datetime(2026, 9, 15, 20, 30, tzinfo=UTC),
+        recording_end=datetime(2026, 9, 15, 21, 30, tzinfo=UTC),
         entries=_entries(),
     )
     analytics = analyse(transcript)
@@ -90,7 +90,7 @@ def test_analyse_uses_recording_span_for_duration():
 
 
 def test_render_digest_can_omit_transcripts():
-    meeting = Meeting(id='1', subject='Design Review', start_time=datetime(2026, 9, 15, tzinfo=timezone.utc))
+    meeting = Meeting(id='1', subject='Design Review', start_time=datetime(2026, 9, 15, tzinfo=UTC))
     transcript = Transcript(thread_id='19:t@thread.v2', entries=_entries(), speakers=['Ada', 'Bob'])
 
     with_bodies = render_digest(title='T', sections=[(meeting, transcript, analyse(transcript))])
@@ -102,6 +102,6 @@ def test_render_digest_can_omit_transcripts():
 
 
 def test_render_digest_handles_missing_transcript():
-    meeting = Meeting(id='1', subject='Solo', start_time=datetime(2026, 9, 15, tzinfo=timezone.utc))
+    meeting = Meeting(id='1', subject='Solo', start_time=datetime(2026, 9, 15, tzinfo=UTC))
     rendered = render_digest(title='T', sections=[(meeting, None, None)])
     assert 'not available' in rendered

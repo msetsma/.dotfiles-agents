@@ -27,7 +27,7 @@ def to_seconds(value: str | float | int | None) -> float | None:
     if not match:
         try:
             return float(value) / 1000.0
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return None
     hours = int(match.group(1) or 0)
     minutes = int(match.group(2))
@@ -38,7 +38,7 @@ def to_seconds(value: str | float | int | None) -> float | None:
 
 def format_seconds(total: float) -> str:
     total = max(0.0, total)
-    minutes, seconds = divmod(int(round(total)), 60)
+    minutes, seconds = divmod(round(total), 60)
     hours, minutes = divmod(minutes, 60)
     if hours:
         return f'{hours}h{minutes:02d}m'
@@ -158,11 +158,11 @@ def render_analytics(analytics: TranscriptAnalytics) -> str:
         '| Speaker | Talk time | Share | Turns | Words |',
         '| --- | --- | --- | --- | --- |',
     ]
-    for stat in analytics.speakers:
-        lines.append(
-            f'| {stat.speaker} | {format_seconds(stat.talk_seconds)} | '
-            f'{stat.share * 100:.0f}% | {stat.turns} | {stat.words} |'
-        )
+    lines.extend(
+        f'| {stat.speaker} | {format_seconds(stat.talk_seconds)} | '
+        f'{stat.share * 100:.0f}% | {stat.turns} | {stat.words} |'
+        for stat in analytics.speakers
+    )
     return '\n'.join(lines) + '\n'
 
 
@@ -192,8 +192,10 @@ def render_digest(
         if analytics and analytics.speakers:
             lines.append('| Speaker | Talk time | Share |')
             lines.append('| --- | --- | --- |')
-            for stat in analytics.speakers:
-                lines.append(f'| {stat.speaker} | {format_seconds(stat.talk_seconds)} | {stat.share * 100:.0f}% |')
+            lines.extend(
+                f'| {stat.speaker} | {format_seconds(stat.talk_seconds)} | {stat.share * 100:.0f}% |'
+                for stat in analytics.speakers
+            )
             lines.append('')
         if include_transcripts:
             lines.append('<details><summary>Transcript</summary>')

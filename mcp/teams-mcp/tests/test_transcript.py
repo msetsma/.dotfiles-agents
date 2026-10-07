@@ -1,8 +1,9 @@
 import json
 
 import pytest
+
 from teams_browser.api.transcript import _normalise_offset, get_transcript
-from teams_browser.errors import TranscriptUnavailable
+from teams_browser.errors import TranscriptUnavailableError
 from teams_browser.models import TokenInfo, TokenSet
 
 from .helpers import make_jwt
@@ -58,19 +59,19 @@ def test_get_transcript_parses_entries():
 
 def test_empty_entries_raises():
     client = _StubClient(_payload([]))
-    with pytest.raises(TranscriptUnavailable):
+    with pytest.raises(TranscriptUnavailableError):
         get_transcript(_tokens(), 'thread', client=client)
 
 
 def test_no_items_raises():
     client = _StubClient({'value': []})
-    with pytest.raises(TranscriptUnavailable):
+    with pytest.raises(TranscriptUnavailableError):
         get_transcript(_tokens(), 'thread', client=client)
 
 
 def test_missing_transcript_json_raises():
     payload = {'value': [{'ItemProperties': {'Default': {}}, 'Visualization': {}}]}
-    with pytest.raises(TranscriptUnavailable):
+    with pytest.raises(TranscriptUnavailableError):
         get_transcript(_tokens(), 'thread', client=_StubClient(payload))
 
 

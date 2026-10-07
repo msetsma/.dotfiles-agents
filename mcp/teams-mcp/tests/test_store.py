@@ -1,13 +1,14 @@
 """Archive store: round-trips, full-text search, safety and stats."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
+
 from teams_browser.models import ChatMessage, Conversation, Meeting, SharedFile, Transcript, TranscriptEntry
 from teams_browser.store import Store
 
 
-NOW = datetime(2026, 9, 15, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 9, 15, 12, 0, tzinfo=UTC)
 
 
 @pytest.fixture
@@ -89,8 +90,10 @@ def test_meeting_and_file_like_search(store):
     store.upsert_files([SharedFile(id='f1', name='Design Deck.pptx', kind='PowerPoint')])
     meeting_hits = store.search('Design', sources=['meeting'])
     file_hits = store.search('Design', sources=['file'])
-    assert meeting_hits and meeting_hits[0].title == 'Design Review'
-    assert file_hits and file_hits[0].title == 'Design Deck.pptx'
+    assert meeting_hits
+    assert meeting_hits[0].title == 'Design Review'
+    assert file_hits
+    assert file_hits[0].title == 'Design Deck.pptx'
 
 
 def test_meetings_date_filter(store):

@@ -19,8 +19,10 @@ def test_classic_msal_tokens():
         ]
     )
     tokens = extract_tokens(state)
-    assert tokens.substrate and tokens.substrate.token == substrate
-    assert tokens.spaces and tokens.spaces.token == spaces
+    assert tokens.substrate
+    assert tokens.substrate.token == substrate
+    assert tokens.spaces
+    assert tokens.spaces.token == spaces
     assert tokens.csa is None
 
 
@@ -28,7 +30,8 @@ def test_tmp_auth_tokens():
     substrate = make_jwt({'aud': 'https://substrate.office.com'})
     state = make_session(local_storage=[tmp_auth_entry('HTTPS://SUBSTRATE.OFFICE.COM', substrate)])
     tokens = extract_tokens(state)
-    assert tokens.substrate and tokens.substrate.token == substrate
+    assert tokens.substrate
+    assert tokens.substrate.token == substrate
 
 
 def test_expired_tokens_are_ignored():
@@ -76,7 +79,8 @@ def test_message_cookies():
     )
     skype_token, auth_token = extract_message_cookies(state)
     assert skype_token == skype
-    assert auth_token and auth_token.startswith('ey')
+    assert auth_token
+    assert auth_token.startswith('ey')
 
 
 def test_identity_from_token_claims():

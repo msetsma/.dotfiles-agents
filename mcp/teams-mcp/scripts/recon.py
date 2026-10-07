@@ -16,6 +16,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +28,7 @@ from teams_browser.api.http import HttpClient
 from teams_browser.auth.session import Paths, load_session
 from teams_browser.auth.tokens import extract_region_config, extract_tokens
 from teams_browser.config import substrate_base_url
+from teams_browser.models import RegionConfig
 
 
 TARGETS = ('calendar', 'chats', 'messages', 'calllogs', 'files', 'transcript')
@@ -42,6 +45,187 @@ def _print_keys(label: str, obj: Any, depth: int = 2, _level: int = 0) -> None:
     elif isinstance(obj, list) and obj:
         print(f'{pad}[0] of {len(obj)}')
         _print_keys(label, obj[0], depth, _level + 1)
+
+
+@dataclass
+class _Probe:
+    """Everything a single endpoint probe needs."""
+
+    http: HttpClient
+    region: RegionConfig
+    skype: dict[str, str]
+    substrate: dict[str, str]
+    dump: Callable[[str, Any], None]
+
+
+def _probe_calendar(ctx: _Probe) -> None:
+    print('\n== calendarView ==')
+    response = ctx.http.request(
+        'GET',
+        f'{ctx.region.teams_base_url}/api/mt/'
+        f'{"part/" if ctx.region.has_partition else ""}{ctx.region.region_partition}'
+        '/v2.1/me/calendars/calendarView',
+        headers=ctx.skype,
+        params={'$top': '5', '$select': 'subject,startTime,skypeTeamsData,isOnlineMeeting'},
+    )
+    print(f'  status={response.status_code} bytes={len(response.content)}')
+    if response.status_code < 400:
+        values = response.json().get('value') or []
+        print(f'  meetings={len(values)}')
+        if values:
+            _print_keys('calendar', values[0])
+        ctx.dump('calendar_view', response.json())
+
+
+def _probe_chats(ctx: _Probe) -> None:
+    print('\n== chatsvc conversations ==')
+    response = ctx.http.request(
+        'GET',
+        f'{ctx.region.chat_service_url}/v1/users/ME/conversations',
+        headers=ctx.skype,
+        params={'$top': '20', 'view': 'msnp24Equivalent', 'pageSize': '20'},
+    )
+    print(f'  status={response.status_code} bytes={len(response.content)}')
+    if response.status_code < 400:
+        conversations = response.json().get('conversations') or []
+        kinds: dict[str, int] = {}
+        for conversation in conversations:
+            cid = conversation.get('id') or ''
+            kind = (
+                'channel'
+                if '@thread.tacv2' in cid
+                else 'meeting'
+                if cid.startswith('19:meeting_')
+                else 'one_to_one'
+                if '@unq.gbl.spaces' in cid
+                else 'group'
+            )
+            kinds[kind] = kinds.get(kind, 0) + 1
+        print(f'  conversations={len(conversations)} kinds={kinds}')
+        if conversations:
+            _print_keys('chats', conversations[0])
+        ctx.dump('chatsvc_conversations', response.json())
+
+
+def _probe_messages(ctx: _Probe) -> None:
+    print('\n== chatsvc messages ==')
+    response = ctx.http.request(
+        'GET',
+        f'{ctx.region.chat_service_url}/v1/users/ME/conversations',
+        headers=ctx.skype,
+        params={'$top': '1', 'view': 'msnp24Equivalent'},
+    )
+    first = (response.json().get('conversations') or [{}])[0] if response.status_code < 400 else {}
+    if first.get('id'):
+        response = ctx.http.request(
+            'GET',
+            f'{ctx.region.chat_service_url}/v1/users/ME/conversations/{first["id"]}/messages',
+            headers=ctx.skype,
+            params={'pageSize': '5', 'view': 'msnp24Equivalent'},
+        )
+        print(f'  status={response.status_code} bytes={len(response.content)}')
+        if response.status_code < 400:
+            messages = response.json().get('messages') or []
+            print(f'  messages={len(messages)} types={sorted({m.get("messagetype") for m in messages})}')
+            if messages:
+                _print_keys('messages', messages[0], depth=3)
+            ctx.dump('chatsvc_messages', response.json())
+    else:
+        print('  no conversation available')
+
+
+def _probe_calllogs(ctx: _Probe) -> None:
+    print('\n== chatsvc 48:calllogs ==')
+    response = ctx.http.request(
+        'GET',
+        f'{ctx.region.chat_service_url}/v1/users/ME/conversations/48:calllogs/messages',
+        headers=ctx.skype,
+        params={'pageSize': '50', 'view': 'msnp24Equivalent'},
+    )
+    print(f'  status={response.status_code} bytes={len(response.content)}')
+    if response.status_code < 400:
+        messages = response.json().get('messages') or []
+        types: dict[str, int] = {}
+        for message in messages:
+            kind = str(message.get('messagetype'))
+            types[kind] = types.get(kind, 0) + 1
+        print(f'  messages={len(messages)} types={types}')
+        with_thread = [
+            m
+            for m in messages
+            if m.get('messagetype') in ('RichText/Media_CallLogTranscript', 'RichText/Media_CallLogRecording')
+        ]
+        print(f'  calls with a thread id={len(with_thread)}')
+        if with_thread:
+            _print_keys('calllogs', with_thread[0], depth=1)
+        ctx.dump('calllogs_messages', response.json())
+
+
+def _probe_files(ctx: _Probe) -> None:
+    print('\n== WorkingSetFiles ==')
+    response = ctx.http.request(
+        'GET',
+        f'{substrate_base_url()}/api/beta/me/WorkingSetFiles/',
+        headers=ctx.substrate,
+        params={
+            '$top': '50',
+            '$orderby': 'FileCreatedTime desc',
+            '$select': 'Visualization,FileName,FileExtension,FileCreatedTime,ItemProperties/Default/MeetingThreadId',
+        },
+    )
+    print(f'  status={response.status_code} bytes={len(response.content)}')
+    if response.status_code < 400:
+        values = response.json().get('value') or []
+        kinds: dict[str, int] = {}
+        for item in values:
+            kind = str((item.get('Visualization') or {}).get('Type'))
+            kinds[kind] = kinds.get(kind, 0) + 1
+        print(f'  files={len(values)} types={kinds}')
+        if values:
+            _print_keys('files', values[0])
+        ctx.dump('working_set_files', response.json())
+
+
+def _probe_transcript(ctx: _Probe) -> None:
+    print('\n== Substrate transcript carrier ==')
+    response = ctx.http.request(
+        'GET',
+        f'{substrate_base_url()}/api/beta/me/WorkingSetFiles/',
+        headers=ctx.substrate,
+        params={
+            '$top': '50',
+            '$orderby': 'FileCreatedTime desc',
+            '$select': 'Visualization,ItemProperties/Default/MeetingThreadId,'
+            'ItemProperties/Default/TranscriptJson,'
+            'ItemProperties/Default/RecordingStartDateTime',
+        },
+    )
+    print(f'  status={response.status_code} bytes={len(response.content)}')
+    if response.status_code < 400:
+        values = response.json().get('value') or []
+        with_transcript = [
+            v for v in values if (v.get('ItemProperties') or {}).get('Default', {}).get('TranscriptJson')
+        ]
+        print(f'  items={len(values)} with_transcript={len(with_transcript)}')
+        if with_transcript:
+            props = with_transcript[0]['ItemProperties']['Default']
+            parsed = json.loads(props['TranscriptJson'])
+            entries = parsed.get('entries') or []
+            print(f'  entries={len(entries)}')
+            if entries:
+                print(f'  entry keys={sorted(entries[0].keys())}')
+                print(f'  startOffset sample={entries[0].get("startOffset")!r}')
+            ctx.dump('transcript_entries', entries[:5])
+
+
+_PROBES: dict[str, Callable[[_Probe], None]] = {
+    'calendar': _probe_calendar,
+    'chats': _probe_chats,
+    'messages': _probe_messages,
+    'calllogs': _probe_calllogs,
+    'files': _probe_files,
+    'transcript': _probe_transcript,
+}
 
 
 def main() -> int:
@@ -85,161 +269,11 @@ def main() -> int:
             (args.dump / f'{name}.json').write_text(json.dumps(payload, indent=2, default=str))
             print(f'    wrote {args.dump / f"{name}.json"}')
 
+    probe = _Probe(http=http, region=region, skype=skype, substrate=substrate, dump=dump)
     try:
-        if 'calendar' in args.targets:
-            print('\n== calendarView ==')
-            response = http.request(
-                'GET',
-                f'{region.teams_base_url}/api/mt/'
-                f'{"part/" if region.has_partition else ""}{region.region_partition}'
-                '/v2.1/me/calendars/calendarView',
-                headers=skype,
-                params={'$top': '5', '$select': 'subject,startTime,skypeTeamsData,isOnlineMeeting'},
-            )
-            print(f'  status={response.status_code} bytes={len(response.content)}')
-            if response.status_code < 400:
-                values = response.json().get('value') or []
-                print(f'  meetings={len(values)}')
-                if values:
-                    _print_keys('calendar', values[0])
-                dump('calendar_view', response.json())
-
-        if 'chats' in args.targets:
-            print('\n== chatsvc conversations ==')
-            response = http.request(
-                'GET',
-                f'{region.chat_service_url}/v1/users/ME/conversations',
-                headers=skype,
-                params={'$top': '20', 'view': 'msnp24Equivalent', 'pageSize': '20'},
-            )
-            print(f'  status={response.status_code} bytes={len(response.content)}')
-            if response.status_code < 400:
-                conversations = response.json().get('conversations') or []
-                kinds: dict[str, int] = {}
-                for conversation in conversations:
-                    cid = conversation.get('id') or ''
-                    kind = (
-                        'channel'
-                        if '@thread.tacv2' in cid
-                        else 'meeting'
-                        if cid.startswith('19:meeting_')
-                        else 'one_to_one'
-                        if '@unq.gbl.spaces' in cid
-                        else 'group'
-                    )
-                    kinds[kind] = kinds.get(kind, 0) + 1
-                print(f'  conversations={len(conversations)} kinds={kinds}')
-                if conversations:
-                    _print_keys('chats', conversations[0])
-                dump('chatsvc_conversations', response.json())
-
-        if 'messages' in args.targets:
-            print('\n== chatsvc messages ==')
-            response = http.request(
-                'GET',
-                f'{region.chat_service_url}/v1/users/ME/conversations',
-                headers=skype,
-                params={'$top': '1', 'view': 'msnp24Equivalent'},
-            )
-            first = (response.json().get('conversations') or [{}])[0] if response.status_code < 400 else {}
-            if first.get('id'):
-                response = http.request(
-                    'GET',
-                    f'{region.chat_service_url}/v1/users/ME/conversations/{first["id"]}/messages',
-                    headers=skype,
-                    params={'pageSize': '5', 'view': 'msnp24Equivalent'},
-                )
-                print(f'  status={response.status_code} bytes={len(response.content)}')
-                if response.status_code < 400:
-                    messages = response.json().get('messages') or []
-                    print(f'  messages={len(messages)} types={sorted({m.get("messagetype") for m in messages})}')
-                    if messages:
-                        _print_keys('messages', messages[0], depth=3)
-                    dump('chatsvc_messages', response.json())
-            else:
-                print('  no conversation available')
-
-        if 'calllogs' in args.targets:
-            print('\n== chatsvc 48:calllogs ==')
-            response = http.request(
-                'GET',
-                f'{region.chat_service_url}/v1/users/ME/conversations/48:calllogs/messages',
-                headers=skype,
-                params={'pageSize': '50', 'view': 'msnp24Equivalent'},
-            )
-            print(f'  status={response.status_code} bytes={len(response.content)}')
-            if response.status_code < 400:
-                messages = response.json().get('messages') or []
-                types: dict[str, int] = {}
-                for message in messages:
-                    kind = str(message.get('messagetype'))
-                    types[kind] = types.get(kind, 0) + 1
-                print(f'  messages={len(messages)} types={types}')
-                with_thread = [
-                    m
-                    for m in messages
-                    if m.get('messagetype') in ('RichText/Media_CallLogTranscript', 'RichText/Media_CallLogRecording')
-                ]
-                print(f'  calls with a thread id={len(with_thread)}')
-                if with_thread:
-                    _print_keys('calllogs', with_thread[0], depth=1)
-                dump('calllogs_messages', response.json())
-
-        if 'files' in args.targets:
-            print('\n== WorkingSetFiles ==')
-            response = http.request(
-                'GET',
-                f'{substrate_base_url()}/api/beta/me/WorkingSetFiles/',
-                headers=substrate,
-                params={
-                    '$top': '50',
-                    '$orderby': 'FileCreatedTime desc',
-                    '$select': 'Visualization,FileName,FileExtension,FileCreatedTime,'
-                    'ItemProperties/Default/MeetingThreadId',
-                },
-            )
-            print(f'  status={response.status_code} bytes={len(response.content)}')
-            if response.status_code < 400:
-                values = response.json().get('value') or []
-                kinds: dict[str, int] = {}
-                for item in values:
-                    kind = str((item.get('Visualization') or {}).get('Type'))
-                    kinds[kind] = kinds.get(kind, 0) + 1
-                print(f'  files={len(values)} types={kinds}')
-                if values:
-                    _print_keys('files', values[0])
-                dump('working_set_files', response.json())
-
-        if 'transcript' in args.targets:
-            print('\n== Substrate transcript carrier ==')
-            response = http.request(
-                'GET',
-                f'{substrate_base_url()}/api/beta/me/WorkingSetFiles/',
-                headers=substrate,
-                params={
-                    '$top': '50',
-                    '$orderby': 'FileCreatedTime desc',
-                    '$select': 'Visualization,ItemProperties/Default/MeetingThreadId,'
-                    'ItemProperties/Default/TranscriptJson,'
-                    'ItemProperties/Default/RecordingStartDateTime',
-                },
-            )
-            print(f'  status={response.status_code} bytes={len(response.content)}')
-            if response.status_code < 400:
-                values = response.json().get('value') or []
-                with_transcript = [
-                    v for v in values if (v.get('ItemProperties') or {}).get('Default', {}).get('TranscriptJson')
-                ]
-                print(f'  items={len(values)} with_transcript={len(with_transcript)}')
-                if with_transcript:
-                    props = with_transcript[0]['ItemProperties']['Default']
-                    parsed = json.loads(props['TranscriptJson'])
-                    entries = parsed.get('entries') or []
-                    print(f'  entries={len(entries)}')
-                    if entries:
-                        print(f'  entry keys={sorted(entries[0].keys())}')
-                        print(f'  startOffset sample={entries[0].get("startOffset")!r}')
-                    dump('transcript_entries', entries[:5])
+        for target in TARGETS:
+            if target in args.targets:
+                _PROBES[target](probe)
     finally:
         http.close()
 

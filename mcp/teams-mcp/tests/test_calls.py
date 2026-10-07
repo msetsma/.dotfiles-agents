@@ -1,20 +1,21 @@
 """Call history: parsing, joining on CallId, and ad-hoc transcript fallback."""
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+
 from teams_browser.api.calls import derive_title, list_calls, matches, parse_call_log_message
 from teams_browser.client import TeamsClient
-from teams_browser.errors import ApiError, ResourceNotFound
+from teams_browser.errors import ApiError, ResourceNotFoundError
 from teams_browser.models import Call, CallParticipant, RegionConfig, TokenInfo, TokenSet, Transcript, TranscriptEntry
 
 from .helpers import make_jwt
 
 
 FIXTURES = Path(__file__).parent / 'fixtures'
-PAST = datetime.now(tz=timezone.utc) - timedelta(days=1)
+PAST = datetime.now(tz=UTC) - timedelta(days=1)
 
 
 def _region() -> RegionConfig:
@@ -179,7 +180,7 @@ def test_get_transcript_for_falls_back_to_ad_hoc_call():
 def test_get_transcript_for_skips_calls_without_a_transcript():
     client = _FakeTeamsClient([_call(thread_id=None, has_transcript=False)])
     try:
-        with pytest.raises(ResourceNotFound, match='No meetings or calls'):
+        with pytest.raises(ResourceNotFoundError, match='No meetings or calls'):
             client.get_transcript_for('Kevin')
     finally:
         client.close()

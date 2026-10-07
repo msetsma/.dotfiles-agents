@@ -1,17 +1,18 @@
 """Sync orchestration: counts, tolerance of per-item failures, state."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
+
 from teams_browser.client import TeamsClient
-from teams_browser.errors import TranscriptUnavailable
+from teams_browser.errors import TranscriptUnavailableError
 from teams_browser.models import Call, ChatMessage, Conversation, Meeting, SharedFile, Transcript, TranscriptEntry
 from teams_browser.store import Store
 from teams_browser.sync import sync
 
 
-PAST = datetime.now(tz=timezone.utc) - timedelta(days=1)
-FUTURE = datetime.now(tz=timezone.utc) + timedelta(days=1)
+PAST = datetime.now(tz=UTC) - timedelta(days=1)
+FUTURE = datetime.now(tz=UTC) + timedelta(days=1)
 
 
 class FakeClient:
@@ -74,7 +75,7 @@ def test_sync_populates_everything(store):
 
 
 def test_sync_skips_unavailable_transcripts_quietly(store):
-    report = sync(FakeClient(transcript_error=TranscriptUnavailable('none')), store, pause=0)
+    report = sync(FakeClient(transcript_error=TranscriptUnavailableError('none')), store, pause=0)
     assert report.transcripts == 0
     assert report.skipped == 1
     assert report.errors == []
@@ -144,7 +145,8 @@ def test_client_search_delegates_to_store(tmp_path):
     client = TeamsClient(paths=_paths(tmp_path))
     client.store.upsert_meetings([Meeting(id='m1', subject='Design Review')])
     hits = client.search('Design', sources=['meeting'])
-    assert hits and hits[0].title == 'Design Review'
+    assert hits
+    assert hits[0].title == 'Design Review'
     client.close()
 
 

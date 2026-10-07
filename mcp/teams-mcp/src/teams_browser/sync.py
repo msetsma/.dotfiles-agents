@@ -12,10 +12,10 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, NamedTuple
 
-from .errors import ResourceNotFound, TeamsBrowserError, TranscriptUnavailable
+from .errors import ResourceNotFoundError, TeamsBrowserError, TranscriptUnavailableError
 from .models import Meeting, SyncReport
 from .store import Store
 
@@ -49,9 +49,9 @@ def sync(
     pause: float = 0.15,
     log: Callable[[str], None] | None = None,
 ) -> SyncReport:
-    started = datetime.now(tz=timezone.utc)
+    started = datetime.now(tz=UTC)
     report = SyncReport(started_at=started)
-    emit: Callable[[str], None] = log or (lambda message: None)
+    emit: Callable[[str], None] = log or (lambda _message: None)
 
     meetings = _sync_meetings(client, store, report, started, days_back, days_forward, emit)
 
@@ -66,7 +66,7 @@ def sync(
     if include_chats:
         _sync_chats(client, store, report, conversation_limit, messages_per_conversation, pause, emit)
 
-    report.finished_at = datetime.now(tz=timezone.utc)
+    report.finished_at = datetime.now(tz=UTC)
     store.set_state('last_sync', report.finished_at.isoformat())
     return report
 
@@ -136,7 +136,7 @@ def _store_transcripts(
             continue
         try:
             transcript = client.get_transcript(job.thread_id, subject=job.subject, meeting_date=job.started_at)
-        except (TranscriptUnavailable, ResourceNotFound):
+        except TranscriptUnavailableError, ResourceNotFoundError:
             report.skipped += 1
             continue
         except Exception as exc:

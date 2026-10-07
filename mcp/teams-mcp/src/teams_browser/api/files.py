@@ -21,17 +21,15 @@ from .http import HttpClient, substrate_headers
 from .util import parse_dt
 
 
-_SELECT = ','.join(
-    [
-        'Visualization',
-        'FileName',
-        'FileExtension',
-        'FileCreatedTime',
-        'LastModifiedDateTime',
-        'ItemProperties/Default/MeetingThreadId',
-        'ItemProperties/Default/DocumentLink',
-        'ItemProperties/Default/RecordingStartDateTime',
-    ]
+_SELECT = (
+    'Visualization,'
+    'FileName,'
+    'FileExtension,'
+    'FileCreatedTime,'
+    'LastModifiedDateTime,'
+    'ItemProperties/Default/MeetingThreadId,'
+    'ItemProperties/Default/DocumentLink,'
+    'ItemProperties/Default/RecordingStartDateTime'
 )
 
 _RECORDING_EXTENSIONS = {'mp4', 'm4a', 'mov', 'wav', 'avi', 'mkv'}

@@ -17,7 +17,7 @@ were never recorded.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from ..errors import ApiError
@@ -45,7 +45,7 @@ def _loads(value: Any) -> dict[str, Any] | None:
         return None
     try:
         parsed = json.loads(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
     return parsed if isinstance(parsed, dict) else None
 
@@ -140,7 +140,7 @@ def list_calls(
             _merge(existing, call)
 
     calls = list(merged.values())
-    calls.sort(key=lambda c: c.start_time or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+    calls.sort(key=lambda c: c.start_time or datetime.min.replace(tzinfo=UTC), reverse=True)
     return calls
 
 
