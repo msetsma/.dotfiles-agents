@@ -117,9 +117,14 @@ def test_client_override_deep_merges(profile) -> None:
 
 def test_mcp_override_replaces_clients_and_merges_env(engine) -> None:
     local = {'mcp': {'playwright': {'clients': ['claude-code']}, 'notes': {'env': {'VAULT_PATH': 'C:/vault'}}}}
+    base = engine.load_mcp(engine.build_context(), {})
     mcp = engine.load_mcp(engine.build_context(local), local)
     assert mcp['playwright']['clients'] == ['claude-code']
-    assert mcp['notes']['env'] == {'VAULT_PATH': 'C:/vault', 'QMD_COLLECTION': 'notes'}
+    # The override replaces the keys it sets and inherits the catalog's other
+    # env vars. Derive the expectation from the catalog so the test tracks
+    # changes instead of pinning today's full env set.
+    assert mcp['notes']['env'] == {**base['notes']['env'], 'VAULT_PATH': 'C:/vault'}
+    assert base['notes']['env']['VAULT_PATH'] != 'C:/vault'
 
 
 @pytest.mark.parametrize(
