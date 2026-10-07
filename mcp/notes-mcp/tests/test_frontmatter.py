@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import datetime
+
 import pytest
 
 from notes_mcp.errors import INVALID_FRONTMATTER, NotesError
@@ -18,6 +20,15 @@ from notes_mcp.frontmatter import (
 
 
 TODAY = '2026-10-06'
+QMD_KEYS = ('type', 'status', 'tags', 'created_ts', 'updated_ts')
+
+
+def _epoch(value: str) -> int:
+    """UTC epoch seconds for an ISO date/datetime string (naive == UTC)."""
+    parsed = datetime.datetime.fromisoformat(value)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=datetime.UTC)
+    return int(parsed.timestamp())
 
 
 def make_fm():
@@ -64,7 +75,13 @@ def test_round_trip_preserves_unknown_key_order_and_qmd():
     assert parsed == fm
     assert list(parsed) == list(fm)
     assert parsed['custom'] == 'keep-me'
-    assert parsed['qmd']['metadata'] == {'type': 'note', 'status': 'active', 'tags': []}
+    assert parsed['qmd']['metadata'] == {
+        'type': 'note',
+        'status': 'active',
+        'tags': [],
+        'created_ts': _epoch(TODAY),
+        'updated_ts': _epoch(TODAY),
+    }
     assert parsed['qmd']['collection'] == 'notes'
     assert body == 'Body line\n'
 
@@ -83,7 +100,42 @@ def test_sync_qmd_metadata_tracks_current_values():
 
     sync_qmd_metadata(fm)
 
-    assert fm['qmd']['metadata'] == {'type': 'note', 'status': 'archived', 'tags': ['a', 'b']}
+    assert fm['qmd']['metadata'] == {
+        'type': 'note',
+        'status': 'archived',
+        'tags': ['a', 'b'],
+        'created_ts': _epoch(TODAY),
+        'updated_ts': _epoch(TODAY),
+    }
+
+
+def test_sync_qmd_metadata_mirrors_epoch_timestamps():
+    fm = make_fm()
+    fm['created'] = '2026-10-06'
+    fm['updated'] = '2026-10-06T12:00:00'
+
+    sync_qmd_metadata(fm)
+
+    metadata = fm['qmd']['metadata']
+    assert metadata['created_ts'] == _epoch('2026-10-06')
+    assert metadata['updated_ts'] == _epoch('2026-10-06T12:00:00')
+    assert metadata['updated_ts'] - metadata['created_ts'] == 12 * 60 * 60
+    assert list(metadata) == list(QMD_KEYS)
+
+
+def test_sync_qmd_metadata_missing_or_unparseable_timestamps_are_none():
+    fm = make_fm()
+    fm['created'] = 'not-a-date'
+    del fm['updated']
+
+    sync_qmd_metadata(fm)
+
+    metadata = fm['qmd']['metadata']
+    assert metadata['created_ts'] is None
+    assert metadata['updated_ts'] is None
+    assert metadata['type'] == 'note'
+    assert metadata['status'] == 'active'
+    assert metadata['tags'] == []
 
 
 def test_serialize_emits_no_yaml_anchors():

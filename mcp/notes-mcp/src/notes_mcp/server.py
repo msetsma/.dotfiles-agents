@@ -1,4 +1,4 @@
-"""MCP server entry point: registers the 13 ``notes_*`` tools over stdio.
+"""MCP server entry point: registers the 16 ``notes_*`` tools over stdio.
 
 The vault is the single source of truth for behavior (see the vault ``AGENTS.md``);
 ``CONTRACT.md`` fixes the interfaces. Tool parameters are published snake_case
@@ -20,10 +20,27 @@ from notes_mcp import __version__
 from notes_mcp.config import Config
 from notes_mcp.context import ToolContext, build_context
 from notes_mcp.errors import NotesError
-from notes_mcp.tools import read as read_tools, structure as structure_tools, write as write_tools
+from notes_mcp.tools import (
+    capture as capture_tools,
+    lint as lint_tools,
+    read as read_tools,
+    structure as structure_tools,
+    write as write_tools,
+)
 
 
-READ_TOOLS = frozenset({'notes_index', 'notes_search', 'notes_read', 'notes_list', 'notes_recent', 'notes_status'})
+READ_TOOLS = frozenset(
+    {
+        'notes_index',
+        'notes_search',
+        'notes_read',
+        'notes_list',
+        'notes_recent',
+        'notes_status',
+        'notes_triage',
+        'notes_lint',
+    }
+)
 
 INSTRUCTIONS = (
     'Read and write notes in the personal Obsidian vault (Johnny-Decimal x PARA). '
@@ -59,10 +76,15 @@ def _read_tools(ctx: ToolContext) -> dict[str, Tool]:
         note_type: str | None = None,
         status: str | None = None,
         tags: list[str] | None = None,
+        domain: str | None = None,
+        created_after: str | None = None,
+        created_before: str | None = None,
+        updated_after: str | None = None,
+        updated_before: str | None = None,
         limit: int = 10,
         rerank: bool = True,
     ) -> dict[str, Any]:
-        """Search the vault, filtered by area/category/type/status/tags."""
+        """Search the vault, filtered by area/category/type/status/tags/domain/dates."""
         return _call(
             read_tools.notes_search,
             ctx,
@@ -72,6 +94,11 @@ def _read_tools(ctx: ToolContext) -> dict[str, Tool]:
             type_=note_type,
             status=status,
             tags=tags,
+            domain=domain,
+            created_after=created_after,
+            created_before=created_before,
+            updated_after=updated_after,
+            updated_before=updated_before,
             limit=limit,
             rerank=rerank,
         )
@@ -92,6 +119,14 @@ def _read_tools(ctx: ToolContext) -> dict[str, Tool]:
         """Vault path, branch, ahead/behind, last pull, and qmd index health."""
         return _call(read_tools.notes_status, ctx)
 
+    def notes_triage(path: str | None = None, limit: int | None = None) -> dict[str, Any]:
+        """Suggest a category for each inbox note (read-only; no commit)."""
+        return _call(capture_tools.notes_triage, ctx, path, limit)
+
+    def notes_lint() -> dict[str, Any]:
+        """Report broken links, bad frontmatter, collisions, hubs, drift, secrets."""
+        return _call(lint_tools.notes_lint, ctx)
+
     return {
         'notes_index': notes_index,
         'notes_search': notes_search,
@@ -99,6 +134,8 @@ def _read_tools(ctx: ToolContext) -> dict[str, Tool]:
         'notes_list': notes_list,
         'notes_recent': notes_recent,
         'notes_status': notes_status,
+        'notes_triage': notes_triage,
+        'notes_lint': notes_lint,
     }
 
 
@@ -131,7 +168,16 @@ def _write_tools(ctx: ToolContext) -> dict[str, Tool]:
         """Append text to a note (or today's daily), optionally under a heading."""
         return _call(write_tools.notes_append, ctx, path, daily, heading, text)
 
-    return {'notes_create': notes_create, 'notes_update': notes_update, 'notes_append': notes_append}
+    def notes_capture(text: str, title: str | None = None, tags: list[str] | None = None) -> dict[str, Any]:
+        """Create one inbox note (or append to the daily when there is no Inbox)."""
+        return _call(capture_tools.notes_capture, ctx, text, title, tags)
+
+    return {
+        'notes_create': notes_create,
+        'notes_update': notes_update,
+        'notes_append': notes_append,
+        'notes_capture': notes_capture,
+    }
 
 
 def _structure_tools(ctx: ToolContext) -> dict[str, Tool]:
@@ -162,12 +208,12 @@ def _structure_tools(ctx: ToolContext) -> dict[str, Tool]:
 
 
 def build_tools(ctx: ToolContext) -> dict[str, Tool]:
-    """Create the 13 tool callables bound to ``ctx`` (also used by tests)."""
+    """Create the 16 tool callables bound to ``ctx`` (also used by tests)."""
     return {**_read_tools(ctx), **_write_tools(ctx), **_structure_tools(ctx)}
 
 
 def build_server(config: Config | None = None) -> Any:
-    """Build the MCPServer with all 13 tools registered."""
+    """Build the MCPServer with all 16 tools registered."""
     from mcp.server import MCPServer
     from mcp.types import ToolAnnotations
 

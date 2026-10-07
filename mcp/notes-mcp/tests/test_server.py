@@ -18,16 +18,35 @@ EXPECTED_TOOLS = {
     'notes_create',
     'notes_update',
     'notes_append',
+    'notes_capture',
     'notes_move',
     'notes_rename',
     'notes_sync',
     'notes_move_category',
+    'notes_triage',
+    'notes_lint',
 }
 
 
-def test_registers_all_thirteen_tools(vault):
+def test_registers_all_sixteen_tools(vault):
     mcp = build_server(vault.config())
     assert {tool.name for tool in asyncio.run(mcp.list_tools())} == EXPECTED_TOOLS
+
+
+def test_capture_is_a_write_tool(vault):
+    mcp = build_server(vault.config())
+    tool = next(t for t in asyncio.run(mcp.list_tools()) if t.name == 'notes_capture')
+    assert tool.annotations is not None
+    assert tool.annotations.read_only_hint is False
+    assert tool.annotations.destructive_hint is False
+
+
+def test_triage_and_lint_are_read_only(vault):
+    mcp = build_server(vault.config())
+    tools = {tool.name: tool for tool in asyncio.run(mcp.list_tools())}
+    for name in ('notes_triage', 'notes_lint'):
+        assert tools[name].annotations is not None
+        assert tools[name].annotations.read_only_hint is True
 
 
 def test_read_tools_are_read_only(vault):

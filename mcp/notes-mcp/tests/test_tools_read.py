@@ -27,8 +27,8 @@ TAIL = {'commit': None, 'pending_push': False, 'needs_index_update': False}
 NOTE_TEMPLATE = """---
 type: {type_}
 status: {status}
-created: "2026-01-05"
-updated: "2026-01-05"
+created: "{created}"
+updated: "{updated}"
 tags: {tags}
 related: []
 source: []
@@ -63,11 +63,32 @@ def make_ctx(vault):
 
 
 def write_note(
-    ctx, rel: str, *, type_: str, status: str = 'active', body: str = '# Note\n', tags: list[str] | None = None
+    ctx,
+    rel: str,
+    *,
+    type_: str,
+    status: str = 'active',
+    created: str = '2026-01-05',
+    updated: str | None = None,
+    body: str = '# Note\n',
+    tags: list[str] | None = None,
 ) -> None:
     path = ctx.config.vault_path / rel
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(NOTE_TEMPLATE.format(type_=type_, status=status, body=body, tags=tags or []), encoding='utf-8')
+    path.write_text(
+        NOTE_TEMPLATE.format(
+            type_=type_, status=status, created=created, updated=updated or created, body=body, tags=tags or []
+        ),
+        encoding='utf-8',
+    )
+
+
+def write_raw_note(ctx, rel: str, frontmatter_lines: list[str], body: str = '# Note\n') -> None:
+    """Write a note from raw frontmatter lines, so required keys can be omitted."""
+    path = ctx.config.vault_path / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    block = '\n'.join(frontmatter_lines)
+    path.write_text(f'---\n{block}\n---\n{body}', encoding='utf-8')
 
 
 class FakeSearcher:
@@ -340,3 +361,88 @@ def test_search_filters_by_tags_any_match(vault):
 
     none = read.notes_search(ctx, 'q', tags=['missing'])
     assert none['count'] == 0
+
+
+def test_search_filters_by_domain_substring_case_insensitive(vault):
+    ctx = _search_ctx(
+        vault,
+        hits=[
+            SearchHit(path='10 Projects/Work/Alpha.md', title='Alpha', score=1.0, snippet=None),
+            SearchHit(path='10 Projects/Personal/Beta.md', title='Beta', score=0.9, snippet=None),
+            SearchHit(path='30 Resources/Work Tools.md', title='Tools', score=0.8, snippet=None),
+        ],
+    )
+
+    work = read.notes_search(ctx, 'q', domain='work')
+    assert_ok(work)
+    assert {hit['path'] for hit in work['hits']} == {'10 Projects/Work/Alpha.md', '30 Resources/Work Tools.md'}
+    assert ctx.search.calls[0]['limit'] == 50  # domain alone still oversamples
+
+    personal = read.notes_search(ctx, 'q', domain='PERSONAL')
+    assert [hit['path'] for hit in personal['hits']] == ['10 Projects/Personal/Beta.md']
+
+    missing = read.notes_search(ctx, 'q', domain='archive')
+    assert missing['count'] == 0
+
+
+def test_search_filters_by_created_range_inclusive(vault):
+    ctx = _search_ctx(
+        vault,
+        hits=[
+            SearchHit(path=CONCEPT_NOTE, title='Concept', score=1.0, snippet=None),
+            SearchHit(path=MEETING_NOTE, title='Meeting', score=0.9, snippet=None),
+        ],
+    )
+    write_note(ctx, CONCEPT_NOTE, type_='concept', created='2026-01-10')
+    write_note(ctx, MEETING_NOTE, type_='meeting', created='2026-02-01')
+
+    after = read.notes_search(ctx, 'q', created_after='2026-01-10')
+    assert [hit['path'] for hit in after['hits']] == [CONCEPT_NOTE, MEETING_NOTE]  # lower bound inclusive
+    assert ctx.search.calls[-1]['limit'] == 50
+
+    between = read.notes_search(ctx, 'q', created_after='2026-01-11', created_before='2026-02-01')
+    assert [hit['path'] for hit in between['hits']] == [MEETING_NOTE]  # upper bound inclusive
+
+    before = read.notes_search(ctx, 'q', created_before='2026-01-10')
+    assert [hit['path'] for hit in before['hits']] == [CONCEPT_NOTE]
+
+
+def test_search_filters_by_updated_range_and_drops_missing_dates(vault):
+    ctx = _search_ctx(
+        vault,
+        hits=[
+            SearchHit(path=CONCEPT_NOTE, title='Concept', score=1.0, snippet=None),
+            SearchHit(path=MEETING_NOTE, title='Meeting', score=0.9, snippet=None),
+            SearchHit(path=AGENT_NOTE, title='Daily', score=0.8, snippet=None),
+        ],
+    )
+    write_note(ctx, CONCEPT_NOTE, type_='concept', created='2026-01-01', updated='2026-01-20')
+    write_note(ctx, MEETING_NOTE, type_='meeting', created='2026-01-01', updated='2026-03-01')
+    write_raw_note(ctx, AGENT_NOTE, ['type: daily', 'status: active'])  # no created/updated keys
+
+    after = read.notes_search(ctx, 'q', updated_after='2026-01-20')
+    assert [hit['path'] for hit in after['hits']] == [CONCEPT_NOTE, MEETING_NOTE]
+
+    before = read.notes_search(ctx, 'q', updated_before='2026-01-20')
+    assert [hit['path'] for hit in before['hits']] == [CONCEPT_NOTE]
+
+    window = read.notes_search(ctx, 'q', updated_after='2026-02-01', updated_before='2026-12-31')
+    assert [hit['path'] for hit in window['hits']] == [MEETING_NOTE]
+
+
+def test_search_combined_filters_oversample_then_truncate(vault):
+    ctx = make_ctx(vault)
+    hits: list[SearchHit] = []
+    for index in range(6):
+        rel = f'10 Projects/Work/Note {index}.md'
+        write_note(ctx, rel, type_='concept', created=f'2026-01-0{index + 1}')
+        hits.append(SearchHit(path=rel, title=rel, score=1.0, snippet=None))
+    write_note(ctx, '10 Projects/Personal/Skip.md', type_='meeting', created='2026-01-09')
+    hits.append(SearchHit(path='10 Projects/Personal/Skip.md', title='Skip', score=1.0, snippet=None))
+    ctx.search = FakeSearcher(hits=hits)
+
+    result = read.notes_search(ctx, 'q', domain='Work', type_='concept', created_after='2026-01-02', limit=2)
+    assert_ok(result)
+    assert ctx.search.calls[0]['limit'] == 10  # min(max(2 * 5, 2), 50)
+    assert result['count'] == 2
+    assert [hit['path'] for hit in result['hits']] == ['10 Projects/Work/Note 1.md', '10 Projects/Work/Note 2.md']

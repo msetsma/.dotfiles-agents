@@ -13,11 +13,11 @@ shell/filesystem tools directly.
   target paths are snapshotted under the human identity first, so an agent
   overwrite never silently loses unsaved edits.
 
-## Tools (13)
+## Tools (16)
 
 Read: `notes_index`, `notes_search`, `notes_read`, `notes_list`, `notes_recent`,
-`notes_status`.
-Write: `notes_create`, `notes_update`, `notes_append`.
+`notes_status`, `notes_triage`, `notes_lint`.
+Write: `notes_create`, `notes_update`, `notes_append`, `notes_capture`.
 Structure: `notes_move`, `notes_rename`, `notes_move_category`, `notes_sync`.
 
 ## Deviations from the Part 2 spec
@@ -47,8 +47,21 @@ repo's ruff gate forbids camelCase arguments and the `type` builtin. So:
 - **Human snapshot.** Before mutating, dirty target paths are committed under the
   human identity (`HUMAN_NAME`/`HUMAN_EMAIL`, else ambient git config).
 - **Category restructure.** `notes_move_category` relocates a whole category
-  folder, rewrites its row in `00 Meta/00.00 Index.md`, and updates
-  path-qualified links in one commit.
+  folder, renaming the hub to match, rewriting its `# H1`/`scope`, and updating
+  the Index `Category`/`Path`/`Scope` cells and title/path links in one commit.
+- **Tolerant frontmatter.** `frontmatter.parse` coerces unquoted ISO
+  date/datetime values to strings, so hand-edited notes still read and update.
+  The `qmd.metadata` mirror also carries `created_ts`/`updated_ts` epoch seconds.
+- **Configurable, Index-driven layout.** Journal/template/attachment paths come
+  from the Index, overridable with `NOTES_*_DIR` (see Env); `notes_status`
+  reports the resolved `layout`.
+- **Capture + triage.** `notes_capture` files a frictionless note into the `05
+  Inbox` from the Inbox template; `notes_triage` (read-only) suggests a category
+  per inbox note via search. `notes_lint` (read-only) reports broken links,
+  invalid frontmatter, filename collisions, missing hubs, Index drift, secrets.
+- **Types.** `watch` is accepted, and every templated type is seeded from its
+  template in `00 Meta/01 Templates/` (Project Hub, Decision, Meeting, Person,
+  Howto, Watch, Weekly, Daily).
 
 ## Env
 
@@ -62,6 +75,8 @@ repo's ruff gate forbids camelCase arguments and the `type` builtin. So:
 | `QMD_TIMEOUT` | `60` | Seconds per qmd daemon/CLI call |
 | `QMD_EMBED_ON_WRITE` | `0` | Refresh vectors (`qmd embed`) after a write's reindex (rely on the hourly job by default) |
 | `HUMAN_NAME` / `HUMAN_EMAIL` | ambient git | Identity for pre-write snapshot commits |
+| `NOTES_DAILY_DIR` / `NOTES_WEEKLY_DIR` / `NOTES_MEETINGS_DIR` | Index categories `41`/`42`/`43` | Journal directory overrides |
+| `NOTES_TEMPLATES_DIR` / `NOTES_ATTACHMENTS_DIR` | `00 Meta/01 Templates` / `00 Meta/02 Attachments` | Layout overrides |
 | `QMD_EMBED_MODEL` / `QMD_RERANK_MODEL` / `QMD_GENERATE_MODEL` | qmd defaults | Optional `file://` model overrides |
 
 ## Run / test

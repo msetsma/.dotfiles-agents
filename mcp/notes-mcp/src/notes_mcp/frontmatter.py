@@ -112,10 +112,12 @@ def validate(fm: dict[str, Any], *, hub: bool = False) -> None:
 
 
 def sync_qmd_metadata(fm: dict[str, Any]) -> dict[str, Any]:
-    """Mirror ``{type, status, tags}`` into ``fm['qmd']['metadata']``.
+    """Mirror ``{type, status, tags, created_ts, updated_ts}`` into ``qmd.metadata``.
 
-    Other keys inside the ``qmd`` block are preserved. Mutates and returns
-    ``fm``.
+    ``created_ts``/``updated_ts`` are integer epoch seconds (UTC) derived from
+    the ``created``/``updated`` scalars, which ``parse`` has already coerced to
+    ISO strings. Other keys inside the ``qmd`` block are preserved. Mutates and
+    returns ``fm``.
     """
     qmd = fm.get('qmd')
     if not isinstance(qmd, dict):
@@ -125,9 +127,29 @@ def sync_qmd_metadata(fm: dict[str, Any]) -> dict[str, Any]:
         'type': fm.get('type'),
         'status': fm.get('status'),
         'tags': list(tags) if isinstance(tags, list) else tags,
+        'created_ts': _epoch(fm.get('created')),
+        'updated_ts': _epoch(fm.get('updated')),
     }
     fm['qmd'] = qmd
     return fm
+
+
+def _epoch(value: Any) -> int | None:
+    """Convert an ISO date/datetime string to UTC epoch seconds, else ``None``.
+
+    A plain date is treated as UTC midnight; a naive datetime is assumed UTC.
+    Anything missing or unparseable yields ``None`` so the mirror never raises
+    on hand-edited frontmatter.
+    """
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=datetime.UTC)
+    return int(parsed.timestamp())
 
 
 def new_frontmatter(*, status: str, today: str, **fields: str) -> dict[str, Any]:

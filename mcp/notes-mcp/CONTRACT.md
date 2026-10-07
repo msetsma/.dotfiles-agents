@@ -200,3 +200,29 @@ Wave 3: `context.py` (read-only), `test_tools_integration.py`, `README.md`, cata
   `attachments_dir` (env `NOTES_*_DIR`, empty -> None).
 - **read.py**: `notes_status` payload gains `layout` (`layout.resolve(ctx)`).
 
+## 14. v4 additions (P2)
+
+Framework: 16 tools (`notes_capture`, `notes_triage`, `notes_lint` added).
+
+- **read.py**: `notes_search(ctx, query, *, area=None, category_id=None, type_=None,
+  status=None, tags=None, domain=None, created_after=None, created_before=None,
+  updated_after=None, updated_before=None, limit=10, rerank=True)`. `domain` is a
+  case-insensitive substring match on the hit path (mirrors the Obsidian Bases
+  `file.folder.contains(...)`); date bounds are ISO `YYYY-MM-DD`, inclusive
+  (`_after` `>=`, `_before` `<=`), compared on the frontmatter date part; a hit
+  with a missing/unparseable date is dropped when its bound is set.
+- **frontmatter.py**: `sync_qmd_metadata` adds `created_ts`/`updated_ts` (epoch
+  seconds, UTC) after `tags`.
+- **write.py**: `watch` added to `_ALLOWED_TYPES`; `_TYPE_TEMPLATES` seeds the
+  body from `00 Meta/01 Templates/<name>.md` for templated types, then appends
+  the caller body; a missing non-Daily template falls back to the caller body.
+- **tools/capture.py**: `notes_capture(ctx, text, title=None, tags=None,
+  source=None, **options)` writes one `05 Inbox` note from the Inbox template
+  (falls back to today's daily under `## Inbox` if category `05` is absent);
+  `notes_triage(ctx, path=None, limit=None, **options)` is read-only and ranks
+  category suggestions per inbox note.
+- **tools/lint.py**: `notes_lint(ctx)` is read-only and reports `broken_links`,
+  `invalid_frontmatter`, `filename_collisions`, `missing_hubs`, `index_drift`,
+  `secrets` (each capped at 100; `AGENTS.md` and the raw Index are skipped).
+
+

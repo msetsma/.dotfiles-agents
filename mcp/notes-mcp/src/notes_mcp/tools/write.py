@@ -37,9 +37,21 @@ if TYPE_CHECKING:
 
 
 _ALLOWED_TYPES = frozenset(
-    {'note', 'project', 'decision', 'meeting', 'person', 'howto', 'reference', 'daily', 'weekly', 'hub'}
+    {'note', 'project', 'decision', 'meeting', 'person', 'howto', 'reference', 'daily', 'weekly', 'watch', 'hub'}
 )
 _JOURNAL_TYPES = frozenset({'daily', 'weekly'})
+# Vault Contract: type -> seed template in ``00 Meta/01 Templates``. ``note``,
+# ``reference``, and ``hub`` deliberately have no template.
+_TYPE_TEMPLATES = {
+    'project': 'Project Hub',
+    'decision': 'Decision',
+    'meeting': 'Meeting',
+    'person': 'Person',
+    'howto': 'Howto',
+    'watch': 'Watch',
+    'weekly': 'Weekly',
+    'daily': 'Daily',
+}
 # Never descend into these while hunting for a duplicate filename.
 _PRUNE_DIRS = frozenset({'.git', '.obsidian', '.githooks'})
 
@@ -207,10 +219,31 @@ def _compose_new(
     _frontmatter.sync_qmd_metadata(fm)
     _frontmatter.validate(fm, hub=note_type == 'hub')
 
-    content_body = body
-    if note_type == 'daily':
-        content_body = _daily_body(ctx, title, body, today)
+    content_body = _seeded_body(ctx, note_type, title, body, today)
     return _frontmatter.serialize(fm, content_body)
+
+
+def _seeded_body(ctx: ToolContext, note_type: str, title: str | None, body: str, today: str) -> str:
+    """The create body: a rendered type template (if any) plus the caller's body.
+
+    Daily keeps its strict behavior (a missing Daily template raises). Every
+    other templated type falls back to the caller's body when its template file
+    is absent, so a partial vault still creates notes.
+    """
+    if note_type == 'daily':
+        return _daily_body(ctx, title, body, today)
+    template_name = _TYPE_TEMPLATES.get(note_type)
+    if template_name is None:
+        return body
+    try:
+        template = _read_template(ctx, template_name)
+    except NotesError:
+        return body
+    _, template_body = _frontmatter.parse(template)
+    rendered = _render_template(template_body, today=today, title=title or today)
+    if body:
+        rendered = f'{rendered.rstrip()}\n\n{body}'
+    return rendered
 
 
 def _daily_body(ctx: ToolContext, title: str | None, body: str, today: str) -> str:
@@ -355,14 +388,14 @@ def _write_payload(target: Path, text: str, rel: str) -> dict[str, Any]:
     return {'path': rel, 'needs_index_update': False}
 
 
-def _read_template(ctx: ToolContext) -> str:
-    rel = layout.template_rel(ctx, 'Daily')
+def _read_template(ctx: ToolContext, name: str = 'Daily') -> str:
+    rel = layout.template_rel(ctx, name)
     template = ctx.config.vault_path / rel
     try:
         return template.read_text(encoding='utf-8')
     except OSError as exc:
         raise NotesError(
-            NOT_FOUND, f'daily template is missing: {rel}', f'Restore {rel} in the vault.', path=rel
+            NOT_FOUND, f'{name} template is missing: {rel}', f'Restore {rel} in the vault.', path=rel
         ) from exc
 
 

@@ -14,7 +14,9 @@ in :mod:`notes_mcp.search` makes.
 
 from __future__ import annotations
 
+import datetime
 import re
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
 from notes_mcp.errors import NOT_FOUND, NotesError, notes_error
@@ -59,6 +61,43 @@ def notes_index(ctx: ToolContext) -> dict:
     )
 
 
+@dataclass(frozen=True)
+class _Criteria:
+    """Post-filter criteria for :func:`notes_search`.
+
+    ``prefix`` (from ``category_id``), ``area`` and ``domain`` match on the hit
+    path; the rest read the hit's frontmatter. ``created_after``/``updated_after``
+    are inclusive ``>=`` and ``created_before``/``updated_before`` inclusive
+    ``<=``, compared on the date part of the note's ``created``/``updated``.
+    """
+
+    prefix: str | None = None
+    area: str | None = None
+    type_: str | None = None
+    status: str | None = None
+    tags: list[str] | None = None
+    domain: str | None = None
+    created_after: str | None = None
+    created_before: str | None = None
+    updated_after: str | None = None
+    updated_before: str | None = None
+
+    @property
+    def needs_frontmatter(self) -> bool:
+        """True when any criterion can only be evaluated from the frontmatter."""
+        return bool(self.tags) or any(
+            value is not None
+            for value in (
+                self.type_,
+                self.status,
+                self.created_after,
+                self.created_before,
+                self.updated_after,
+                self.updated_before,
+            )
+        )
+
+
 def notes_search(
     ctx: ToolContext,
     query: str,
@@ -68,17 +107,23 @@ def notes_search(
     type_: str | None = None,
     status: str | None = None,
     tags: list[str] | None = None,
+    domain: str | None = None,
+    created_after: str | None = None,
+    created_before: str | None = None,
+    updated_after: str | None = None,
+    updated_before: str | None = None,
     limit: int = 10,
     rerank: bool = True,
     **options: object,
 ) -> dict:
     """Search the vault and post-filter hits by path/frontmatter.
 
-    ``qmd --filter`` proved unreliable, so filtering happens here: ``category_id``
-    and ``area`` match on the hit path, ``type_``/``status``/``tags`` parse the
-    hit's frontmatter. When any filter is set the search requests an oversampled
-    pool (up to ``50``) before post-filtering, because qmd applies its own limit
-    before we can filter. ``type`` is accepted as an alias for ``type_``.
+    ``qmd --filter`` proved unreliable, so filtering happens here: ``category_id``,
+    ``area`` and ``domain`` match on the hit path, ``type_``/``status``/``tags``
+    parse the hit's frontmatter, and the four date bounds read the frontmatter's
+    ``created``/``updated``. When any filter is set the search requests an
+    oversampled pool (up to ``50``) before post-filtering, because qmd applies its
+    own limit before we can filter. ``type`` is accepted as an alias for ``type_``.
     """
     if 'type' in options:
         type_ = options.pop('type')  # type: ignore[assignment]
@@ -86,7 +131,18 @@ def notes_search(
         unknown = ', '.join(sorted(options))
         raise TypeError(f'unexpected keyword argument(s): {unknown}')
 
-    filtering = any(value is not None for value in (area, category_id, type_, status)) or bool(tags)
+    criteria = _Criteria(
+        area=area,
+        type_=type_,
+        status=status,
+        tags=tags,
+        domain=domain,
+        created_after=created_after,
+        created_before=created_before,
+        updated_after=updated_after,
+        updated_before=updated_before,
+    )
+    filtering = any(value is not None for value in (area, category_id, domain)) or criteria.needs_frontmatter
     pool = min(max(limit * 5, limit), 50) if filtering else limit
 
     try:
@@ -94,12 +150,13 @@ def notes_search(
         prefix = ctx.index.get(category_id).path if category_id is not None else None
     except NotesError as exc:
         return exc.to_dict()
+    criteria = replace(criteria, prefix=prefix)
 
     matched: list[dict[str, Any]] = []
     for hit in hits:
         if len(matched) >= limit:
             break
-        if not _hit_matches(ctx, hit.path, prefix, area, type_, status, tags):
+        if not _hit_matches(ctx, hit.path, criteria):
             continue
         matched.append({'path': hit.path, 'title': hit.title, 'score': hit.score, 'snippet': hit.snippet})
 
@@ -183,36 +240,85 @@ def _slice_body(body: str, from_line: int | None, max_lines: int | None) -> str:
     return '\n'.join(lines[start:end])
 
 
-def _hit_matches(
-    ctx: ToolContext,
-    path: str,
-    prefix: str | None,
-    area: str | None,
-    type_: str | None,
-    status: str | None,
-    tags: list[str] | None,
-) -> bool:
+def _hit_matches(ctx: ToolContext, path: str, criteria: _Criteria) -> bool:
     """True when a hit passes the path and frontmatter filters."""
-    norm = path.replace('\\', '/')
-    if prefix is not None and not _under(norm, prefix.replace('\\', '/').strip('/')):
+    if not _path_matches(path, criteria):
         return False
-    if area is not None and not norm.startswith(area.replace('\\', '/').strip('/')):
-        return False
-    if type_ is None and status is None and not tags:
+    if not criteria.needs_frontmatter:
         return True
     frontmatter = _frontmatter(ctx, path)
     if frontmatter is None:
         return False
-    if type_ is not None and str(frontmatter.get('type')) != str(type_):
+    return _frontmatter_matches(frontmatter, criteria)
+
+
+def _path_matches(path: str, criteria: _Criteria) -> bool:
+    """True when the hit path satisfies the prefix, area, and domain filters."""
+    norm = path.replace('\\', '/')
+    if criteria.prefix is not None and not _under(norm, _norm_dir(criteria.prefix)):
         return False
-    if status is not None and str(frontmatter.get('status')) != str(status):
+    if criteria.area is not None and not norm.startswith(_norm_dir(criteria.area)):
         return False
-    if tags:
-        note_tags = frontmatter.get('tags')
-        note_tags = note_tags if isinstance(note_tags, list) else []
-        if not any(tag in note_tags for tag in tags):
-            return False
-    return True
+    return criteria.domain is None or criteria.domain.casefold() in norm.casefold()
+
+
+def _frontmatter_matches(frontmatter: dict[str, Any], criteria: _Criteria) -> bool:
+    """True when the hit frontmatter satisfies the type, status, tag, and date filters."""
+    if criteria.type_ is not None and str(frontmatter.get('type')) != str(criteria.type_):
+        return False
+    if criteria.status is not None and str(frontmatter.get('status')) != str(criteria.status):
+        return False
+    if criteria.tags and not _has_any_tag(frontmatter, criteria.tags):
+        return False
+    return _dates_match(frontmatter, criteria)
+
+
+def _has_any_tag(frontmatter: dict[str, Any], tags: list[str]) -> bool:
+    """True when the note's ``tags`` list contains any of ``tags``."""
+    note_tags = frontmatter.get('tags')
+    note_tags = note_tags if isinstance(note_tags, list) else []
+    return any(tag in note_tags for tag in tags)
+
+
+def _dates_match(frontmatter: dict[str, Any], criteria: _Criteria) -> bool:
+    """True when ``created`` and ``updated`` fall within their configured bounds."""
+    created = _date_in_range(frontmatter.get('created'), criteria.created_after, criteria.created_before)
+    updated = _date_in_range(frontmatter.get('updated'), criteria.updated_after, criteria.updated_before)
+    return created and updated
+
+
+def _date_in_range(value: object, after: str | None, before: str | None) -> bool:
+    """True when ``value``'s date part is within inclusive ``[after, before]``.
+
+    With no bound the value is unconstrained, so a missing date passes. When a
+    bound is set a missing or unparseable date fails (the note is excluded).
+    """
+    low, high = _date_part(after), _date_part(before)
+    if low is None and high is None:
+        return True
+    day = _date_part(value)
+    if day is None:
+        return False
+    if low is not None and day < low:
+        return False
+    return high is None or day <= high
+
+
+def _date_part(value: object) -> str | None:
+    """Return a validated ``YYYY-MM-DD`` prefix, or ``None`` when absent/invalid."""
+    if not isinstance(value, str):
+        return None
+    candidate = value.strip()[:10]
+    try:
+        datetime.date.fromisoformat(candidate)
+    except ValueError:
+        return None
+    return candidate
+
+
+def _norm_dir(value: str) -> str:
+    """Normalise a configured directory filter: posix separators, no outer slashes."""
+    return value.replace('\\', '/').strip('/')
 
 
 def _under(path: str, prefix: str) -> bool:

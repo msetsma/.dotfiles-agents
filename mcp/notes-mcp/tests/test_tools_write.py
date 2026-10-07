@@ -23,6 +23,28 @@ from notes_mcp.tools import write
 
 GIT = '/usr/bin/git'
 
+WATCH_TEMPLATE = """---
+type: watch
+status: active
+created: "{{date:YYYY-MM-DD}}"
+updated: "{{date:YYYY-MM-DD}}"
+tags: []
+related: []
+source: []
+qmd:
+  metadata:
+    type: watch
+    status: active
+    tags: []
+---
+
+# {{title}}
+
+## Watching
+
+## Signals
+"""
+
 
 class FakeSearch:
     """Records ``schedule_reindex`` calls; never touches qmd."""
@@ -47,6 +69,13 @@ def make_ctx(vault, **env_overrides) -> SimpleNamespace:
 
 def _today() -> str:
     return datetime.now(tz=UTC).astimezone().date().isoformat()
+
+
+def _epoch(value: str) -> int:
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return int(parsed.timestamp())
 
 
 def _last_subject(vault) -> str:
@@ -81,7 +110,13 @@ def test_create_writes_frontmatter_and_commits(vault) -> None:
     assert fm['created'] == _today()
     assert fm['updated'] == _today()
     assert fm['tags'] == []
-    assert fm['qmd']['metadata'] == {'type': 'note', 'status': 'active', 'tags': []}
+    assert fm['qmd']['metadata'] == {
+        'type': 'note',
+        'status': 'active',
+        'tags': [],
+        'created_ts': _epoch(_today()),
+        'updated_ts': _epoch(_today()),
+    }
     assert 'Hello.' in body
 
     assert _last_subject(vault) == 'agent(notes_create): Platform Notes'
@@ -132,6 +167,78 @@ def test_create_duplicate_filename(vault) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# template seeding by type
+# --------------------------------------------------------------------------- #
+def _write_watch_template(root) -> None:
+    path = root / '00 Meta/01 Templates/Watch.md'
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(WATCH_TEMPLATE, encoding='utf-8')
+
+
+def test_create_watch_note_is_allowed(vault) -> None:
+    ctx = make_ctx(vault)
+    _write_watch_template(vault.agent)
+
+    result = write.notes_create(ctx, '11', 'Vendor Watch', 'watch', 'Caller note.')
+
+    assert result.get('ok') is not False, result
+    rel = '10 Projects/11 Project A/Vendor Watch.md'
+    assert result['path'] == rel
+    fm, body = frontmatter.parse((vault.agent / rel).read_text(encoding='utf-8'))
+    assert fm['type'] == 'watch'
+    assert '# Vendor Watch' in body
+    assert '## Watching' in body
+    assert 'Caller note.' in body
+
+
+def test_create_project_seeds_template_then_appends_body(vault) -> None:
+    ctx = make_ctx(vault)
+
+    result = write.notes_create(ctx, '11', 'My Project', 'project', 'Extra line.')
+
+    assert result.get('ok') is not False, result
+    fm, body = frontmatter.parse((vault.agent / result['path']).read_text(encoding='utf-8'))
+    assert fm['type'] == 'project'
+    assert '# My Project' in body
+    assert '## Outcome' in body
+    assert body.index('## Outcome') < body.index('Extra line.')
+
+
+def test_create_decision_seeds_template(vault) -> None:
+    ctx = make_ctx(vault)
+
+    result = write.notes_create(ctx, '11', 'Pick One', 'decision', 'Rationale.')
+
+    assert result.get('ok') is not False, result
+    _, body = frontmatter.parse((vault.agent / result['path']).read_text(encoding='utf-8'))
+    assert '## Decision' in body
+    assert '## Consequences' in body
+    assert 'Rationale.' in body
+
+
+def test_create_missing_template_falls_back_to_body(vault) -> None:
+    ctx = make_ctx(vault)
+    (vault.agent / '00 Meta/01 Templates/Decision.md').unlink()
+
+    result = write.notes_create(ctx, '11', 'No Template', 'decision', 'Only caller body.')
+
+    assert result.get('ok') is not False, result
+    _, body = frontmatter.parse((vault.agent / result['path']).read_text(encoding='utf-8'))
+    assert body == 'Only caller body.'
+    assert '## Decision' not in body
+
+
+def test_create_untemplated_type_keeps_caller_body(vault) -> None:
+    ctx = make_ctx(vault)
+
+    result = write.notes_create(ctx, '11', 'Plain Note', 'note', 'Just this.')
+
+    assert result.get('ok') is not False, result
+    _, body = frontmatter.parse((vault.agent / result['path']).read_text(encoding='utf-8'))
+    assert body == 'Just this.'
+
+
+# --------------------------------------------------------------------------- #
 # notes_update
 # --------------------------------------------------------------------------- #
 def test_update_replaces_body_and_bumps_updated(vault) -> None:
@@ -174,7 +281,13 @@ def test_update_frontmatter_merge_reruns_qmd_mirror(vault) -> None:
     assert result.get('ok') is not False
     fm, _ = frontmatter.parse((vault.agent / rel).read_text(encoding='utf-8'))
     assert fm['tags'] == ['renamed']
-    assert fm['qmd']['metadata'] == {'type': 'note', 'status': 'active', 'tags': ['renamed']}
+    assert fm['qmd']['metadata'] == {
+        'type': 'note',
+        'status': 'active',
+        'tags': ['renamed'],
+        'created_ts': _epoch(_today()),
+        'updated_ts': _epoch(_today()),
+    }
 
 
 def test_update_missing_note(vault) -> None:
