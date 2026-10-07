@@ -50,7 +50,7 @@ README is the detail.
 
 | Server | Directory | Purpose | Entry point |
 |---|---|---|---|
-| `m365-local` | `mcp/m365-local-mcp/` | Local Outlook meetings, Mail.app search, synced SharePoint files. AppleScript + disk, no Graph, no Full Disk Access. | `server.py` |
+| `sharepoint-mcp` | `mcp/sharepoint-mcp/` | SharePoint: synced libraries read from disk (`sp_roots`/`sp_find`/`sp_read`) and lists via Graph (`sp_lists`/`sp_list_items`). No Full Disk Access; list tools need a signed-in `az`, read-only unless `SHAREPOINT_ENABLE_WRITES` is set. | `server.py` |
 | `teams-browser` | `mcp/teams-mcp/` | Teams meetings, transcripts, ad-hoc/1:1 calls, chats, channel messages, shared files via browser session tokens + local SQLite archive. | `teams-browser-mcp` (console script) |
 | `entra-mcp` | `mcp/entra-mcp/` | Entra ID org structure + access analysis: people search, group membership, reporting trees, manager lookup, membership comparison. Azure CLI delegated session, no app registration. Also ships the `entra` CLI. | `entra-mcp` (console script, uv tool) |
 
@@ -97,8 +97,8 @@ server's entry point.
 Launch commands:
 
 ```sh
-# m365-local
-/opt/homebrew/bin/uv run --directory /Users/msetsma/.dotfiles-agents/mcp/m365-local-mcp server.py
+# sharepoint-mcp
+/opt/homebrew/bin/uv run --directory /Users/msetsma/.dotfiles-agents/mcp/sharepoint-mcp server.py
 
 # teams-browser
 /opt/homebrew/bin/uv run --directory /Users/msetsma/.dotfiles-agents/mcp/teams-mcp --extra mcp teams-browser-mcp
@@ -119,15 +119,15 @@ Config: `~/.config/opencode/opencode.jsonc`, under `mcp.servers` (V2 does **not*
 put server names directly under `mcp`). Use `disabled: true`, not `enabled`.
 
 ```sh
-opencode mcp add m365-local --global -- \
-  /opt/homebrew/bin/uv run --directory /Users/msetsma/.dotfiles-agents/mcp/m365-local-mcp server.py
+opencode mcp add sharepoint-mcp --global -- \
+  /opt/homebrew/bin/uv run --directory /Users/msetsma/.dotfiles-agents/mcp/sharepoint-mcp server.py
 opencode mcp list
 ```
 
 ```jsonc
-"m365-local": {
+"sharepoint-mcp": {
   "type": "local",
-  "command": ["/opt/homebrew/bin/uv", "run", "--directory", "/Users/msetsma/.dotfiles-agents/mcp/m365-local-mcp", "server.py"]
+  "command": ["/opt/homebrew/bin/uv", "run", "--directory", "/Users/msetsma/.dotfiles-agents/mcp/sharepoint-mcp", "server.py"]
 }
 ```
 
@@ -136,8 +136,8 @@ opencode mcp list
 User-scope servers land in `~/.claude.json`.
 
 ```sh
-claude mcp add --scope user m365-local -- \
-  /opt/homebrew/bin/uv run --directory /Users/msetsma/.dotfiles-agents/mcp/m365-local-mcp server.py
+claude mcp add --scope user sharepoint-mcp -- \
+  /opt/homebrew/bin/uv run --directory /Users/msetsma/.dotfiles-agents/mcp/sharepoint-mcp server.py
 claude mcp list
 ```
 
@@ -148,9 +148,9 @@ Include `env.PATH`: the app launches without your shell environment.
 
 ```json
 "mcpServers": {
-  "m365-local": {
+  "sharepoint-mcp": {
     "command": "/opt/homebrew/bin/uv",
-    "args": ["run", "--directory", "/Users/msetsma/.dotfiles-agents/mcp/m365-local-mcp", "server.py"],
+    "args": ["run", "--directory", "/Users/msetsma/.dotfiles-agents/mcp/sharepoint-mcp", "server.py"],
     "env": { "PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" }
   }
 }
@@ -161,9 +161,9 @@ Include `env.PATH`: the app launches without your shell environment.
 Config: `~/.codex/config.toml`.
 
 ```toml
-[mcp_servers.m365-local]
+[mcp_servers.sharepoint-mcp]
 command = "/opt/homebrew/bin/uv"
-args = ["run", "--directory", "/Users/msetsma/.dotfiles-agents/mcp/m365-local-mcp", "server.py"]
+args = ["run", "--directory", "/Users/msetsma/.dotfiles-agents/mcp/sharepoint-mcp", "server.py"]
 ```
 
 ### teams-browser has its own installer

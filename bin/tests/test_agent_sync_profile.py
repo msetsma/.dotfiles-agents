@@ -72,7 +72,7 @@ def test_empty_override_keeps_clients_identical(profile) -> None:
     ('item', 'expected'),
     [
         ({'name': 'entra-mcp', 'tags': ['work']}, False),
-        ({'name': 'm365-local', 'tags': ['work', 'macos']}, False),
+        ({'name': 'sharepoint-mcp', 'tags': ['work', 'macos']}, False),
         ({'name': 'obscura', 'tags': []}, False),
         ({'name': 'github', 'tags': []}, True),
         ({'name': 'notes'}, True),
@@ -86,7 +86,7 @@ def test_is_selected(profile, item: dict, expected: bool) -> None:
 def test_profile_filters_real_catalog(engine) -> None:
     rules = {'exclude_tags': ['work', 'macos'], 'exclude': ['python-clean', 'python-clean-stop']}
     catalogs = engine.load_catalogs(engine.build_context(), {}, rules)
-    assert not {'entra-mcp', 'teams-browser', 'm365-local', 'apple-mail', 'iMCP'} & set(catalogs['mcp'])
+    assert not {'entra-mcp', 'teams-browser', 'sharepoint-mcp', 'apple-mail', 'iMCP'} & set(catalogs['mcp'])
     assert {'github', 'notes', 'playwright'} <= set(catalogs['mcp'])
     assert not {'python-clean', 'python-clean-stop'} & set(catalogs['hooks'])
 
@@ -123,8 +123,7 @@ def test_mcp_override_replaces_clients_and_merges_env(engine) -> None:
 
 
 @pytest.mark.parametrize(
-    ('command', 'expected'),
-    [('npx', ('npx', [])), (['cmd', '/c', 'npx'], ('cmd', ['/c', 'npx']))],
+    ('command', 'expected'), [('npx', ('npx', [])), (['cmd', '/c', 'npx'], ('cmd', ['/c', 'npx']))]
 )
 def test_split_command(profile, command, expected) -> None:
     assert profile.split_command(command) == expected

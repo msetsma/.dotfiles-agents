@@ -1,7 +1,7 @@
 [project]
-name = "m365-local-mcp"
+name = "sharepoint-mcp"
 version = "0.1.0"
-description = "Read-only local MCP server for Outlook meetings, mail search, and synced SharePoint files (via Mail.app/Calendar.app AppleScript + OneDrive sync)"
+description = "Read-only-by-default MCP server for SharePoint: OneDrive-synced libraries on disk and SharePoint lists via Microsoft Graph (Azure CLI token)"
 requires-python = ">=3.14"
 # 2.0+ required: code uses MCPServer (renamed from FastMCP) and
 # snake_case ToolAnnotations fields, neither of which exist in 1.x.

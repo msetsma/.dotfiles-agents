@@ -34,7 +34,7 @@ make sync         # render + merge into every agent
 │   └── retired.toml        # resources to scrub from every client
 ├── bin/                    # agent-sync, agent-update, clean-python
 └── mcp/                    # MCP server projects
-    ├── m365-local-mcp/     # custom
+    ├── sharepoint-mcp/     # custom
     ├── teams-mcp/          # custom
     ├── databricks-mcp/     # pins ai-dev-kit's MCP from git
     └── entra-mcp/          # custom; also ships the `entra` CLI
@@ -104,7 +104,7 @@ Full table of what this repo manages. `custom` = source lives in this repo;
 
 | Server                                       | Origin   | Launch                                                                  | Clients                                      |
 |----------------------------------------------|----------|-------------------------------------------------------------------------|----------------------------------------------|
-| [`m365-local`](mcp/m365-local-mcp/README.md) | custom   | `uv run --directory ~/.dotfiles-agents/mcp/m365-local-mcp server.py`    | opencode, Claude Code, Claude Desktop        |
+| [`sharepoint-mcp`](mcp/sharepoint-mcp/README.md) | custom   | `uv run --directory ~/.dotfiles-agents/mcp/sharepoint-mcp server.py`    | opencode, Claude Code, Claude Desktop        |
 | [`notes`](mcp/notes-mcp/README.md)           | custom   | `uv run --directory ~/.dotfiles-agents/mcp/notes-mcp notes-mcp`         | opencode, Claude Code, Claude Desktop        |
 | [`teams-browser`](mcp/teams-mcp/README.md)   | custom   | `uv run --directory ~/.dotfiles-agents/mcp/teams-mcp teams-browser-mcp` | opencode, Claude Code, Claude Desktop        |
 | [`entra-mcp`](mcp/entra-mcp/README.md)       | custom   | `entra-mcp` (uv tool)                                                   | opencode, Claude Code, Claude Desktop, Codex |
@@ -148,8 +148,8 @@ clients = ["claude-code", "claude-desktop"]
 ```
 
 Catalog entries carry `tags`: `work` (azure, azure-devops, databricks,
-entra-mcp, teams-browser, m365-local) and `macos` (apple-mail, iMCP,
-m365-local). Excluded resources are simply not synced; nothing is scrubbed.
+entra-mcp, teams-browser, sharepoint-mcp) and `macos` (apple-mail, iMCP,
+sharepoint-mcp). Excluded resources are simply not synced; nothing is scrubbed.
 `"auto"` picks clients whose config directory exists. Selection logic lives in
 [`bin/agent_profile.py`](bin/agent_profile.py); full example in
 `catalog/local.toml.example`.

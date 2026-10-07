@@ -11,7 +11,7 @@
 #   hook_commands exact shell commands of retired hooks (scrubbed from the
 #                 managed event maps)
 
-mcp           = ["notion"]
+mcp           = ["notion", "m365-local"]
 skills        = []
 plugins       = []
 instructions  = []

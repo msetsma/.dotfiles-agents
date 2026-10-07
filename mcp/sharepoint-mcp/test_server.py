@@ -1,4 +1,4 @@
-"""Self-check for m365-local-mcp. Runs offline: no Mail, Calendar or network.
+"""Self-check for sharepoint-mcp. Runs offline: no network, no SharePoint.
 
 uv run test_server.py
 """
@@ -11,38 +11,6 @@ import zipfile
 from pathlib import Path
 
 import server as s
-
-
-def test_delimiter_roundtrip():
-    """Subjects contain | , tabs and newlines -- only FS/RS survive."""
-    nasty = 'Re: Q3 | budget,\tnotes\nsecond line'
-    raw = f'5551{s.FS}2026-08-20T12:03:38{s.FS}a@b.com{s.FS}{nasty}{s.RS}'
-    rows = s.parse_records(raw, 4)
-    assert len(rows) == 1, rows
-    assert rows[0][3] == nasty
-    assert rows[0][0] == '5551'
-
-
-def test_parse_records_drops_bad_arity():
-    """A shifted column is worse than a dropped row."""
-    raw = f'a{s.FS}b{s.RS}c{s.FS}d{s.FS}e{s.RS}'
-    assert s.parse_records(raw, 2) == [['a', 'b']]
-
-
-def test_parse_records_ignores_blank_tail():
-    assert s.parse_records(f'a{s.FS}b{s.RS}', 2) == [['a', 'b']]
-    assert s.parse_records('', 2) == []
-
-
-def test_esc_quotes():
-    assert s.esc('say "hi"') == 'say \\"hi\\"'
-    assert s.esc('back\\slash') == 'back\\\\slash'
-
-
-def test_mailbox_ref():
-    assert s.mailbox_ref('Inbox') == 'inbox'
-    assert s.mailbox_ref('inbox') == 'inbox'
-    assert 'mailbox "Sent Items"' in s.mailbox_ref('Sent Items')
 
 
 def test_path_escape_rejected():
@@ -95,7 +63,7 @@ def _synthetic_xlsx() -> Path:
             '<row><c><v>42</v></c><c t="inlineStr"><is><t>inline</t></is></c></row>'
             '</sheetData></worksheet>',
         )
-    out = Path('/tmp/_m365_test.xlsx')
+    out = Path('/tmp/_sp_test.xlsx')
     out.write_bytes(buf.getvalue())
     return out
 
@@ -135,7 +103,7 @@ def _multi_sheet_xlsx(n: int) -> Path:
                 f'<c t="inlineStr"><is><t>MARKER{i}</t></is></c>'
                 '</row></sheetData></worksheet>',
             )
-    out = Path('/tmp/_m365_multi.xlsx')
+    out = Path('/tmp/_sp_multi.xlsx')
     out.write_bytes(buf.getvalue())
     return out
 
@@ -161,7 +129,7 @@ def test_xlsx_fallback_sorts_numerically():
     with zipfile.ZipFile(buf, 'w') as zf:
         for i in (1, 2, 10):
             zf.writestr(f'xl/worksheets/sheet{i}.xml', f'<worksheet xmlns="{main}"/>')
-    p = Path('/tmp/_m365_fallback.xlsx')
+    p = Path('/tmp/_sp_fallback.xlsx')
     p.write_bytes(buf.getvalue())
     try:
         with zipfile.ZipFile(p) as zf:
@@ -269,15 +237,185 @@ def test_xml_text_survives_bad_xml():
     assert 'hello' in s._xml_text(b'<a><b>hello</b></a>')
 
 
-def test_read_only_surface():
-    """No tool may mutate anything. Guard against future additions."""
-    names = set()
-    for attr in dir(s):
-        obj = getattr(s, attr)
-        if callable(obj) and getattr(obj, '__doc__', None) and not attr.startswith('_'):
-            names.add(attr)
+def test_read_only_by_default():
+    """Writes are opt-in: nothing write-ish is advertised unless SHAREPOINT_ENABLE_WRITES is set."""
+    assert s.ENABLE_WRITES is False
+    assert s.REGISTERED_WRITE_TOOLS == []
+    # The write functions exist so they stay testable, but must not be registered.
+    for name in ('sp_list_item_create', 'sp_list_item_update', 'sp_list_item_delete'):
+        assert callable(getattr(s, name)), name
     forbidden = {'mail_send', 'mail_reply', 'event_create', 'sp_write', 'mail_move'}
+    names = {a for a in dir(s) if callable(getattr(s, a)) and not a.startswith('_')}
     assert not (names & forbidden), names & forbidden
+
+
+# --- SharePoint list tools (Microsoft Graph) ------------------------------
+
+
+def test_site_path_forms():
+    """URLs, host:path, and composite ids all resolve to a Graph path segment."""
+    assert s._site_path('https://steelcase.sharepoint.com/sites/Foo') == 'steelcase.sharepoint.com:/sites/Foo'
+    assert s._site_path('https://steelcase.sharepoint.com/sites/Foo/') == 'steelcase.sharepoint.com:/sites/Foo'
+    assert s._site_path('steelcase.sharepoint.com:/sites/Foo') == 'steelcase.sharepoint.com:/sites/Foo'
+    composite = 'steelcase.sharepoint.com,0dcf,abc'
+    assert s._site_path(composite) == composite
+
+
+def test_resolve_site_id_passthrough():
+    """A composite id must not trigger a Graph round-trip."""
+    composite = 'steelcase.sharepoint.com,0dcf,abc'
+    assert s._resolve_site_id(composite) == composite
+
+
+def test_list_items_paging_and_limit():
+    """Paging is followed and `limit` caps the result with a truncation flag."""
+    pages = [
+        {
+            'value': [{'id': '1', 'fields': {'t': 'a'}}, {'id': '2', 'fields': {'t': 'b'}}],
+            '@odata.nextLink': 'https://graph.microsoft.com/next',
+        },
+        {'value': [{'id': '3', 'fields': {'t': 'c'}}]},
+    ]
+    calls = []
+    orig = s._graph_get
+    s._graph_get = lambda url, headers=None: (calls.append(url), pages.pop(0))[1]
+    try:
+        r = s.sp_list_items('steelcase.sharepoint.com,aaa,bbb', 'L', limit=2)
+    finally:
+        s._graph_get = orig
+    assert r['count'] == 2, r
+    assert r['truncated'] is True, r
+    assert [i['id'] for i in r['items']] == ['1', '2'], r
+    assert len(calls) == 2, calls  # a second page is fetched to detect the overflow
+
+
+def test_list_items_filter_prefix_and_header():
+    """filter_query gains the fields/ prefix; the Prefer header is always sent."""
+    seen = {}
+
+    def fake(url, headers=None):
+        seen['url'] = url
+        seen['headers'] = headers
+        return {'value': []}
+
+    orig = s._graph_get
+    s._graph_get = fake
+    try:
+        s.sp_list_items(
+            'steelcase.sharepoint.com,aaa,bbb', 'Project Portfolio', filter_query="project_status eq 'In Progress'"
+        )
+    finally:
+        s._graph_get = orig
+    assert 'Project%20Portfolio' in seen['url'], seen['url']
+    assert "$filter=fields/project_status%20eq%20'In%20Progress'" in seen['url'], seen['url']
+    assert seen['headers'] == {'Prefer': 'HonorNonIndexedQueriesWarningMayFailRandomly'}, seen['headers']
+
+
+def test_graph_error_surfaces_as_dict():
+    """A Graph failure must become {'error': ...}, never a raised exception."""
+
+    def boom(url, headers=None):
+        raise s.GraphError('boom')
+
+    orig = s._graph_get
+    s._graph_get = boom
+    try:
+        assert s.sp_lists('site') == {'error': 'boom'}
+        assert s.sp_list_items('site', 'L') == {'error': 'boom'}
+    finally:
+        s._graph_get = orig
+
+
+def test_az_bin_missing_raises_graph_error():
+    """An absent `az` is reported as a GraphError, not a bare OSError."""
+    orig = s.shutil.which
+    s.shutil.which = lambda _name: None
+    try:
+        try:
+            s._az_bin()
+        except s.GraphError:
+            return
+        raise AssertionError('expected GraphError when az is absent')
+    finally:
+        s.shutil.which = orig
+
+
+# --- SharePoint list writes (opt-in) --------------------------------------
+
+
+def test_list_item_create_posts_fields():
+    seen = {}
+
+    def fake(url, method='GET', body=None, headers=None, timeout=60):
+        seen.update(url=url, method=method, body=body)
+        return {'id': '99', 'webUrl': 'https://x/99', 'fields': {'Title': 'T'}}
+
+    orig = s._graph_request
+    s._graph_request = fake
+    try:
+        r = s.sp_list_item_create('steelcase.sharepoint.com,a,b', 'L', {'Title': 'T'})
+    finally:
+        s._graph_request = orig
+    assert seen['method'] == 'POST', seen
+    assert seen['body'] == {'fields': {'Title': 'T'}}, seen
+    assert r == {'id': '99', 'web_url': 'https://x/99'}, r
+
+
+def test_list_item_update_patches_only_given_fields():
+    seen = {}
+
+    def fake(url, method='GET', body=None, headers=None, timeout=60):
+        seen.update(url=url, method=method, body=body)
+        return {'Title': 'new'}
+
+    orig = s._graph_request
+    s._graph_request = fake
+    try:
+        r = s.sp_list_item_update('steelcase.sharepoint.com,a,b', 'Project Portfolio', '3', {'Title': 'new'})
+    finally:
+        s._graph_request = orig
+    assert seen['method'] == 'PATCH', seen
+    assert seen['body'] == {'Title': 'new'}, seen
+    assert '/items/3/fields' in seen['url'], seen
+    assert 'Project%20Portfolio' in seen['url'], seen
+    assert r == {'id': '3', 'updated': ['Title']}, r
+
+
+def test_list_item_delete_uses_delete():
+    seen = {}
+
+    def fake(url, method='GET', body=None, headers=None, timeout=60):
+        seen.update(url=url, method=method)
+        return {}
+
+    orig = s._graph_request
+    s._graph_request = fake
+    try:
+        r = s.sp_list_item_delete('steelcase.sharepoint.com,a,b', 'L', '3')
+    finally:
+        s._graph_request = orig
+    assert seen['method'] == 'DELETE', seen
+    assert seen['url'].endswith('/items/3'), seen
+    assert r == {'deleted': True, 'item_id': '3'}, r
+
+
+def test_writes_reject_empty_fields():
+    assert 'error' in s.sp_list_item_create('steelcase.sharepoint.com,a,b', 'L', {})
+    assert 'error' in s.sp_list_item_update('steelcase.sharepoint.com,a,b', 'L', '3', {})
+
+
+def test_write_error_surfaces_as_dict():
+    def boom(url, method='GET', body=None, headers=None, timeout=60):
+        raise s.GraphError('nope')
+
+    orig = s._graph_request
+    s._graph_request = boom
+    try:
+        assert s.sp_list_item_create('steelcase.sharepoint.com,a,b', 'L', {'T': 1}) == {'error': 'nope'}
+        assert s.sp_list_item_update('steelcase.sharepoint.com,a,b', 'L', '3', {'T': 1}) == {'error': 'nope'}
+        assert s.sp_list_item_delete('steelcase.sharepoint.com,a,b', 'L', '3') == {'error': 'nope'}
+    finally:
+        s._graph_request = orig
 
 
 if __name__ == '__main__':
