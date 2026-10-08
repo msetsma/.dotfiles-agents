@@ -1,4 +1,0 @@
-name        = "pi-goal-x"
-description = "Adds /goal: conversational goal planning, persistent progress, and an independent completion auditor."
-source      = "npm:pi-goal-x"
-clients     = ["pi"]

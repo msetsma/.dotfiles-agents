@@ -1,4 +1,0 @@
-name        = "rpiv-todo"
-description = "Model-managed todo list rendered as a live overlay; survives /reload and compaction."
-source      = "npm:@juicesharp/rpiv-todo"
-clients     = ["pi"]

@@ -1,4 +1,0 @@
-name        = "pi-zentui"
-description = "Modular UI components: customizable editors, messages, progress displays, and statuslines."
-source      = "npm:pi-zentui"
-clients     = ["pi"]

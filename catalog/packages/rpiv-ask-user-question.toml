@@ -1,4 +1,0 @@
-name        = "rpiv-ask-user-question"
-description = "Structured questionnaire the model can put to you instead of guessing, with typed options."
-source      = "npm:@juicesharp/rpiv-ask-user-question"
-clients     = ["pi"]

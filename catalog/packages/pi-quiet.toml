@@ -1,4 +1,0 @@
-name        = "pi-quiet"
-description = "Compact transcript rendering: one-line tool summaries, an alt+o detail overlay, and /quiet modes."
-source      = "${AGENT_HOME}/packages/pi-quiet"
-clients     = ["pi"]

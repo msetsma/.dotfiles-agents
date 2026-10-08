@@ -130,14 +130,11 @@ Full table of what this repo manages. `custom` = source lives in this repo;
 
 ### pi packages
 
-| Package | Source | Purpose |
-|---|---|---|
-| `pi-subagents` | `npm:pi-subagents` | single-agent delegation and scripted multi-agent workflows |
-| `rpiv-ask-user-question` | `npm:@juicesharp/rpiv-ask-user-question` | structured questions with typed options instead of guessing |
-| `rpiv-todo` | `npm:@juicesharp/rpiv-todo` | model-managed todo list as a live overlay |
-| `pi-goal-x` | `npm:pi-goal-x` | `/goal`: goal planning, persistent progress, completion auditor |
-| `pi-zentui` | `npm:pi-zentui` | UI components: editors, messages, progress, statuslines |
-| [`pi-quiet`](packages/pi-quiet/README.md) | `packages/pi-quiet` (local) | compact tool rendering, `alt+o` detail overlay, `/quiet` modes |
+No pi packages are currently managed — the whole set was retired (see
+[`catalog/retired.toml`](catalog/retired.toml)) and `catalog/packages/` is empty.
+The mechanism is unchanged: drop a `catalog/packages/<name>.toml` (see
+[Resource kinds](#resource-kinds)), remove its source from `retired.toml`, then
+`make sync`.
 
 ## Secrets
 
