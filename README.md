@@ -118,7 +118,7 @@ Full table of what this repo manages. `custom` = source lives in this repo;
 | [`teams-browser`](mcp/teams-mcp/README.md)   | custom   | `uv run --directory ~/.dotfiles-agents/mcp/teams-mcp teams-browser-mcp` | opencode, Claude Code, Claude Desktop        |
 | [`entra-mcp`](mcp/entra-mcp/README.md)       | custom   | `entra-mcp` (uv tool)                                                   | opencode, Claude Code, Claude Desktop, Codex |
 | `obscura`                                    | external | `~/.local/bin/obscura mcp --stealth`                                    | opencode, Claude Code, Claude Desktop        |
-| `apple-mail`                                 | external | `apple-mail-mcp` (uv tool)                                              | opencode                                     |
+| `apple-mail`                                 | external | `apple-mail-mcp` (uv tool)                                              | opencode, Claude Desktop                     |
 | `databricks`                                 | external | `uv run --project ~/.dotfiles-agents/mcp/databricks-mcp databricks-mcp` | opencode, Claude Code, Claude Desktop, Codex |
 | `azure`                                      | external | `npx @azure/mcp@3.0.0-beta.29 server start`                             | opencode, Claude Code, Claude Desktop        |
 | `azure-devops`                               | external | `npx @azure-devops/mcp ${ADO_ORG}`                                      | opencode, Claude Code, Claude Desktop        |

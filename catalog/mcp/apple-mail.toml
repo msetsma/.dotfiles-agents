@@ -2,7 +2,7 @@ name        = "apple-mail"
 description = "Apple Mail search/read via the apple-mailbox-mcp uv tool (read-only)."
 kind        = "local"
 origin      = "external"
-clients     = ["opencode"]
+clients     = ["opencode", "claude-desktop"]
 tags        = ["macos"]
 
 [launch]
