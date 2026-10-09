@@ -33,7 +33,7 @@ make sync         # render + merge into every agent
 │   ├── clients.toml        # where each agent keeps each kind
 │   ├── paths.toml          # machine paths + ${VARS}
 │   └── retired.toml        # resources to scrub from every client
-├── bin/                    # agent-sync, agent-update, clean-python
+├── bin/                    # agent-sync, agent-update, clean-python, peek
 ├── mods/                   # Claude Code mods (local plugin marketplace, see mods/README.md)
 └── mcp/                    # MCP server projects
     ├── sharepoint-mcp/     # custom
@@ -101,8 +101,14 @@ catalog/packages/<name>.toml     # source + optional resource filters
   changed. Edits made with `pi config` to a catalog package are overwritten on
   the next sync, so copy them into the TOML.
 
-`catalog/skills/github-glowup/` is a real skill; `example-skill/` and
-`hooks/example-hook.toml` are templates.
+`catalog/skills/github-glowup/` and `catalog/skills/peek/` are real skills;
+`example-skill/` and `hooks/example-hook.toml` are templates.
+
+`bin/peek` runs a CLI or TUI in a hidden tmux pane and prints its screen as
+text, or with `-o shot.png` saves a real Ghostty screenshot, so an agent can
+check terminal output itself (`peek --help`;
+the `peek` skill tells agents when to use it). Link it onto your PATH once:
+`ln -s ~/.dotfiles-agents/bin/peek ~/.local/bin/peek`.
 
 ## Inventory
 

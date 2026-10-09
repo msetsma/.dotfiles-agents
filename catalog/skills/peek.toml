@@ -1,0 +1,3 @@
+name        = "peek"
+description = "See what a CLI or TUI renders in a terminal: run it in a hidden tmux pane of a fixed size, type keys, and read the screen back as text or as a real Ghostty screenshot. Use when building or debugging terminal UIs, Claude Code mods, or any command whose on-screen layout matters."
+clients     = ["claude-code"]

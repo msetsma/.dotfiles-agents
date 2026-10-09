@@ -1,0 +1,176 @@
+#!/usr/bin/env bash
+# peek - run a CLI or TUI in a hidden terminal and print what its screen shows.
+#
+# Lets an agent (or you) see exactly what a terminal program renders, with no
+# screenshots: the command runs in a detached tmux pane of a fixed size, peek
+# types the keys you give it, waits for the screen to settle, then prints the
+# pane as text.
+#
+#   peek [options] -- <command...>        fresh terminal, print the screen, close it
+#   peek -S <name> [options] -- <command> start a named terminal and keep it open
+#   peek -S <name> [options]              act on that terminal again (keys, capture)
+#   peek --kill <name>                    close a named terminal
+#   peek --list                           list open named terminals
+#
+# Options (keys run in the order given):
+#   -k <text>     type text literally                 (-k '/sidebar')
+#   -K <key>      press a key by tmux name            (-K Enter, -K Escape, -K C-c, -K Down)
+#   -s <WxH>      terminal size, default 120x40
+#   -r <regex>    after starting, wait until the screen matches regex (the program is ready)
+#   -u <regex>    capture once the screen matches regex (grep -E); without -r/-u peek
+#                 waits for the screen to stop changing
+#   -t <seconds>  longest wait for any step, default 15
+#   -c            keep colors (ANSI escapes) in the output
+#   -a            include the scrollback above the screen, not just the visible rows
+#   -o <file.png> also save a real screenshot (macOS + Ghostty): a borderless Ghostty
+#                 window attaches to the terminal for a moment and is captured, so the
+#                 image has your font, theme and glyphs; the text still prints
+#
+# A program that exits stays on screen, followed by a "[peek: exited N]" line.
+#
+# Screenshots need Screen Recording permission for the app running peek (macOS
+# asks once). Under a tiling window manager, float windows titled "peek-shot" so
+# the capture keeps its size (AeroSpace: an [[on-window-detected]] rule matching
+# that title, run = 'layout floating'). Everything runs on a private tmux server
+# (`tmux -L peek`), so your own tmux sessions are never touched.
+#
+# Examples:
+#   peek -- git log --oneline -5
+#   peek -s 170x50 -r '❯' -k /sidebar -K Enter -u 'Sidebar opened' -- claude
+#   peek -o /tmp/top.png -- htop
+#   peek -S top -- htop                # then:  peek -S top -K F2   ...   peek --kill top
+
+set -euo pipefail
+
+# Private server, no user config: the same terminal on every machine.
+tmux_() { tmux -L peek -f /dev/null "$@"; }
+
+usage() { sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+
+size=120x40 timeout=15 ready='' until='' color='' history='' name='' png=''
+actions=()
+while (($#)); do
+  case $1 in
+    -k) actions+=("text:$2"); shift 2 ;;
+    -K) actions+=("key:$2"); shift 2 ;;
+    -s) size=$2; shift 2 ;;
+    -r) ready=$2; shift 2 ;;
+    -u) until=$2; shift 2 ;;
+    -t) timeout=$2; shift 2 ;;
+    -c) color=-e; shift ;;
+    -a) history='-S -'; shift ;;
+    -o) png=$2; shift 2 ;;
+    -S) name=$2; shift 2 ;;
+    --kill) tmux_ kill-session -t "=$2"; exit ;;
+    --list) tmux_ list-sessions -F '#{session_name} #{window_width}x#{window_height} #{pane_current_command}' 2>/dev/null || true; exit ;;
+    -h | --help) usage ;;
+    --) shift; break ;;
+    *) break ;;
+  esac
+done
+command -v tmux >/dev/null || { echo 'peek: tmux is not installed' >&2; exit 1; }
+[[ -z $png ]] || [[ $(uname) == Darwin && -d /Applications/Ghostty.app ]] || {
+  echo 'peek: -o needs macOS and Ghostty (/Applications/Ghostty.app)' >&2
+  exit 1
+}
+
+capture() { tmux_ capture-pane -p $color $history -t "=$name:" | sed 's/[[:space:]]*$//'; }
+
+# Waits until the screen matches $1, or (with no $1) until two captures 0.3 s
+# apart are the same. Gives up after -t seconds and leaves what is there.
+settle() {
+  local want=${1:-} deadline=$((SECONDS + timeout)) last='' now
+  sleep 0.3
+  while ((SECONDS < deadline)); do
+    now=$(capture)
+    if [[ -n $want ]]; then
+      grep -Eq -- "$want" <<<"$now" && return 0
+    elif [[ $now == "$last" ]]; then
+      return 0
+    fi
+    last=$now
+    sleep 0.3
+  done
+  echo "peek: gave up waiting after ${timeout}s" >&2
+}
+
+if [[ -z $name ]]; then
+  name="peek-$$"
+  trap 'tmux_ kill-session -t "=$name" 2>/dev/null || true' EXIT
+fi
+
+if (($#)); then
+  tmux_ kill-session -t "=$name" 2>/dev/null || true
+  # Run the command under a small wrapper that, when the command exits, prints
+  # its status and keeps the pane open, so even instant output can be captured.
+  # The server is set up first in the same call: no status line, so the pane
+  # gets the full height, and a 256-color terminal that advertises truecolor.
+  # Then a fixed size, so a window attaching for a screenshot never resizes it.
+  tmux_ start-server \; set-option -g status off \; set-option -g default-terminal tmux-256color \; \
+    new-session -d -s "$name" -x "${size%x*}" -y "${size#*x}" -c "$PWD" -e COLORTERM=truecolor \
+    bash -c '"$@"; printf "\n[peek: exited %s]\n" "$?"; exec tail -f /dev/null' peek "$@"
+  tmux_ set-option -g window-size manual
+  settle "$ready"
+elif [[ $name == peek-$$ ]]; then
+  usage 1
+elif ! tmux_ has-session -t "=$name" 2>/dev/null; then
+  echo "peek: no terminal named '$name'; start one with: peek -S $name -- <command>" >&2
+  exit 1
+fi
+
+# Each key waits for the screen to stop changing; -u is for the final capture.
+for action in ${actions[@]+"${actions[@]}"}; do
+  case $action in
+    text:*) tmux_ send-keys -t "=$name:" -l -- "${action#text:}" ;;
+    key:*) tmux_ send-keys -t "=$name:" -- "${action#key:}" ;;
+  esac
+  settle
+done
+[[ -z $until ]] || settle "$until"
+
+# The screen without trailing blank lines.
+trim() { sed -e :a -e '/^\n*$/{$d;N;ba' -e '}'; }
+
+# The CoreGraphics id of the on-screen window titled $1, for `screencapture -l`.
+window_id() {
+  osascript -l JavaScript - "$1" <<'JS'
+ObjC.import('CoreGraphics')
+function run([title]) {
+  const list = ObjC.castRefToObject($.CGWindowListCopyWindowInfo($.kCGWindowListOptionOnScreenOnly, 0))
+  for (let i = 0; i < list.count; i++) {
+    const w = list.objectAtIndex(i), name = w.objectForKey('kCGWindowName')
+    if (!name.isNil() && name.js === title) return String(w.objectForKey('kCGWindowNumber').js)
+  }
+  return ''
+}
+JS
+}
+
+# Opens a borderless Ghostty window exactly the terminal's size, attached to it,
+# captures that window to $1, then detaches, which closes the window.
+shot() {
+  local title="peek-shot-$name" cells id='' i
+  cells=$(tmux_ display-message -p -t "=$name:" '#{window_width} #{window_height}')
+  open -na Ghostty.app --args --title="$title" --window-decoration=none \
+    --window-padding-x=0 --window-padding-y=0 --window-padding-balance=false \
+    --window-width="${cells% *}" --window-height="${cells#* }" --quit-after-last-window-closed=true \
+    -e tmux -L peek -f /dev/null attach -t "=$name"
+  for ((i = 0; i < 40; i++)); do
+    id=$(window_id "$title") && [[ -n $id ]] && break
+    sleep 0.25
+  done
+  if [[ -z $id ]]; then
+    echo "peek: the screenshot window never appeared" >&2
+  else
+    sleep 0.5 # let Ghostty draw the attached screen
+    screencapture -x -o -l "$id" "$1"
+    # A margin in the terminal's own background color, when ImageMagick is around.
+    if command -v magick >/dev/null; then
+      magick "$1" -bordercolor "$(magick "$1" -format '%[pixel:p{0,0}]' info:)" -border 24 "$1"
+    fi
+  fi
+  tmux_ detach-client -s "=$name" 2>/dev/null || true
+}
+
+[[ -z $png ]] || shot "$png"
+capture | trim
