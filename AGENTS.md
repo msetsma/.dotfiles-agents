@@ -88,6 +88,16 @@ opencode plugin over `bin/clean-python`.
 `catalog/clients.toml` declares a `[<client>.<kind>]` block for each kind a
 client supports; a kind with no block is skipped for that client.
 
+## Claude Code mods
+
+Mods (hooks-module plugins: panes, bands, status line, toasts, tool-call
+guards) live in `mods/<name>/`, outside the catalog. `mods/` is a local plugin
+marketplace named `dotfiles-mods`; Claude Code reads each mod from this folder,
+so edits need only `/reload-plugins`. To add one, create the folder, list it in
+`mods/.claude-plugin/marketplace.json`, then
+`claude plugin install <name>@dotfiles-mods`. Details in
+[`mods/README.md`](mods/README.md).
+
 ## Registering a server with the local agents
 
 > The snippets below are a fallback for a machine without this repo; prefer the

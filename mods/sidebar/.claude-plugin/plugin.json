@@ -1,0 +1,6 @@
+{
+  "name": "sidebar",
+  "version": "0.3.0",
+  "description": "Toggleable sidebar with session usage (limit resets, burn rate, compaction forecast), git status, quick prompts, todos, subagents, MCP servers with per-server token cost, tool activity, errors and files touched with diff sizes; collapsible sections and in-pane settings.",
+  "types": "./types/index.d.ts"
+}

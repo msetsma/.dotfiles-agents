@@ -34,6 +34,7 @@ make sync         # render + merge into every agent
 │   ├── paths.toml          # machine paths + ${VARS}
 │   └── retired.toml        # resources to scrub from every client
 ├── bin/                    # agent-sync, agent-update, clean-python
+├── mods/                   # Claude Code mods (local plugin marketplace, see mods/README.md)
 └── mcp/                    # MCP server projects
     ├── sharepoint-mcp/     # custom
     ├── teams-mcp/          # custom
