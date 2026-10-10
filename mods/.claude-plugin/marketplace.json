@@ -3,11 +3,14 @@
   "owner": {
     "name": "Mitchell Setsma"
   },
-  "description": "Claude Code mods (hooks-module plugins) kept in ~/.dotfiles-agents/mods.",
+  "description": "Claude Code mods (hooks-module plugins), each in its own GitHub repo.",
   "plugins": [
     {
       "name": "sidebar",
-      "source": "./sidebar",
+      "source": {
+        "source": "github",
+        "repo": "msetsma/claude-sidebar"
+      },
       "description": "Toggleable sidebar: usage, todos, subagents, MCP servers, recent tools."
     }
   ]

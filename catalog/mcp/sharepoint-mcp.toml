@@ -7,8 +7,10 @@ tags        = ["work", "macos"]
 
 [launch]
 command = "uv"
-args    = ["run", "--directory", "${AGENT_HOME}/mcp/sharepoint-mcp", "server.py"]
+args    = ["run", "--directory", "${AGENT_HOME}/vendor/sharepoint-mcp", "server.py"]
 
+# Source lives in its own repo; `make agent-update` clones it into vendor/.
 [package]
-manager = "source"
-path    = "${AGENT_HOME}/mcp/sharepoint-mcp"
+manager = "git"
+repo    = "msetsma/sharepoint-mcp"
+path    = "${AGENT_HOME}/vendor/sharepoint-mcp"

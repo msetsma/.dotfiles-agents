@@ -9,6 +9,8 @@ tags        = ["work"]
 command = "entra-mcp"
 args    = []
 
+# Source lives in its own repo; `make agent-update` clones it into vendor/.
 [package]
 manager = "git"
-path    = "${AGENT_HOME}/mcp/entra-mcp"
+repo    = "msetsma/entra-mcp"
+path    = "${AGENT_HOME}/vendor/entra-mcp"

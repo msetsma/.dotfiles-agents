@@ -16,8 +16,8 @@ __pycache__/
 dist/
 build/
 
-# teams-mcp/.ori working dir (session history + logs)
-/mcp/teams-mcp/.ori/
+# MCP server repos cloned by `make agent-update` (see catalog/mcp/*.toml [package])
+/vendor/
 
 # SQLite databases and their WAL/SHM/journal sidecars - never commit these
 *.sqlite

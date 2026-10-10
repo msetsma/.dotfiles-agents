@@ -7,8 +7,10 @@ tags        = ["work"]
 
 [launch]
 command = "uv"
-args    = ["run", "--directory", "${AGENT_HOME}/mcp/teams-mcp", "--extra", "mcp", "teams-browser-mcp"]
+args    = ["run", "--directory", "${AGENT_HOME}/vendor/teams-mcp", "--extra", "mcp", "teams-browser-mcp"]
 
+# Source lives in its own repo; `make agent-update` clones it into vendor/.
 [package]
-manager = "source"
-path    = "${AGENT_HOME}/mcp/teams-mcp"
+manager = "git"
+repo    = "msetsma/teams-mcp"
+path    = "${AGENT_HOME}/vendor/teams-mcp"
