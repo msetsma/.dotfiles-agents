@@ -19,6 +19,9 @@ import {
   TRACK,
   WARN,
   bar,
+  barCells,
+  glide,
+  spinFrame,
   duration,
   tokenColor,
   toolColor,
@@ -26,12 +29,14 @@ import {
   compact,
   pillGlyphs,
   describeCall,
+  fillRuns,
   fit,
   fitStart,
   estimateTokens,
   limitLabel,
   loadSettings,
   mcpServers,
+  skillGroups,
   parseGitStatus,
   parseNumstat,
   pushActivity,
@@ -70,6 +75,7 @@ function session(on: On, tools: string[]) {
   on('session.model', () => ({ value: 'opus' }))
   on('session.turns', () => ({ value: 0 }))
   on('agent.list', () => ({ value: [] }))
+  on('command.list', () => ({ value: [{ name: 'peek', description: '', source: 'user' as const }] }))
   on('ui.panes', () => ({ value: [] }))
   on('ui.open', () => ({ value: { isPlaced: true as const } }))
   // git: a clean `main` one ahead of origin, and a numstat for the file the tests edit.
@@ -495,4 +501,98 @@ test('editing a quick prompt replaces it; cancel and a missing name change nothi
     { label: 'tests', text: 'run the tests' },
     { label: 'review', text: 'review the diff for bugs' },
   ])
+})
+
+
+test('a bar fills green, then yellow, then red along its length', async () => {
+  expect(fillRuns(0, 10)).toEqual([])
+  expect(fillRuns(3, 10)).toEqual([[3, OK]])
+  expect(fillRuns(10, 10)).toEqual([[3, OK], [4, WARN], [3, BAD]])
+})
+
+test('skills group by where they come from, built-ins left out, no duplicates', async () => {
+  expect(
+    skillGroups(
+      [
+        { name: 'compact', source: 'builtin' },
+        { name: 'peek', source: 'user' },
+        { name: 'deploy', source: 'user' },
+        { name: 'pdf', source: 'user' },
+        { name: 'anthropic-skills:pdf', source: 'user' },
+        { name: 'caveman:caveman-commit', source: 'plugin', plugin: 'caveman' },
+        { name: 'caveman:caveman-commit', source: 'plugin', plugin: 'caveman' },
+        { name: 'caveman:caveman', source: 'plugin' },
+        { name: 'github:review (MCP)', source: 'mcp' },
+      ],
+      { peek: 'personal', deploy: 'project' },
+    ),
+  ).toEqual([
+    { group: 'caveman', names: ['caveman:caveman', 'caveman:caveman-commit'] },
+    { group: 'claude.ai', names: ['pdf'] }, // `anthropic-skills:pdf` reads the same
+    { group: 'github (mcp)', names: ['github:review'] },
+    { group: 'personal', names: ['peek'] },
+    { group: 'project', names: ['deploy'] },
+  ])
+})
+
+test('skill groups start collapsed and open on press', async ($, on) => {
+  mock.clock(on)
+  const saved = memoryStore(on)
+  session(on, [])
+  await openSidebar($)
+  for (const surface of SURFACES) {
+    const ui = await $.ui.mount({ ...PANE, surface })
+    expect(await ui.find({ key: 'skill:peek' })).toBeUndefined()
+    await ui.press({ key: 'skillgroup:claude.ai' })
+    expect(await ui.find({ key: 'skill:peek' })).toBeDefined()
+    await ui.press({ key: 'skillgroup:claude.ai' })
+    expect(await ui.find({ key: 'skill:peek' })).toBeUndefined()
+    await ui.unmount()
+  }
+  expect((saved.settings as { openSkillGroups: string[] }).openSkillGroups).toEqual([])
+})
+
+test('every bar style draws one character per cell', async () => {
+  expect(barCells(50, 6, 'line')).toEqual(['━━━', '───'])
+  expect(barCells(50, 4, 'ascii')).toEqual(['##', '--'])
+  expect(barCells(0, 3, 'block')).toEqual(['', '░░░'])
+  // 30% of 5 cells is 12 eighths: one full cell and a half one.
+  expect(barCells(30, 5, 'smooth')).toEqual(['█▌', '   '])
+  expect(barCells(100, 3, 'nerd')).toEqual(['\uee03\uee04\uee05', ''])
+})
+
+test('look settings fall back per key, and the old Nerd Font switch carries over', async () => {
+  expect(loadSettings({ look: { barStyle: 'dots', spinner: 'nope' } }).look).toEqual({ ...DEFAULT_SETTINGS.look, barStyle: 'dots' })
+  expect(loadSettings({ nerdFont: true }).look).toEqual({ ...DEFAULT_SETTINGS.look, glyphs: 'nerd', barStyle: 'nerd' })
+})
+
+test('a bar glides from 0 to its value, and spinners step on the frame clock', async () => {
+  expect(glide('t', 60, 1000, true)).toBe(0)
+  expect(glide('t', 60, 1300, true)).toBeGreaterThan(30)
+  expect(glide('t', 60, 2000, true)).toBe(60)
+  expect(glide('u', 60, 0, false)).toBe(60)
+  expect(spinFrame('line', 0, '*')).toBe('|')
+  expect(spinFrame('line', 100, '*')).toBe('/')
+  expect(spinFrame('off', 100, '*')).toBe('*')
+})
+
+test('the ctx bar draws with no reading yet, and a running call spins in Activity', async ($, on) => {
+  mock.clock(on)
+  session(on, [])
+  let during: string[] = []
+  // The test's own engine, not the hook's `$`, mounts the pane mid-call.
+  on('tool.call', async () => {
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    during = (await ui.findAll({ type: 'Text' })).map(t => t.text)
+    await ui.unmount()
+    return { result: {}, text: 'ok' }
+  })
+  await openSidebar($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const lines = (await ui.findAll({ type: 'Text' })).map(t => t.text)
+  expect(lines.some(l => /^ctx\s.*\s0%$/.test(l))).toBe(true)
+  await ui.unmount()
+  await $.tool.call({ tool: 'Bash', tool_use_id: 'r1', command: 'sleep 1', description: 'Wait a bit' })
+  expect(during).toContain(' Wait a bit')
+  expect(during).toContain('⠋ ')
 })

@@ -9,7 +9,7 @@ each mod straight from here. No copy, no reinstall after edits.
 
 | Mod | What it does |
 |---|---|
-| `sidebar` | `/sidebar` toggles a pane with model, turns, burn rate ($/hr, $/turn), context and rate-limit bars with reset times, cost, git branch, ahead/behind and the changed files from `git status` with `+add −del` (click to copy), quick-prompt buttons that fill the composer (edit them in place), todos, subagents, MCP servers with per-server call and token estimates, tool activity (merged repeats, click to copy) and failed calls (click to expand). Click a header to collapse it; ⚙ sets each section to show/auto/hide and the row count, saved across sessions. Refreshes every 5 s. |
+| `sidebar` | `/sidebar` toggles a pane with model, turns, burn rate ($/hr, $/turn), context and rate-limit bars with reset times, cost, git branch, ahead/behind and the changed files from `git status` with `+add −del` (click to copy), quick-prompt buttons that fill the composer (edit them in place), slash commands (skills, plugin and user commands, MCP prompts) grouped by package (click to fill `/name`), todos, subagents, MCP servers with per-server call and token estimates, tool activity (running calls spin with a live timer, merged repeats, click to copy) and failed calls (click to expand). Click a header to collapse it; ⚙ sets each section to show/auto/hide, the row count, and the look: icon set (unicode, Nerd Font, ASCII), bar style, color and width, header rule, spacing, spinner and bar motion, saved across sessions. Refreshes every 5 s. |
 
 ## Layout
 

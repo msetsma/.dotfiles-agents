@@ -31,17 +31,34 @@ export type GitFile = { path: string; status: string }
 export type GitInfo = { branch: string; ahead?: number; behind?: number; files: GitFile[] }
 export type ErrorRow = { id: string; tool: string; target: string; text: string }
 export type QuickPrompt = { label: string; text: string }
+// Slash commands from skills and plugins, grouped by the plugin (package) that adds them.
+export type SkillGroup = { group: string; names: string[] }
 // The prompt form while open: `at` is the index it edits, -1 for a new one.
 export type PromptDraft = { at: number } & QuickPrompt
 // Repo-relative path → lines added and deleted, as `git diff --numstat` reports them.
 export type DiffStat = Record<string, { add: number; del: number }>
-export type SectionId = 'usage' | 'git' | 'todos' | 'agents' | 'mcp' | 'prompts' | 'activity' | 'errors'
+export type SectionId = 'usage' | 'git' | 'todos' | 'agents' | 'mcp' | 'prompts' | 'skills' | 'activity' | 'errors'
 export type Visibility = 'show' | 'auto' | 'hide'
+// How the pane draws: icon set, bar shape and color, header rule, spacing and motion.
+export type Look = {
+  glyphs: 'unicode' | 'nerd' | 'ascii'
+  barStyle: 'line' | 'block' | 'shade' | 'smooth' | 'pill' | 'dots' | 'braille' | 'ascii' | 'nerd'
+  barColor: 'gradient' | 'solid' | 'accent'
+  barWidth: 'fit' | '10' | '16' | '24'
+  headerStyle: 'rule' | 'dots' | 'heavy' | 'plain'
+  density: 'cozy' | 'compact'
+  spinner: 'dots' | 'arc' | 'circle' | 'bounce' | 'line' | 'nerd' | 'off'
+  barMotion: 'on' | 'off'
+}
+// A tool call still running, drawn with a spinner at the top of Activity.
+export type Running = { id: string; tool: string; target: string; agent: boolean; startedAt: number }
 export type Settings = {
   sections: Record<SectionId, Visibility>
   collapsed: SectionId[]
   recentCount: number
-  nerdFont: boolean
+  look: Look
+  // Skill groups the person opened; every other group shows collapsed.
+  openSkillGroups: string[]
   prompts: QuickPrompt[]
 }
 // Inside the block below `Settings` names claude-code's own type, so refer to ours by another name.
@@ -54,12 +71,12 @@ declare module 'claude-code' {
       todos: Todo[]
       agents: Agent[]
       mcp: McpServer[]
+      skills: SkillGroup[]
       mcpUsage: McpUsage
       activity: Activity[]
+      running: Running[]
       git: GitInfo | null
       diffStat: DiffStat
-      // `contextPercent` at each main-thread turn end, oldest first; reset by a compaction.
-      // The context percent auto-compaction runs at.
       errors: ErrorRow[]
       toolCalls: number
       settings: SidebarSettings
