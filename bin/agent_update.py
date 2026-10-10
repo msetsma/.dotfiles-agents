@@ -10,6 +10,8 @@ The ``[package]`` block on each server says how it's kept current:
                        ``uv tool upgrade <name>``.
   manager = "git"      ``git fetch`` + behind-count vs upstream; applied with
                        ``git pull --ff-only`` when on a branch with an upstream.
+                       With ``repo = "owner/name"`` a missing ``path`` is
+                       reported as not cloned and applied with ``git clone``.
   manager = "source"   runs from a working tree (always current).
   manager = "manual"   a binary / app updated by hand.
   manager = "remote"   a hosted endpoint.
@@ -17,7 +19,9 @@ The ``[package]`` block on each server says how it's kept current:
 Usage
 -----
   agent-update            report only
-  agent-update --apply    apply uv upgrades + git pulls + catalog pin bumps, then sync
+  agent-update --apply    apply uv upgrades + git clones/pulls + catalog pin bumps, then sync
+
+Servers excluded by this machine's ``[profile]`` (catalog/local.toml) are skipped.
 """
 
 from __future__ import annotations
@@ -149,6 +153,7 @@ class Plan:
     uv_project_bumps: list[tuple[str, str, Path, str, str]] = field(
         default_factory=list
     )  # name, proj, catalog, old, new
+    git_clones: list[tuple[str, str, str]] = field(default_factory=list)  # name, repo, path
     git_pulls: list[tuple[str, str, str]] = field(default_factory=list)  # name, path, branch
     git_manual: list[tuple[str, str]] = field(default_factory=list)
 
@@ -176,6 +181,9 @@ def uv_tool_status(pkg: dict, uv: dict[str, tuple[str, str]], plan: Plan) -> str
 
 def git_status(name: str, pkg: dict, ctx: dict, do_fetch: bool, plan: Plan) -> str:
     gp = ms.expand(pkg.get('path', ''), ctx)
+    if pkg.get('repo') and gp and not Path(gp).exists():
+        plan.git_clones.append((name, pkg['repo'], gp))
+        return f'not cloned (github.com/{pkg["repo"]} -> {gp})'
     gi = git_info(gp, do_fetch=do_fetch)
     if gi.get('error'):
         return f'{gi["error"]} ({gp})'
@@ -249,6 +257,11 @@ def apply_updates(plan: Plan) -> None:
         print(
             '    ' + (r.stdout.strip().splitlines()[-1] if r.returncode == 0 and r.stdout.strip() else r.stderr.strip())
         )
+    for _name, repo, gp in plan.git_clones:
+        print(f'  git clone {repo} -> {gp}')
+        Path(gp).parent.mkdir(parents=True, exist_ok=True)
+        r = sh(['git', 'clone', '--quiet', f'https://github.com/{repo}.git', gp])
+        print('    ' + ('cloned' if r.returncode == 0 else r.stderr.strip()))
     for _name, gp, branch in plan.git_pulls:
         print(f'  git pull {gp} ({branch})')
         r = sh(['git', '-C', gp, 'pull', '--ff-only'])
@@ -271,11 +284,13 @@ def main() -> int:
     ap.add_argument('--no-fetch', action='store_true', help='skip git fetch')
     args = ap.parse_args()
 
-    ctx = ms.build_context()
+    local = ms.load_local()
+    profile = local.get('profile', {})
+    ctx = ms.build_context(local)
     servers: dict[str, tuple[Path, dict]] = {}
     for path in sorted((CATALOG / 'mcp').glob('*.toml')):
-        raw = ms.load_toml(path)
-        if raw.get('package'):
+        raw = ms.load_raw(path, 'mcp', local)
+        if raw.get('package') and ms.is_selected(raw, profile):
             servers[raw['name']] = (path, raw['package'])
 
     uv = uv_outdated()
@@ -288,7 +303,7 @@ def main() -> int:
 
     if not args.apply:
         print()
-        if plan.catalog_bumps or plan.uv_upgrades or plan.git_pulls or plan.git_manual:
+        if plan.catalog_bumps or plan.uv_upgrades or plan.git_clones or plan.git_pulls or plan.git_manual:
             print('run `make agent-update` (or agent-update --apply) to apply')
         else:
             print('everything is current')
