@@ -1,8 +1,9 @@
 # AGENTS.md
 
-Instructions for anyone (human or agent) working in `~/.dotfiles-agents`. This directory is
-the base for custom MCP servers: each server lives in its own subdirectory and
-is registered with the local agent software.
+Instructions for anyone (human or agent) working in `~/.dotfiles-agents`. This directory
+registers MCP servers and other resources with the local agent software. Custom
+MCP servers each live in their own repo under
+[github.com/msetsma](https://github.com/msetsma) and are cloned into `vendor/`.
 
 ## The one rule
 
@@ -23,18 +24,21 @@ Tag resources that shouldn't reach every machine (`tags = ["work"]`,
 `catalog/local.toml` (see README "Per-machine profiles"). No profile = sync
 everything, which is the primary (Mac) behaviour.
 
-External servers carry a `[package]` block; `make agent-outdated` reports newer
-npm/uv/git versions, `make agent-update` applies them. Prefer `ref = "latest"`
+Servers carry a `[package]` block; `make agent-outdated` reports newer
+npm/uv/git versions and uncloned server repos, `make agent-update` applies them. Prefer `ref = "latest"`
 (float) unless you need a specific version.
 
-Also keep the server's own `README.md` (the deep docs) and `pyproject.toml`
-`description` in sync: `README.md` at the root is the summary, the server
-README is the detail.
+Also keep the server repo's own `README.md` (the deep docs) and
+`pyproject.toml` `description` in sync: `README.md` at the root is the summary,
+the server README is the detail.
 
 ## Repo conventions
 
-- **One server = one directory**, self-contained (`pyproject.toml`, `README.md`,
-  `src/` or `server.py`, `tests/`).
+- **One server = one repo** under github.com/msetsma, self-contained
+  (`pyproject.toml`, `README.md`, `src/` or `server.py`, `tests/`). Its catalog
+  entry names the repo, and `make agent-update` clones it into
+  `vendor/<repo>/` (gitignored). Commit server changes in the server repo, not
+  here.
 - **Python + `uv`.** `requires-python = ">=3.14"`. Run via
   `uv run --directory <dir> ...`, so no global install is needed. (Exception:
   `entra-mcp` is uv-tool-installed because it also ships a daily-use CLI; see
@@ -48,13 +52,14 @@ README is the detail.
 
 ## Inventory (high level)
 
-| Server | Directory | Purpose | Entry point |
+| Server | Repo | Purpose | Entry point |
 |---|---|---|---|
-| `sharepoint-mcp` | `mcp/sharepoint-mcp/` | SharePoint: synced libraries read from disk (`sp_roots`/`sp_find`/`sp_read`) and lists via Graph (`sp_lists`/`sp_list_items`). No Full Disk Access; list tools need a signed-in `az`, read-only unless `SHAREPOINT_ENABLE_WRITES` is set. | `server.py` |
-| `teams-browser` | `mcp/teams-mcp/` | Teams meetings, transcripts, ad-hoc/1:1 calls, chats, channel messages, shared files via browser session tokens + local SQLite archive. | `teams-browser-mcp` (console script) |
-| `entra-mcp` | `mcp/entra-mcp/` | Entra ID org structure + access analysis: people search, group membership, reporting trees, manager lookup, membership comparison. Azure CLI delegated session, no app registration. Also ships the `entra` CLI. | `entra-mcp` (console script, uv tool) |
+| `sharepoint-mcp` | [msetsma/sharepoint-mcp](https://github.com/msetsma/sharepoint-mcp) | SharePoint: synced libraries read from disk (`sp_roots`/`sp_find`/`sp_read`) and lists via Graph (`sp_lists`/`sp_list_items`). No Full Disk Access; list tools need a signed-in `az`, read-only unless `SHAREPOINT_ENABLE_WRITES` is set. | `server.py` |
+| `notes` | [msetsma/notes-mcp](https://github.com/msetsma/notes-mcp) | Read/write the personal Obsidian vault: qmd search, git-committed edits, inbox capture and triage, related-note discovery, digests, a vault lint. | `notes-mcp` (console script) |
+| `teams-browser` | [msetsma/teams-mcp](https://github.com/msetsma/teams-mcp) | Teams meetings, transcripts, ad-hoc/1:1 calls, chats, channel messages, shared files via browser session tokens + local SQLite archive. | `teams-browser-mcp` (console script) |
+| `entra-mcp` | [msetsma/entra-mcp](https://github.com/msetsma/entra-mcp) | Entra ID org structure + access analysis: people search, group membership, reporting trees, manager lookup, membership comparison. Azure CLI delegated session, no app registration. Also ships the `entra` CLI. | `entra-mcp` (console script, uv tool) |
 
-Tool-level detail lives in each directory's `README.md`. Don't duplicate it here.
+Tool-level detail lives in each repo's `README.md`. Don't duplicate it here.
 
 ## Skills, plugins, hooks, instructions & packages
 
@@ -91,12 +96,15 @@ client supports; a kind with no block is skipped for that client.
 ## Claude Code mods
 
 Mods (hooks-module plugins: panes, bands, status line, toasts, tool-call
-guards) live in `mods/<name>/`, outside the catalog. `mods/` is a local plugin
-marketplace named `dotfiles-mods`; Claude Code reads each mod from this folder,
-so edits need only `/reload-plugins`. To add one, create the folder, list it in
-`mods/.claude-plugin/marketplace.json`, then
-`claude plugin install <name>@dotfiles-mods`. Details in
-[`mods/README.md`](mods/README.md).
+guards) live outside the catalog, each in its own repo under github.com/msetsma
+(the sidebar is [msetsma/claude-sidebar](https://github.com/msetsma/claude-sidebar)).
+`mods/` holds only the `dotfiles-mods` marketplace, which lists each mod by
+GitHub source, the same way third-party plugins come in. To add one, create the
+repo, add a `{"source": "github", "repo": "msetsma/<repo>"}` entry to
+`mods/.claude-plugin/marketplace.json`, run
+`claude plugin marketplace update dotfiles-mods`, then
+`claude plugin install <name>@dotfiles-mods`. To work on a mod, clone it and run
+`claude --plugin-dir <clone>`. Details in [`mods/README.md`](mods/README.md).
 
 ## Registering a server with the local agents
 
@@ -114,19 +122,24 @@ Launch commands:
 
 ```sh
 # sharepoint-mcp
-/opt/homebrew/bin/uv run --directory /Users/msetsma/.dotfiles-agents/mcp/sharepoint-mcp server.py
+/opt/homebrew/bin/uv run --directory /Users/msetsma/.dotfiles-agents/vendor/sharepoint-mcp server.py
 
 # teams-browser
-/opt/homebrew/bin/uv run --directory /Users/msetsma/.dotfiles-agents/mcp/teams-mcp --extra mcp teams-browser-mcp
+/opt/homebrew/bin/uv run --directory /Users/msetsma/.dotfiles-agents/vendor/teams-mcp --extra mcp teams-browser-mcp
+
+# notes
+/opt/homebrew/bin/uv run --directory /Users/msetsma/.dotfiles-agents/vendor/notes-mcp notes-mcp
 
 # entra-mcp
-/opt/homebrew/bin/uv run --directory /Users/msetsma/.dotfiles-agents/mcp/entra-mcp --extra mcp entra-mcp
+/opt/homebrew/bin/uv run --directory /Users/msetsma/.dotfiles-agents/vendor/entra-mcp --extra mcp entra-mcp
 ```
+
+Each path is a clone of the server's repo; `make agent-update` creates it.
 
 `entra-mcp` also ships a daily-use `entra` CLI, so it's a uv tool install:
 
 ```sh
-uv tool install --editable ~/.dotfiles-agents/mcp/entra-mcp --with fastmcp   # provides `entra` and `entra-mcp`
+uv tool install --editable ~/.dotfiles-agents/vendor/entra-mcp --with fastmcp   # provides `entra` and `entra-mcp`
 ```
 
 ### opencode
@@ -136,14 +149,14 @@ put server names directly under `mcp`). Use `disabled: true`, not `enabled`.
 
 ```sh
 opencode mcp add sharepoint-mcp --global -- \
-  /opt/homebrew/bin/uv run --directory /Users/msetsma/.dotfiles-agents/mcp/sharepoint-mcp server.py
+  /opt/homebrew/bin/uv run --directory /Users/msetsma/.dotfiles-agents/vendor/sharepoint-mcp server.py
 opencode mcp list
 ```
 
 ```jsonc
 "sharepoint-mcp": {
   "type": "local",
-  "command": ["/opt/homebrew/bin/uv", "run", "--directory", "/Users/msetsma/.dotfiles-agents/mcp/sharepoint-mcp", "server.py"]
+  "command": ["/opt/homebrew/bin/uv", "run", "--directory", "/Users/msetsma/.dotfiles-agents/vendor/sharepoint-mcp", "server.py"]
 }
 ```
 
@@ -153,7 +166,7 @@ User-scope servers land in `~/.claude.json`.
 
 ```sh
 claude mcp add --scope user sharepoint-mcp -- \
-  /opt/homebrew/bin/uv run --directory /Users/msetsma/.dotfiles-agents/mcp/sharepoint-mcp server.py
+  /opt/homebrew/bin/uv run --directory /Users/msetsma/.dotfiles-agents/vendor/sharepoint-mcp server.py
 claude mcp list
 ```
 
@@ -166,7 +179,7 @@ Include `env.PATH`: the app launches without your shell environment.
 "mcpServers": {
   "sharepoint-mcp": {
     "command": "/opt/homebrew/bin/uv",
-    "args": ["run", "--directory", "/Users/msetsma/.dotfiles-agents/mcp/sharepoint-mcp", "server.py"],
+    "args": ["run", "--directory", "/Users/msetsma/.dotfiles-agents/vendor/sharepoint-mcp", "server.py"],
     "env": { "PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" }
   }
 }
@@ -179,14 +192,14 @@ Config: `~/.codex/config.toml`.
 ```toml
 [mcp_servers.sharepoint-mcp]
 command = "/opt/homebrew/bin/uv"
-args = ["run", "--directory", "/Users/msetsma/.dotfiles-agents/mcp/sharepoint-mcp", "server.py"]
+args = ["run", "--directory", "/Users/msetsma/.dotfiles-agents/vendor/sharepoint-mcp", "server.py"]
 ```
 
 ### teams-browser has its own installer
 
 ```sh
-uv run --directory ~/.dotfiles-agents/mcp/teams-mcp --extra mcp teams-browser mcp clients
-uv run --directory ~/.dotfiles-agents/mcp/teams-mcp --extra mcp teams-browser mcp install claude-desktop
+uv run --directory ~/.dotfiles-agents/vendor/teams-mcp --extra mcp teams-browser mcp clients
+uv run --directory ~/.dotfiles-agents/vendor/teams-mcp --extra mcp teams-browser mcp install claude-desktop
 ```
 
 It supports `claude-desktop`, `claude-code`, `cursor`, `vscode`, `opencode`.
@@ -196,13 +209,17 @@ snippets above.
 
 ## Adding a new server: checklist
 
-1. Create `~/.dotfiles-agents/mcp/<name>/` with `pyproject.toml`, `README.md`, entry point, tests.
-2. Make it run with `uv run --directory ~/.dotfiles-agents/mcp/<name> <entrypoint>`.
-3. Prove it offline (tests pass).
-4. Add a row to the table in `README.md`.
-5. Register it with the agents you want (snippets above), then confirm it
-   connects (`opencode mcp list`, `claude mcp list`, or the client's MCP panel).
-6. For anything with secrets or auth, document the one-time login step in the
+1. Create a repo `msetsma/<repo>` with `pyproject.toml`, `README.md`, entry point, tests.
+2. Prove it offline (tests pass) in that repo.
+3. Add `catalog/mcp/<name>.toml` with launch args pointing at
+   `${AGENT_HOME}/vendor/<repo>` and a package block:
+   `[package]`, `manager = "git"`, `repo = "msetsma/<repo>"`,
+   `path = "${AGENT_HOME}/vendor/<repo>"`.
+4. `make agent-update` to clone it into `vendor/<repo>/`.
+5. `make agent-check`, then `make sync`, and confirm it connects
+   (`opencode mcp list`, `claude mcp list`, or the client's MCP panel).
+6. Add a row to the Inventory tables in `README.md` and above.
+7. For anything with secrets or auth, document the one-time login step in the
    server's README.
 
 ## Path convention

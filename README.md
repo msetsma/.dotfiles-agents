@@ -14,10 +14,37 @@ skills, plugins, hooks, per-tool instructions, and pi packages are declared once
 git clone git@github.com:msetsma/.dotfiles-agents.git
 cd .dotfiles-agents
 
-make              # list targets (same as `make help`)
-make agent-check  # dry-run
-make sync         # render + merge into every agent
+make               # list targets (same as `make help`)
+make agent-update  # clone the custom MCP server repos into vendor/
+make agent-check   # dry-run
+make sync          # render + merge into every agent
+
+# one time: entra-mcp runs as a uv tool that also ships the `entra` CLI
+uv tool install --editable ~/.dotfiles-agents/vendor/entra-mcp --with fastmcp
 ```
+
+The custom MCP servers and Claude Code mods live in their own repos under
+[github.com/msetsma](https://github.com/msetsma). This repo pins them the same
+way it pins third-party tools: a catalog entry per server names its repo, and
+`make agent-update` clones any that are missing into `vendor/` (gitignored).
+Machines whose profile excludes a server never clone it.
+
+### Migrating an existing checkout
+
+The servers used to live in `mcp/<name>/`. After pulling the change that moved
+them out:
+
+1. Delete the old `mcp/notes-mcp/`, `mcp/sharepoint-mcp/`, `mcp/teams-mcp/` and
+   `mcp/entra-mcp/` directories. Git removes the tracked files but leaves
+   untracked leftovers such as `.venv/` and teams-mcp's `.ori/` behind. Copy
+   anything you still need out of `.ori/` first.
+2. `make agent-update` to clone the server repos into `vendor/`, then `make sync`.
+3. Reinstall the entra tool from its new path:
+   `uv tool install --editable ~/.dotfiles-agents/vendor/entra-mcp --with fastmcp --force`.
+4. Point the installed sidebar at its repo:
+   `claude plugin marketplace update dotfiles-mods`, then
+   `claude plugin uninstall sidebar@dotfiles-mods` and
+   `claude plugin install sidebar@dotfiles-mods`.
 
 ## Layout
 
@@ -34,12 +61,14 @@ make sync         # render + merge into every agent
 │   ├── paths.toml          # machine paths + ${VARS}
 │   └── retired.toml        # resources to scrub from every client
 ├── bin/                    # agent-sync, agent-update, clean-python, peek
-├── mods/                   # Claude Code mods (local plugin marketplace, see mods/README.md)
-└── mcp/                    # MCP server projects
-    ├── sharepoint-mcp/     # custom
-    ├── teams-mcp/          # custom
-    ├── databricks-mcp/     # pins ai-dev-kit's MCP from git
-    └── entra-mcp/          # custom; also ships the `entra` CLI
+├── mods/                   # dotfiles-mods marketplace: lists each mod's GitHub repo
+├── mcp/
+│   └── databricks-mcp/     # pins ai-dev-kit's MCP from git
+└── vendor/                 # gitignored; server repos cloned by `make agent-update`
+    ├── notes-mcp/
+    ├── sharepoint-mcp/
+    ├── teams-mcp/
+    └── entra-mcp/          # also ships the `entra` CLI
 ```
 
 ## How it works
@@ -112,18 +141,19 @@ the `peek` skill tells agents when to use it). Link it onto your PATH once:
 
 ## Inventory
 
-Full table of what this repo manages. `custom` = source lives in this repo;
-`external` = pulled from elsewhere (npx / uv tool / app).
+Full table of what this repo manages. `custom` means written by me, with the
+source in its own repo under github.com/msetsma, cloned into `vendor/`.
+`external` means a third-party server (npx, uv tool, app, git source).
 
 <details>
 <summary>Show the table</summary>
 
 | Server                                       | Origin   | Launch                                                                  | Clients                                      |
 |----------------------------------------------|----------|-------------------------------------------------------------------------|----------------------------------------------|
-| [`sharepoint-mcp`](mcp/sharepoint-mcp/README.md) | custom   | `uv run --directory ~/.dotfiles-agents/mcp/sharepoint-mcp server.py`    | opencode, Claude Code, Claude Desktop        |
-| [`notes`](mcp/notes-mcp/README.md)           | custom   | `uv run --directory ~/.dotfiles-agents/mcp/notes-mcp notes-mcp`         | opencode, Claude Code, Claude Desktop        |
-| [`teams-browser`](mcp/teams-mcp/README.md)   | custom   | `uv run --directory ~/.dotfiles-agents/mcp/teams-mcp teams-browser-mcp` | opencode, Claude Code, Claude Desktop        |
-| [`entra-mcp`](mcp/entra-mcp/README.md)       | custom   | `entra-mcp` (uv tool)                                                   | opencode, Claude Code, Claude Desktop, Codex |
+| [`sharepoint-mcp`](https://github.com/msetsma/sharepoint-mcp) | custom   | `uv run --directory ~/.dotfiles-agents/vendor/sharepoint-mcp server.py` | opencode, Claude Code, Claude Desktop        |
+| [`notes`](https://github.com/msetsma/notes-mcp) | custom   | `uv run --directory ~/.dotfiles-agents/vendor/notes-mcp notes-mcp`      | opencode, Claude Code, Claude Desktop        |
+| [`teams-browser`](https://github.com/msetsma/teams-mcp) | custom   | `uv run --directory ~/.dotfiles-agents/vendor/teams-mcp teams-browser-mcp` | opencode, Claude Code, Claude Desktop        |
+| [`entra-mcp`](https://github.com/msetsma/entra-mcp) | custom   | `entra-mcp` (uv tool)                                                   | opencode, Claude Code, Claude Desktop, Codex |
 | `obscura`                                    | external | `~/.local/bin/obscura mcp --stealth`                                    | opencode, Claude Code, Claude Desktop        |
 | `apple-mail`                                 | external | `apple-mail-mcp` (uv tool)                                              | opencode, Claude Desktop                     |
 | `databricks`                                 | external | `uv run --project ~/.dotfiles-agents/mcp/databricks-mcp databricks-mcp` | opencode, Claude Code, Claude Desktop, Codex |
@@ -184,7 +214,7 @@ Developer Mode (skill symlinks), and run `make` from Git Bash. The
 
 ## Keeping up to date
 
-External servers carry a `[package]` block; launch args use a `{{package}}`
+Servers carry a `[package]` block; npm launch args use a `{{package}}`
 placeholder resolved at render time.
 
 ```sh
@@ -197,7 +227,7 @@ make agent-update     # apply, then re-sync
 | `npm`               | bump the pinned `ref`; floating tags left alone                   |
 | `uv-tool`           | `uv tool upgrade <tool>`                                          |
 | `uv-project`        | bump the pinned git tag + re-lock                                 |
-| `git`               | `git pull --ff-only`; tag-pinned / no-upstream reported as manual |
+| `git`               | `git pull --ff-only`; clones a missing `repo` into `path`; tag-pinned / no-upstream reported as manual |
 | `source`            | always current (runs from a working tree)                         |
 | `manual` / `remote` | a binary/app or hosted endpoint; nothing to do                    |
 
@@ -205,6 +235,9 @@ make agent-update     # apply, then re-sync
 
 1. **Server**: add/edit `catalog/mcp/<name>.toml` (set `clients = [...]`;
    add `tags = ["work"]` / `["macos"]` if it shouldn't reach every machine).
+   For a custom server, create its repo under github.com/msetsma, point
+   `[package]` at it (`manager = "git"`, `repo`, `path = "${AGENT_HOME}/vendor/<repo>"`)
+   and run `make agent-update` to clone it.
 2. **Skill**: add `catalog/skills/<name>.toml` + `catalog/skills/<name>/SKILL.md`.
 3. **Hook**: add `catalog/hooks/<name>.toml`.
 4. **pi package**: add `catalog/packages/<name>.toml` (`source = "npm:..."`,
