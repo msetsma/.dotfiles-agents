@@ -51,9 +51,9 @@ them out:
 3. Reinstall the entra tool from its new path:
    `uv tool install --editable ~/.dotfiles-agents/vendor/entra-mcp --with fastmcp --force`.
 4. Point the installed sidebar at its repo, with `GIT_SSH_COMMAND` still exported:
-   `claude plugin marketplace update dotfiles-mods`, then
-   `claude plugin uninstall sidebar@dotfiles-mods` and
-   `claude plugin install sidebar@dotfiles-mods`.
+   `claude plugin marketplace update msetsma-mods`, then
+   `claude plugin uninstall sidebar@msetsma-mods` and
+   `claude plugin install sidebar@msetsma-mods`.
 
 ## Layout
 
@@ -70,7 +70,7 @@ them out:
 │   ├── paths.toml          # machine paths + ${VARS}
 │   └── retired.toml        # resources to scrub from every client
 ├── bin/                    # agent-sync, agent-update, clean-python, peek
-├── mods/                   # dotfiles-mods marketplace: lists each mod's GitHub repo
+├── mods/                   # msetsma-mods marketplace: lists each mod's GitHub repo
 ├── mcp/
 │   └── databricks-mcp/     # pins ai-dev-kit's MCP from git
 └── vendor/                 # gitignored; server repos cloned by `make agent-update`

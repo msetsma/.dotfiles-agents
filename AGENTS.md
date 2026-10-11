@@ -98,12 +98,12 @@ client supports; a kind with no block is skipped for that client.
 Mods (hooks-module plugins: panes, bands, status line, toasts, tool-call
 guards) live outside the catalog, each in its own repo under github.com/msetsma
 (the sidebar is [msetsma/claude-sidebar](https://github.com/msetsma/claude-sidebar)).
-`mods/` holds only the `dotfiles-mods` marketplace, which lists each mod by
+`mods/` holds only the `msetsma-mods` marketplace, which lists each mod by
 GitHub source, the same way third-party plugins come in. To add one, create the
 repo, add a `{"source": "github", "repo": "msetsma/<repo>"}` entry to
 `mods/.claude-plugin/marketplace.json`, run
-`claude plugin marketplace update dotfiles-mods`, then
-`claude plugin install <name>@dotfiles-mods`. To work on a mod, clone it and run
+`claude plugin marketplace update msetsma-mods`, then
+`claude plugin install <name>@msetsma-mods`. To work on a mod, clone it and run
 `claude --plugin-dir <clone>`. Details in [`mods/README.md`](mods/README.md).
 
 ## Registering a server with the local agents

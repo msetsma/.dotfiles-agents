@@ -3,7 +3,7 @@
 Mods are Claude Code plugins built from a hooks module: panes, bands above the
 prompt, status line entries, toasts, slash commands, tool-call guards. Each mod
 lives in its own repo under [github.com/msetsma](https://github.com/msetsma).
-This folder holds only the `dotfiles-mods` marketplace, which lists every mod by
+This folder holds only the `msetsma-mods` marketplace, which lists every mod by
 GitHub source, the same way third-party plugins come in.
 
 ## Mods
@@ -18,7 +18,7 @@ GitHub source, the same way third-party plugins come in.
 Mods in the same tier nest in `enabledPlugins` order in `~/.claude/settings.json`,
 first outermost. A band hook that answers without calling `next` hides
 everything beneath it, so `style` only frames a mod's band when it sits above
-it: keep `style@dotfiles-mods` first in `enabledPlugins`. A mod installed later
+it: keep `style@msetsma-mods` first in `enabledPlugins`. A mod installed later
 lands after it, which is the order that works.
 
 ### Installing from the private repos
@@ -30,8 +30,8 @@ update, so run those with the personal key:
 
 ```sh
 export GIT_SSH_COMMAND="ssh -F /dev/null -i ~/.ssh/id_ed25519_personal -o IdentitiesOnly=yes -o HostName=ssh.github.com -p 443"
-claude plugin marketplace update dotfiles-mods
-claude plugin install <mod>@dotfiles-mods   # or `claude plugin update <mod>@dotfiles-mods`
+claude plugin marketplace update msetsma-mods
+claude plugin install <mod>@msetsma-mods   # or `claude plugin update <mod>@msetsma-mods`
 ```
 
 ## Layout
@@ -59,14 +59,14 @@ A mod repo has this shape:
    `{ "name": "<mod-name>", "source": { "source": "github", "repo": "msetsma/<repo>" } }`.
 3. Check the manifest: `claude plugin validate mods`.
 4. Pick up the new entry and install it once:
-   `claude plugin marketplace update dotfiles-mods`, then
-   `claude plugin install <mod-name>@dotfiles-mods`.
+   `claude plugin marketplace update msetsma-mods`, then
+   `claude plugin install <mod-name>@msetsma-mods`.
 
 ## One-time setup per machine
 
 ```sh
 claude plugin marketplace add ~/.dotfiles-agents/mods
-claude plugin marketplace update dotfiles-mods   # after the marketplace changes
+claude plugin marketplace update msetsma-mods   # after the marketplace changes
 ```
 
 ## Editing a mod
@@ -75,4 +75,4 @@ Clone the mod's repo anywhere and start a session with
 `claude --plugin-dir <clone>`. That loads the working tree and reloads on every
 save. Check it with `claude plugin validate <clone>` and
 `claude plugin test <clone>`. Push the change, then run
-`claude plugin update <mod-name>@dotfiles-mods` on each machine to pick it up.
+`claude plugin update <mod-name>@msetsma-mods` on each machine to pick it up.
