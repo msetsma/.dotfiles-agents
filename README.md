@@ -15,6 +15,8 @@ git clone git@github.com:msetsma/.dotfiles-agents.git
 cd .dotfiles-agents
 
 make               # list targets (same as `make help`)
+# the server repos are private: clone with the personal key (see below)
+export GIT_SSH_COMMAND="ssh -F /dev/null -i ~/.ssh/id_ed25519_personal -o IdentitiesOnly=yes -o HostName=ssh.github.com -p 443"
 make agent-update  # clone the custom MCP server repos into vendor/
 make agent-check   # dry-run
 make sync          # render + merge into every agent
@@ -29,6 +31,12 @@ way it pins third-party tools: a catalog entry per server names its repo, and
 `make agent-update` clones any that are missing into `vendor/` (gitignored).
 Machines whose profile excludes a server never clone it.
 
+The repos are private, and plain `git@github.com` SSH here logs in as the work
+account. `~/.gitconfig-personal` only applies inside an existing clone, so the
+first `make agent-update` needs the personal key in `GIT_SSH_COMMAND`. Clones use
+`git@github.com:msetsma/<repo>.git`, so later pulls pick the personal key up
+from the includeIf on their own.
+
 ### Migrating an existing checkout
 
 The servers used to live in `mcp/<name>/`. After pulling the change that moved
@@ -38,10 +46,11 @@ them out:
    `mcp/entra-mcp/` directories. Git removes the tracked files but leaves
    untracked leftovers such as `.venv/` and teams-mcp's `.ori/` behind. Copy
    anything you still need out of `.ori/` first.
-2. `make agent-update` to clone the server repos into `vendor/`, then `make sync`.
+2. With `GIT_SSH_COMMAND` exported as above, `make agent-update` to clone the
+   server repos into `vendor/`, then `make sync`.
 3. Reinstall the entra tool from its new path:
    `uv tool install --editable ~/.dotfiles-agents/vendor/entra-mcp --with fastmcp --force`.
-4. Point the installed sidebar at its repo:
+4. Point the installed sidebar at its repo, with `GIT_SSH_COMMAND` still exported:
    `claude plugin marketplace update dotfiles-mods`, then
    `claude plugin uninstall sidebar@dotfiles-mods` and
    `claude plugin install sidebar@dotfiles-mods`.

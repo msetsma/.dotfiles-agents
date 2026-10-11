@@ -40,7 +40,7 @@ def test_missing_repo_path_is_planned_and_cloned(tmp_path, monkeypatch):
 
     up.apply_updates(plan)
     assert dest.parent.is_dir()
-    assert ['git', 'clone', '--quiet', 'https://github.com/msetsma/notes-mcp.git', str(dest)] in calls
+    assert ['git', 'clone', '--quiet', 'git@github.com:msetsma/notes-mcp.git', str(dest)] in calls
 
 
 def test_existing_path_is_not_cloned(tmp_path):

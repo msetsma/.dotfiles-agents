@@ -11,7 +11,9 @@ The ``[package]`` block on each server says how it's kept current:
   manager = "git"      ``git fetch`` + behind-count vs upstream; applied with
                        ``git pull --ff-only`` when on a branch with an upstream.
                        With ``repo = "owner/name"`` a missing ``path`` is
-                       reported as not cloned and applied with ``git clone``.
+                       reported as not cloned and applied with ``git clone`` over SSH
+                       (``git@github.com:owner/name.git``), so the clone
+                       matches a ``hasconfig:remote.*.url`` includeIf.
   manager = "source"   runs from a working tree (always current).
   manager = "manual"   a binary / app updated by hand.
   manager = "remote"   a hosted endpoint.
@@ -260,7 +262,7 @@ def apply_updates(plan: Plan) -> None:
     for _name, repo, gp in plan.git_clones:
         print(f'  git clone {repo} -> {gp}')
         Path(gp).parent.mkdir(parents=True, exist_ok=True)
-        r = sh(['git', 'clone', '--quiet', f'https://github.com/{repo}.git', gp])
+        r = sh(['git', 'clone', '--quiet', f'git@github.com:{repo}.git', gp])
         print('    ' + ('cloned' if r.returncode == 0 else r.stderr.strip()))
     for _name, gp, branch in plan.git_pulls:
         print(f'  git pull {gp} ({branch})')
