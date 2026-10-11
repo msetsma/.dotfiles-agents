@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# demo-gif - record a terminal demo GIF with vhs and pull frames out to check it.
+#
+#   demo-gif new [tape]          write a starter tape (default demo/demo.tape)
+#   demo-gif [render] [tape]     run vhs on the tape, then extract frames
+#   demo-gif frames <gif> [fps]  only extract frames from an existing GIF
+#
+# Frames go to $TMPDIR/demo-gif/<gif path>/ (1 per second by default, DEMO_GIF_FPS
+# to change), replaced on every run. The summary (size, length, frame dir) is
+# printed last. Warns when the GIF is over DEMO_GIF_MAX_KB (default 2048).
+# Needs vhs and ffmpeg (brew install vhs ffmpeg).
+set -euo pipefail
+
+die() { echo "demo-gif: $*" >&2; exit 1; }
+need() { command -v "$1" >/dev/null || die "$1 not found (brew install ${2:-$1})"; }
+
+frames() {
+	local gif=$1 fps=${2:-${DEMO_GIF_FPS:-1}}
+	need ffmpeg; need ffprobe ffmpeg
+	[[ -f $gif ]] || die "no such file: $gif"
+	[[ $fps =~ ^[0-9]*\.?[0-9]+$ && ! $fps =~ ^0*\.?0*$ ]] || die "bad fps: $fps"
+	local t=${TMPDIR:-/tmp} dir kb secs n max=${DEMO_GIF_MAX_KB:-2048}
+	# Keyed by the GIF's full path, so renders in different repos never share frames.
+	dir="${t%/}/demo-gif$(cd "$(dirname "$gif")" && pwd -P)/$(basename "$gif" .gif)"
+	rm -rf "$dir" && mkdir -p "$dir"
+	ffmpeg -loglevel error -i "$gif" -vf "fps=$fps" "$dir/f%03d.png"
+	# A GIF shorter than one sample interval yields nothing; keep its first frame.
+	[[ -e $dir/f001.png ]] || ffmpeg -loglevel error -i "$gif" -frames:v 1 "$dir/f001.png"
+	kb=$(( $(wc -c <"$gif") / 1024 ))
+	secs=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$gif")
+	n=$(ls "$dir" | wc -l | tr -d ' ')
+	echo
+	printf '%s: %s KB, %.1fs\n' "$gif" "$kb" "$secs"
+	if (( kb > max )); then echo "warning: over $max KB; trim sleeps and scenes, lower Framerate, then shrink Width/Height"; fi
+	echo "frames: $dir/f001.png .. f$(printf %03d "$n").png ($n at $fps/s)"
+	echo "read f001 first: a shell prompt or error text there means the hidden setup failed (vhs still exits 0)"
+}
+
+new() {
+	local tape=${1:-demo/demo.tape}
+	[[ -e $tape ]] && die "$tape already exists"
+	mkdir -p "$(dirname "$tape")"
+	cat >"$tape" <<EOF
+# Regenerate with \`vhs $tape\` (or \`demo-gif $tape\`) from the repo root.
+# Needs: TODO (tools, sibling checkouts). Runs offline.
+Output "${tape%.tape}.gif"
+
+Set Shell bash
+Set FontSize 22
+Set Width 1200
+Set Height 680
+Set Padding 16
+Set Theme "Catppuccin Mocha"
+Set TypingSpeed 60ms
+Set Framerate 20
+
+# Hidden setup: a throwaway HOME keeps your real config and paths out of the
+# recording. pwd -P matters on macOS, where temp dirs resolve under /private.
+Hide
+Type@1ms \`REPO="\$PWD"; export HOME="\$(cd "\$(mktemp -d)" && pwd -P)" PS1='\$ '; mkdir -p ~/my-project && cd ~/my-project\`
+Enter
+# TODO: write the tool's config under ~ (quiet startup, no update checks,
+# offline fake, theme to match), then launch it and wait for its UI, e.g.
+#   Type@1ms "mytool" Enter
+#   Wait+Screen@30s /some text the ready UI shows/
+Type@1ms "clear"
+Enter
+Sleep 500ms
+Show
+
+# TODO: the scenes. First change within ~1s: do any prep in the hidden block.
+# Pause before Enter so the viewer reads the input, then Sleep 1.5-3s after
+# each visible change.
+Sleep 500ms
+EOF
+	echo "wrote $tape"
+}
+
+case ${1:-render} in
+	new) shift; new "$@" ;;
+	frames) shift; [[ $# -ge 1 ]] || die "usage: demo-gif frames <gif> [fps]"; frames "$@" ;;
+	-h | --help) sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//' ;;
+	*)
+		[[ ${1:-} == render ]] && shift
+		need vhs
+		tape=${1:-demo/demo.tape}
+		[[ -f $tape ]] || die "no such tape: $tape (demo-gif new $tape writes one)"
+		gif=$(sed -n "s/^[[:space:]]*Output[[:space:]]\{1,\}[\"'\`]\{0,1\}\([^\"'\`]*\.gif\).*/\1/p" "$tape" | head -1)
+		[[ -n $gif ]] || die "tape has no 'Output <file>.gif' line"
+		vhs "$tape"
+		frames "$gif"
+		;;
+esac

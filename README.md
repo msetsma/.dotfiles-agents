@@ -69,7 +69,7 @@ them out:
 │   ├── clients.toml        # where each agent keeps each kind
 │   ├── paths.toml          # machine paths + ${VARS}
 │   └── retired.toml        # resources to scrub from every client
-├── bin/                    # agent-sync, agent-update, clean-python, peek
+├── bin/                    # agent-sync, agent-update, clean-python, peek, demo-gif
 ├── mods/                   # msetsma-mods marketplace: lists each mod's GitHub repo
 ├── mcp/
 │   └── databricks-mcp/     # pins ai-dev-kit's MCP from git
@@ -139,7 +139,7 @@ catalog/packages/<name>.toml     # source + optional resource filters
   changed. Edits made with `pi config` to a catalog package are overwritten on
   the next sync, so copy them into the TOML.
 
-`catalog/skills/github-glowup/` and `catalog/skills/peek/` are real skills;
+`catalog/skills/github-glowup/`, `catalog/skills/peek/` and `catalog/skills/demo-gif/` are real skills;
 `example-skill/` and `hooks/example-hook.toml` are templates.
 
 `bin/peek` runs a CLI or TUI in a hidden tmux pane and prints its screen as
@@ -147,6 +147,11 @@ text, or with `-o shot.png` saves a real Ghostty screenshot, so an agent can
 check terminal output itself (`peek --help`;
 the `peek` skill tells agents when to use it). Link it onto your PATH once:
 `ln -s ~/.dotfiles-agents/bin/peek ~/.local/bin/peek`.
+
+`bin/demo-gif` records a terminal demo GIF with vhs: `demo-gif new` writes a
+starter tape with an isolated `HOME`, and `demo-gif` renders it and extracts
+frames to check (the `demo-gif` skill covers the full process). Link it the same
+way: `ln -s ~/.dotfiles-agents/bin/demo-gif ~/.local/bin/demo-gif`.
 
 ## Inventory
 

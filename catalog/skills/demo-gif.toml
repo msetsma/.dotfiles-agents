@@ -1,0 +1,3 @@
+name        = "demo-gif"
+description = "Record a terminal demo GIF of a CLI or TUI with vhs for a README: an isolated, offline, repeatable tape, then frames pulled out to check it. Use when asked for a terminal GIF, demo recording, screencast, or vhs tape."
+clients     = ["claude-code"]
