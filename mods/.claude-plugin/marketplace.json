@@ -6,6 +6,14 @@
   "description": "Claude Code mods (hooks-module plugins), each in its own GitHub repo.",
   "plugins": [
     {
+      "name": "style",
+      "source": {
+        "source": "github",
+        "repo": "msetsma/claude-style"
+      },
+      "description": "Restyles prompts, tool calls, plugin bands, notices, mode badges, the prompt hint, question dialogs and turn time; set in a /style pane, drawn in your theme's colors."
+    },
+    {
       "name": "sidebar",
       "source": {
         "source": "github",
