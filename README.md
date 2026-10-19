@@ -37,24 +37,6 @@ first `make agent-update` needs the personal key in `GIT_SSH_COMMAND`. Clones us
 `git@github.com:msetsma/<repo>.git`, so later pulls pick the personal key up
 from the includeIf on their own.
 
-### Migrating an existing checkout
-
-The servers used to live in `mcp/<name>/`. After pulling the change that moved
-them out:
-
-1. Delete the old `mcp/notes-mcp/`, `mcp/sharepoint-mcp/`, `mcp/teams-mcp/` and
-   `mcp/entra-mcp/` directories. Git removes the tracked files but leaves
-   untracked leftovers such as `.venv/` and teams-mcp's `.ori/` behind. Copy
-   anything you still need out of `.ori/` first.
-2. With `GIT_SSH_COMMAND` exported as above, `make agent-update` to clone the
-   server repos into `vendor/`, then `make sync`.
-3. Reinstall the entra tool from its new path:
-   `uv tool install --editable ~/.dotfiles-agents/vendor/entra-mcp --with fastmcp --force`.
-4. Point the installed sidebar at its repo, with `GIT_SSH_COMMAND` still exported:
-   `claude plugin marketplace update msetsma-mods`, then
-   `claude plugin uninstall sidebar@msetsma-mods` and
-   `claude plugin install sidebar@msetsma-mods`.
-
 ## Layout
 
 ```

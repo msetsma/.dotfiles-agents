@@ -40,5 +40,5 @@ make agent-update     # rewrites the tag above, re-locks, re-syncs
 Because the catalog launches via `--project` (the tag lives here, not in the
 agent configs), a version bump never rewrites any agent config.
 
-> `~/.ai-dev-kit` may still be installed for its **skills**; it's just no longer
-> the source of the `databricks` MCP server.
+> `~/.ai-dev-kit` can supply **skills**, but it isn't the source of the
+> `databricks` MCP server.
