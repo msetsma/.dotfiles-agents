@@ -1,0 +1,18 @@
+name        = "spotify"
+description = "Spotify playback control, search, queue, listening history, albums, and playlist editing via the Web API (needs Premium and your own Spotify developer app)."
+kind        = "local"
+origin      = "external"
+clients     = ["claude-code", "claude-desktop"]
+tags        = ["personal"]
+
+# Needs Node >= 26.8.1. Build after cloning: `npm ci && npm run build`, then
+# `npm run auth` once. Credentials and tokens live in the clone's
+# spotify-config.json (gitignored upstream and under vendor/).
+[launch]
+command = "node"
+args    = ["${AGENT_HOME}/vendor/spotify-mcp-server/build/index.js"]
+
+[package]
+manager = "git"
+repo    = "marcelmarais/spotify-mcp-server"
+path    = "${AGENT_HOME}/vendor/spotify-mcp-server"
