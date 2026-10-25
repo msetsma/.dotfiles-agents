@@ -44,7 +44,7 @@ from the includeIf on their own.
 ├── catalog/                # single source of truth: one file per resource
 │   ├── mcp/*.toml          # MCP servers (custom + third-party)
 │   ├── skills/<name>.toml  # skills (content in <name>/SKILL.md)
-│   ├── plugins/<name>.toml # opencode plugins (content in <name>.ts)
+│   ├── plugins/<name>.toml # opencode plugins (<name>.ts) + Claude Code marketplace plugins
 │   ├── hooks/<name>.toml   # Claude Code / Codex event hooks
 │   ├── instructions/*.toml # per-tool prompts (content in <name>.md)
 │   ├── packages/*.toml     # pi packages (npm / git / local source)
@@ -59,7 +59,8 @@ from the includeIf on their own.
     ├── notes-mcp/
     ├── sharepoint-mcp/
     ├── teams-mcp/
-    └── entra-mcp/          # also ships the `entra` CLI
+    ├── entra-mcp/          # also ships the `entra` CLI
+    └── spotify-mcp-server/ # third-party; build with Node >= 26
 ```
 
 ## How it works
@@ -77,8 +78,8 @@ client with one of three strategies:
 
 | Strategy    | Used for           | Behaviour                                                          |
 |-------------|--------------------|--------------------------------------------------------------------|
-| **merge**   | MCP servers, hooks, pi packages | rewrite only the managed subtree; leave the rest of the file alone |
-| **symlink** | skills, plugins    | link one item per file/dir into the client's directory             |
+| **merge**   | MCP servers, hooks, pi packages, Claude Code plugins | rewrite only the managed subtree; leave the rest of the file alone |
+| **symlink** | skills, opencode plugins | link one item per file/dir into the client's directory       |
 | **block**   | instructions       | replace one marked region in the client's global file              |
 
 A client declares one `[<client>.<kind>]` block per kind it supports; a kind with
@@ -93,6 +94,7 @@ no block is skipped.
 | opencode       | instructions | `~/.config/opencode/AGENTS.md`                                    | block    |
 | Claude Code    | mcp          | `~/.claude.json` → `mcpServers`                                   | merge    |
 | Claude Code    | skills       | `~/.claude/skills/`                                               | symlink  |
+| Claude Code    | plugins      | `~/.claude/settings.json` → `enabledPlugins` + `extraKnownMarketplaces` | merge    |
 | Claude Code    | hooks        | `~/.claude/settings.json` → `hooks`                               | merge    |
 | Claude Desktop | mcp          | `~/Library/Application Support/Claude/claude_desktop_config.json` | merge    |
 | Codex          | mcp          | `~/.codex/config.toml` → `[mcp_servers]`                          | merge    |
@@ -105,13 +107,20 @@ opencode has no `skills` row; it inherits `~/.claude/skills/`.
 
 ```
 catalog/skills/<name>.toml       # + <name>/SKILL.md
-catalog/plugins/<name>.toml      # + <name>.ts
+catalog/plugins/<name>.toml      # + <name>.ts, or a [marketplace] block + plugin id
 catalog/hooks/<name>.toml        # event + matcher + command
 catalog/instructions/<name>.toml # + <name>.md
 catalog/packages/<name>.toml     # source + optional resource filters
 ```
 
-- **Skills / plugins**: symlinked per item.
+- **Skills / opencode plugins**: symlinked per item.
+- **Claude Code plugins**: a plugin TOML with `plugin = "<name>@<marketplace>"`
+  and a `[marketplace]` block (`source = "github"` + `repo`, `"git"` + `url`, or
+  `"directory"` + `path`). Sync enables it and registers the marketplace in
+  `~/.claude/settings.json`, then runs `claude plugin install`. Listing a plugin
+  under `plugins` in `retired.toml` disables and uninstalls it and removes a
+  marketplace nothing else uses. Install plugins here, not with
+  `claude plugin install`.
 - **Hooks**: merged additively; retire one via `hook_commands` in `catalog/retired.toml`.
 - **Instructions**: per-client, wrapped in a `<!-- dotfiles-agents:begin/end -->` block.
 - **Packages** (pi): merged into the `packages` list by identity (source minus
@@ -158,8 +167,17 @@ source in its own repo under github.com/msetsma, cloned into `vendor/`.
 | `github`                                     | external | remote `api.githubcopilot.com/mcp/`                                     | opencode, Claude Code                        |
 | `iMCP`                                       | external | `/Applications/iMCP.app/…/imcp-server`                                  | opencode, Claude Code, Claude Desktop, Codex |
 | `playwright`                                 | external | `npx @playwright/mcp@latest`                                            | opencode                                     |
+| [`spotify`](https://github.com/marcelmarais/spotify-mcp-server) | external | `node ~/.dotfiles-agents/vendor/spotify-mcp-server/build/index.js` | Claude Code, Claude Desktop                  |
+| `solidcraft`                                 | external | `solidcraft-cli mcp` (ships with the SolidCraft app)                    | Claude Code (Windows box only, via `local.toml`) |
 
 </details>
+
+### Claude Code plugins
+
+| Plugin | Marketplace | What it does |
+|---|---|---|
+| `caveman` | [JuliusBrussee/caveman](https://github.com/JuliusBrussee/caveman) | Terse reply mode plus commit, review, and memory-compress skills |
+| `context7` | [anthropics/claude-plugins-official](https://github.com/anthropics/claude-plugins-official) | Context7 MCP server for current library docs |
 
 ### pi packages
 

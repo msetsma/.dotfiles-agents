@@ -1,0 +1,8 @@
+name        = "context7"
+description = "Context7 MCP server: current library and framework docs on demand."
+clients     = ["claude-code"]
+plugin      = "context7@claude-plugins-official"
+
+[marketplace]
+source = "github"
+repo   = "anthropics/claude-plugins-official"

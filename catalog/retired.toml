@@ -6,7 +6,8 @@
 #
 #   mcp           MCP server names
 #   skills        skill names (symlinks are removed)
-#   plugins       plugin names (symlinks are removed)
+#   plugins       plugin names (symlinks are removed; marketplace plugins are
+#                 disabled and uninstalled, orphaned marketplaces removed)
 #   instructions  instruction overlay names (removed from the managed block)
 #   packages      pi package sources, e.g. "npm:pi-foo" (dropped from settings.json)
 #   hook_commands exact shell commands of retired hooks (scrubbed from the
@@ -14,7 +15,7 @@
 
 mcp           = ["notion", "m365-local"]
 skills        = []
-plugins       = []
+plugins       = ["context-mode"]
 instructions  = []
 # Whole pi package set retired (clean slate). Local sources are listed by
 # absolute path because retired.toml is read without ${VAR} expansion.
@@ -38,4 +39,7 @@ hook_commands = [
   # (and any stale config) gets the old-path duplicates scrubbed on next sync.
   '''/Users/msetsma/.agentdots/bin/clean-python --stop-check''',
   '''/Users/msetsma/.agentdots/bin/clean-python''',
+  # Cache self-heal hook the context-mode plugin deployed for itself.
+  '''node "C:/Users/2015m/.claude/hooks/context-mode-cache-heal.mjs"''',
+  '''node "/Users/msetsma/.claude/hooks/context-mode-cache-heal.mjs"''',
 ]

@@ -71,7 +71,12 @@ Alongside servers, the catalog owns five more kinds:
 - **Plugins**: `catalog/plugins/<name>.toml` (definition) plus
   `catalog/plugins/<name>.ts` (content), symlinked into each listed client's
   plugins directory. This is how opencode hooks are delivered (opencode plugins,
-  not a JSON event map).
+  not a JSON event map). A Claude Code plugin is a `catalog/plugins/<name>.toml`
+  with `plugin = "<name>@<marketplace>"` and a `[marketplace]` block; sync merges
+  it into `~/.claude/settings.json` and runs `claude plugin install`. Every
+  Claude Code plugin comes in this way, never by hand with
+  `claude plugin install`. Retire one by listing it under `plugins` in
+  `catalog/retired.toml`.
 - **Hooks**: `catalog/hooks/<name>.toml`, merged additively into each listed
   client's hook map (Claude Code, Codex). See
   [`catalog/hooks/example-hook.toml`](catalog/hooks/) for the shape.
@@ -96,15 +101,17 @@ client supports; a kind with no block is skipped for that client.
 ## Claude Code mods
 
 Mods (hooks-module plugins: panes, bands, status line, toasts, tool-call
-guards) live outside the catalog, each in its own repo under github.com/msetsma
-(the sidebar is [msetsma/claude-sidebar](https://github.com/msetsma/claude-sidebar)).
-`mods/` holds only the `msetsma-mods` marketplace, which lists each mod by
-GitHub source, the same way third-party plugins come in. To add one, create the
-repo, add a `{"source": "github", "repo": "msetsma/<repo>"}` entry to
-`mods/.claude-plugin/marketplace.json`, run
-`claude plugin marketplace update msetsma-mods`, then
-`claude plugin install <name>@msetsma-mods`. To work on a mod, clone it and run
-`claude --plugin-dir <clone>`. Details in [`mods/README.md`](mods/README.md).
+guards) keep their source outside this repo, each in its own repo under
+github.com/msetsma (the sidebar is
+[msetsma/claude-sidebar](https://github.com/msetsma/claude-sidebar)). `mods/`
+holds only the `msetsma-mods` marketplace, which lists each mod by GitHub
+source. To add one, create the repo, add a
+`{"source": "github", "repo": "msetsma/<repo>"}` entry to
+`mods/.claude-plugin/marketplace.json`, then add a catalog plugin entry with
+`plugin = "<name>@msetsma-mods"` and a `[marketplace]` block of
+`source = "directory"`, `path = "${AGENT_HOME}/mods"`, and `make sync`. To work
+on a mod, clone it and run `claude --plugin-dir <clone>`. Details in
+[`mods/README.md`](mods/README.md).
 
 ## Registering a server with the local agents
 

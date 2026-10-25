@@ -1,0 +1,8 @@
+name        = "caveman"
+description = "Ultra-compressed reply mode (caveman speak) plus terse commit, review, and memory-compress skills."
+clients     = ["claude-code"]
+plugin      = "caveman@caveman"
+
+[marketplace]
+source = "github"
+repo   = "JuliusBrussee/caveman"

@@ -13,6 +13,9 @@
 #
 #   [<client>.plugins]  agent plugins (one .ts file per plugin, symlinked)
 #       path        = directory to link the plugin files into
+#     or, with style = "marketplace" (Claude Code marketplace plugins):
+#       path        = the client's settings.json
+#       command     = plugin CLI used to install / uninstall
 #
 #   [<client>.hooks]    event hooks
 #       format      = json
@@ -55,6 +58,14 @@ style     = "claude-code"
 
 [claude-code.skills]
 path = "~/.claude/skills"
+
+# Marketplace plugins: agent-sync merges enabledPlugins + extraKnownMarketplaces,
+# then runs `claude plugin` to fetch, install, and uninstall. Plugins installed
+# by hand stay enabled until listed under `plugins` in retired.toml.
+[claude-code.plugins]
+path    = "~/.claude/settings.json"
+style   = "marketplace"
+command = ["claude", "plugin"]
 
 [claude-code.hooks]
 path      = "~/.claude/settings.json"

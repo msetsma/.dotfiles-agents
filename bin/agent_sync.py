@@ -198,21 +198,28 @@ def load_skills(ctx: dict, local: dict | None = None) -> dict:
 
 
 def load_plugins(ctx: dict, local: dict | None = None) -> dict:
-    """Each ``catalog/plugins/<name>.toml`` points at ``catalog/plugins/<name>.ts``."""
+    """Each ``catalog/plugins/<name>.toml`` is either a marketplace plugin (a
+    ``[marketplace]`` block plus a ``plugin = "<name>@<marketplace>"`` id, for
+    Claude Code) or points at ``catalog/plugins/<name>.ts`` (opencode)."""
     plugins: dict[str, dict] = {}
     for path in sorted((CATALOG / 'plugins').glob('*.toml')):
         raw = load_raw(path, 'plugins', local)
         name = raw['name']
-        source = CATALOG / 'plugins' / f'{name}.ts'
-        if not source.is_file():
-            die(f'{path.name}: missing {source.relative_to(REPO)}')
-        plugins[name] = {
+        item = {
             'name': name,
             'description': raw.get('description', ''),
             'clients': list(raw.get('clients', [])),
             'tags': list(raw.get('tags', [])),
-            'source': source,
         }
+        if 'marketplace' in raw:
+            item['id'] = raw['plugin']
+            item['marketplace'] = expand(raw['marketplace'], ctx)
+        else:
+            source = CATALOG / 'plugins' / f'{name}.ts'
+            if not source.is_file():
+                die(f'{path.name}: missing {source.relative_to(REPO)}')
+            item['source'] = source
+        plugins[name] = item
     return plugins
 
 
@@ -504,9 +511,13 @@ def sync_skills(client: str, cli: dict, skills: dict, retired: list) -> bool:
 
 
 def sync_plugins(client: str, cli: dict, plugins: dict, retired: list) -> bool:
+    if cli.get('style') == 'marketplace':
+        return sync_marketplace_plugins(client, cli, plugins, retired)
     base = Path(cli['path']).expanduser()
     manage_root = (CATALOG / 'plugins').resolve()
-    desired = {f'{n}.ts': p for n, p in plugins.items() if client in p['clients'] and n not in retired}
+    desired = {
+        f'{n}.ts': p for n, p in plugins.items() if client in p['clients'] and 'source' in p and n not in retired
+    }
 
     # Only touch symlinks that point back into our catalog/plugins/.
     existing: dict[str, str] = {}
@@ -529,6 +540,75 @@ def sync_plugins(client: str, cli: dict, plugins: dict, retired: list) -> bool:
         (base / name).unlink()
     for name in added + changed:
         (base / name).symlink_to(desired[name]['source'])
+    return dirty
+
+
+# --------------------------------------------------------------------------- #
+# marketplace plugins (merge into Claude Code settings.json, then reconcile)
+# --------------------------------------------------------------------------- #
+def marketplace_arg(source: dict) -> str:
+    """The argument ``claude plugin marketplace add`` takes for a source."""
+    if source['source'] == 'github':
+        return source['repo']
+    if source['source'] == 'git':
+        return source['url']
+    return source['path']
+
+
+def market_of(plugin_id: str) -> str:
+    return plugin_id.partition('@')[2]
+
+
+def run_plugin_cli(cli: dict, args: list[str]) -> None:
+    command = cli['command']
+    exe = shutil.which(command[0])
+    if not exe:
+        print(f'  {command[0]} not on PATH; run `{" ".join([*command, *args])}`')
+        return
+    subprocess.run([exe, *command[1:], *args], check=False)
+
+
+def _plugin_changes(enabled: dict, markets: dict, desired: dict, retired: list):
+    want_markets = {market_of(i): {'source': p['marketplace']} for i, p in desired.items()}
+    added = sorted(i for i in desired if enabled.get(i) is not True)
+    changed = sorted(i for i in desired if i not in added and markets.get(market_of(i)) != want_markets[market_of(i)])
+    removed = sorted(i for i in enabled if i.partition('@')[0] in retired and i not in desired)
+    return want_markets, added, changed, removed
+
+
+def _orphan_markets(enabled: dict, removed: list, want_markets: dict) -> list[str]:
+    """Marketplaces only removed plugins used; nothing still enabled needs them."""
+    still_used = {market_of(i) for i in enabled if i not in removed} | set(want_markets)
+    return sorted({market_of(i) for i in removed} - still_used)
+
+
+def sync_marketplace_plugins(client: str, cli: dict, plugins: dict, retired: list) -> bool:
+    target = Path(cli['path']).expanduser()
+    doc = json.loads(strip_jsonc(target.read_text(encoding='utf-8'))) if target.exists() else {}
+    enabled = doc.get('enabledPlugins', {})
+    markets = doc.get('extraKnownMarketplaces', {})
+    desired = {
+        p['id']: p for n, p in plugins.items() if client in p['clients'] and 'id' in p and n not in retired
+    }
+    want_markets, added, changed, removed = _plugin_changes(enabled, markets, desired, retired)
+    dirty = report(client, target, added, changed, removed, kind='plugins')
+    if CONFIG.dry_run or not dirty:
+        return dirty
+
+    orphans = _orphan_markets(enabled, removed, want_markets)
+    doc['enabledPlugins'] = {i: v for i, v in enabled.items() if i not in removed} | dict.fromkeys(desired, True)
+    doc['extraKnownMarketplaces'] = {m: s for m, s in markets.items() if m not in orphans} | want_markets
+    write_json(target, doc)
+
+    # The settings declare intent; the CLI fetches marketplaces and plugin caches.
+    for plugin_id in removed:
+        run_plugin_cli(cli, ['uninstall', plugin_id])
+    for name in orphans:
+        run_plugin_cli(cli, ['marketplace', 'remove', name])
+    for plugin_id in added:
+        if market_of(plugin_id) not in markets:
+            run_plugin_cli(cli, ['marketplace', 'add', marketplace_arg(desired[plugin_id]['marketplace'])])
+        run_plugin_cli(cli, ['install', plugin_id])
     return dirty
 
 

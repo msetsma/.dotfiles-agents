@@ -58,16 +58,21 @@ A mod repo has this shape:
 2. Add an entry to `plugins` in `.claude-plugin/marketplace.json`:
    `{ "name": "<mod-name>", "source": { "source": "github", "repo": "msetsma/<repo>" } }`.
 3. Check the manifest: `claude plugin validate mods`.
-4. Pick up the new entry and install it once:
-   `claude plugin marketplace update msetsma-mods`, then
-   `claude plugin install <mod-name>@msetsma-mods`.
+4. Add `catalog/plugins/<mod-name>.toml`:
 
-## One-time setup per machine
+   ```toml
+   name    = "<mod-name>"
+   clients = ["claude-code"]
+   plugin  = "<mod-name>@msetsma-mods"
 
-```sh
-claude plugin marketplace add ~/.dotfiles-agents/mods
-claude plugin marketplace update msetsma-mods   # after the marketplace changes
-```
+   [marketplace]
+   source = "directory"
+   path   = "${AGENT_HOME}/mods"
+   ```
+
+5. `claude plugin marketplace update msetsma-mods`, then `make sync` (with the
+   personal-key `GIT_SSH_COMMAND` above) registers the marketplace and installs
+   the mod.
 
 ## Editing a mod
 

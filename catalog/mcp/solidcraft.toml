@@ -1,0 +1,13 @@
+name        = "solidcraft"
+description = "SolidCraft CAD over MCP, served by the desktop app's bundled CLI."
+kind        = "local"
+origin      = "external"
+# Personal Windows box only: no clients here; that machine's local.toml
+# enables it with `[mcp.solidcraft] clients = ["claude-code"]`.
+clients     = []
+
+# `solidcraft-cli` ships with the SolidCraft desktop app; it must be on PATH
+# (or mapped under [commands] in local.toml) for the server to start.
+[launch]
+command = "solidcraft-cli"
+args    = ["mcp"]
