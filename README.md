@@ -168,7 +168,7 @@ source in its own repo under github.com/msetsma, cloned into `vendor/`.
 | `iMCP`                                       | external | `/Applications/iMCP.app/…/imcp-server`                                  | opencode, Claude Code, Claude Desktop, Codex |
 | `playwright`                                 | external | `npx @playwright/mcp@latest`                                            | opencode                                     |
 | [`spotify`](https://github.com/marcelmarais/spotify-mcp-server) | external | `node ~/.dotfiles-agents/vendor/spotify-mcp-server/build/index.js` | Claude Code, Claude Desktop                  |
-| `solidcraft`                                 | external | `solidcraft-cli mcp` (ships with the SolidCraft app)                    | Claude Code (Windows box only, via `local.toml`) |
+| `solidcraft`                                 | external | `solidcraft-cli mcp` (ships with the SolidCraft app)                    | Claude Code, Claude Desktop (Windows box only, via `local.toml`) |
 
 </details>
 
