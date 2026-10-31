@@ -8,13 +8,13 @@ help: ## list targets
 
 sync: agent-sync ## render + merge the catalog into every agent
 agent-sync: ## render the catalog into every agent
-	bin/agent-sync
+	bash bin/agent-sync
 
 agent-check: ## dry-run: show what would change
-	bin/agent-sync --dry-run
+	bash bin/agent-sync --dry-run
 
 agent-outdated: ## report newer npm / uv / git versions
-	bin/agent-update
+	bash bin/agent-update
 
 agent-update: ## apply updates, then re-sync
-	bin/agent-update --apply
+	bash bin/agent-update --apply
