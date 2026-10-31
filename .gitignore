@@ -34,3 +34,6 @@ node_modules/
 
 # macOS
 .DS_Store
+
+# Playwright MCP session logs
+.playwright-mcp/
