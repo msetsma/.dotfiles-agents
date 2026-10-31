@@ -1,0 +1,8 @@
+name        = "sidebar"
+description = "Toggleable /sidebar pane: usage, cost, git, todos, subagents, MCP servers, recent tools."
+clients     = ["claude-code"]
+plugin      = "sidebar@msetsma-mods"
+
+[marketplace]
+source = "directory"
+path   = "${AGENT_HOME}/mods"

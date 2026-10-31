@@ -178,6 +178,8 @@ source in its own repo under github.com/msetsma, cloned into `vendor/`.
 |---|---|---|
 | `caveman` | [JuliusBrussee/caveman](https://github.com/JuliusBrussee/caveman) | Terse reply mode plus commit, review, and memory-compress skills |
 | `context7` | [anthropics/claude-plugins-official](https://github.com/anthropics/claude-plugins-official) | Context7 MCP server for current library docs |
+| `style` | [`mods/`](mods/) (msetsma-mods) | Restyles Claude Code's UI from a `/style` pane; keep first among mods in `enabledPlugins` |
+| `sidebar` | [`mods/`](mods/) (msetsma-mods) | `/sidebar` pane: usage, cost, git, todos, subagents, MCP servers, tool activity |
 
 ### pi packages
 

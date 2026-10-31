@@ -1,0 +1,8 @@
+name        = "style"
+description = "Restyles Claude Code's UI (prompts, tool calls, bands, notices, badges) from a /style pane. Keep first in enabledPlugins so it frames other mods' bands."
+clients     = ["claude-code"]
+plugin      = "style@msetsma-mods"
+
+[marketplace]
+source = "directory"
+path   = "${AGENT_HOME}/mods"
