@@ -56,7 +56,7 @@ the server README is the detail.
 |---|---|---|---|
 | `sharepoint-mcp` | [msetsma/sharepoint-mcp](https://github.com/msetsma/sharepoint-mcp) | SharePoint: synced libraries read from disk (`sp_roots`/`sp_find`/`sp_read`) and lists via Graph (`sp_lists`/`sp_list_items`). No Full Disk Access; list tools need a signed-in `az`, read-only unless `SHAREPOINT_ENABLE_WRITES` is set. | `server.py` |
 | `notes` | [msetsma/notes-mcp](https://github.com/msetsma/notes-mcp) | Read/write the personal Obsidian vault: qmd search, git-committed edits, inbox capture and triage, related-note discovery, digests, a vault lint. | `notes-mcp` (console script) |
-| `teams-browser` | [msetsma/teams-mcp](https://github.com/msetsma/teams-mcp) | Teams meetings, transcripts, ad-hoc/1:1 calls, chats, channel messages, shared files via browser session tokens + local SQLite archive. | `teams-browser-mcp` (console script) |
+| `teams-browser` | [msetsma/teams-mcp](https://github.com/msetsma/teams-mcp) | Teams meetings, transcripts, ad-hoc/1:1 calls, chats, channel messages, shared files, answered from a local SQLite archive; `sync_archive` signs in when needed and syncs incrementally. Also finds free slots across attendees and opens a prefilled Teams meeting form for review (never sends). | `teams-browser-mcp` (console script) |
 | `entra-mcp` | [msetsma/entra-mcp](https://github.com/msetsma/entra-mcp) | Entra ID org structure + access analysis: people search, group membership, reporting trees, manager lookup, membership comparison. Azure CLI delegated session, no app registration. Also ships the `entra` CLI. | `entra-mcp` (console script, uv tool) |
 
 Tool-level detail lives in each repo's `README.md`. Don't duplicate it here.

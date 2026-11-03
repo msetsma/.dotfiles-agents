@@ -1,5 +1,5 @@
 name        = "teams-browser"
-description = "Read-only Teams meetings, transcripts, chats, channel messages and shared files via browser session tokens + a local SQLite archive."
+description = "Read-only Teams meetings, transcripts, calls, chats and channel messages, answered from a local SQLite archive that sync_archive refreshes incrementally (signing in when needed)."
 kind        = "local"
 origin      = "custom"
 clients     = ["opencode", "claude-code", "claude-desktop"]
