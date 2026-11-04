@@ -130,7 +130,7 @@ catalog/packages/<name>.toml     # source + optional resource filters
   changed. Edits made with `pi config` to a catalog package are overwritten on
   the next sync, so copy them into the TOML.
 
-`catalog/skills/github-glowup/`, `catalog/skills/peek/` and `catalog/skills/demo-gif/` are real skills;
+`catalog/skills/github-glowup/`, `catalog/skills/peek/`, `catalog/skills/demo-gif/` and `catalog/skills/watch-capture/` (private watch collection in the notes vault; tagged `personal`) are real skills;
 `example-skill/` and `hooks/example-hook.toml` are templates.
 
 `bin/peek` runs a CLI or TUI in a hidden tmux pane and prints its screen as

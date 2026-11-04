@@ -1,0 +1,4 @@
+name        = "watch-capture"
+description = "Add or update a watch in the private Obsidian watch collection: exact reference, sourced specs, dated prices, a normalized background-free image, brand and movement links. Use when a watch model, reference, or listing is shared to add, track, or compare."
+clients     = ["claude-code"]
+tags        = ["personal"]
