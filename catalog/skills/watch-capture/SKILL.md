@@ -39,7 +39,11 @@ into shared categories.
    otherwise), with `retail_date`. Market: a low/high range from recent listings
    or sales (Chrono24 asking prices run high; say so if that is the only source),
    with `market_source` (list from the schema) and `market_date`.
-5. **Image.** Find a manufacturer press or product shot on a plain background.
+5. **Image.** Use the manufacturer's own product shot from the reference page.
+   Never use a dealer or retailer image: they carry watermarks and logos. If the
+   manufacturer site blocks the download (it hangs or returns a bot check), do
+   not work around it and do not fall back to a third-party image; ask the user
+   to save the image from the page and give you the local path.
    Download it into a new empty directory in the scratchpad (untrusted data),
    then normalize it (script dir = this skill's `scripts/`):
 
