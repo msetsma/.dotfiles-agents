@@ -1,0 +1,103 @@
+# Controlled vocabulary for the watch collection. Single source of truth:
+# scripts/check_frontmatter.py validates against it and prints the Watch template.
+#
+# Conventions for every value:
+#   - enum / list values: lowercase kebab-case, only from `values`
+#   - numbers: bare numbers in the unit the key names (mm, m, h, vph, gauss), no units in the value
+#   - booleans: true / false, never "yes" or text
+#   - unknown: null, never a guess or "n/a"
+#   - links: "[[Note title]]"
+#   - month: YYYY-MM, date: YYYY-MM-DD
+# Field types: str, int, number, bool, enum, list, link, month, date, url.
+
+[kinds.watch]
+order = [
+  "brand", "model", "reference", "style", "release_year",
+  "case_diameter_mm", "thickness_mm", "lug_to_lug_mm", "lug_width_mm", "case_material", "caseback",
+  "crystal", "crystal_domed", "bezel_type", "bezel_scale", "bezel_insert",
+  "dial_color", "dial_finish", "lume", "complications",
+  "water_resistance_m", "screw_down_crown",
+  "strap_type", "bracelet_links", "clasp_type", "microadjust", "quick_release",
+  "movement", "movement_type", "power_reserve_h", "frequency_vph", "antimagnetic_gauss",
+  "retail_price", "retail_currency", "retail_date",
+  "market_low", "market_high", "market_currency", "market_source", "market_date",
+  "image", "verified", "rating", "acquired", "paid", "sold",
+]
+defaults = { verified = false }
+
+[kinds.watch.fields]
+brand = { type = "link" }
+model = { type = "str", note = "maker's model name without the brand, e.g. 'Black Bay 58', 'Speedmaster Moonwatch Professional'" }
+reference = { type = "str", note = "exact maker reference incl. suffix, maker's own punctuation" }
+style = { type = "enum", values = ["diver", "dress", "field", "pilot", "chronograph", "gmt", "sports", "integrated-bracelet", "racing", "digital"] }
+release_year = { type = "int", note = "year this reference launched" }
+case_diameter_mm = { type = "number" }
+thickness_mm = { type = "number" }
+lug_to_lug_mm = { type = "number" }
+lug_width_mm = { type = "number" }
+case_material = { type = "enum", values = ["steel", "titanium", "ceramic", "bronze", "silver", "yellow-gold", "rose-gold", "white-gold", "platinum", "carbon", "aluminium", "two-tone"] }
+caseback = { type = "enum", values = ["solid", "display"] }
+crystal = { type = "enum", values = ["sapphire", "hesalite", "acrylic", "mineral"] }
+crystal_domed = { type = "bool" }
+bezel_type = { type = "enum", values = ["none", "fixed", "unidirectional", "bidirectional", "internal"] }
+bezel_scale = { type = "enum", values = ["none", "dive-60", "gmt-24", "tachymeter", "countdown-12", "compass", "minutes-60", "decorative"] }
+bezel_insert = { type = "enum", values = ["none", "aluminium", "ceramic", "steel", "sapphire", "gold", "enamel"] }
+dial_color = { type = "enum", values = ["black", "white", "silver", "grey", "blue", "green", "brown", "burgundy", "red", "cream", "champagne", "yellow", "orange", "purple", "pink", "salmon", "skeleton", "mother-of-pearl", "meteorite"] }
+dial_finish = { type = "enum", values = ["matte", "gloss", "sunburst", "grained", "textured", "guilloche", "enamel", "lacquer", "skeleton"] }
+lume = { type = "bool" }
+complications = { type = "list", values = ["date", "day-date", "gmt", "chronograph", "moonphase", "power-reserve", "small-seconds", "world-time", "alarm", "annual-calendar", "perpetual-calendar", "tourbillon", "minute-repeater"], note = "[] for time-only" }
+water_resistance_m = { type = "int" }
+screw_down_crown = { type = "bool" }
+strap_type = { type = "enum", values = ["bracelet", "rubber", "leather", "fabric", "nato", "mesh"], note = "what this reference ships on" }
+bracelet_links = { type = "int", note = "links across one row (3 or 5); null unless strap_type is bracelet" }
+clasp_type = { type = "enum", values = ["folding", "butterfly", "pin-buckle", "deployant"], note = "folding = any fold-over clasp on a bracelet; deployant = folding clasp on a strap" }
+microadjust = { type = "bool", note = "true when the clasp extends without tools (Tudor T-fit, Omega comfort setting, Rolex Glidelock/Easylink)" }
+quick_release = { type = "bool", note = "tool-free strap or bracelet removal" }
+movement = { type = "link" }
+movement_type = { type = "enum", values = ["automatic", "manual", "quartz", "spring-drive", "solar", "kinetic"], note = "copy from the movement note" }
+power_reserve_h = { type = "int", note = "copy from the movement note" }
+frequency_vph = { type = "int", note = "copy from the movement note; 3 Hz = 21600, 4 Hz = 28800" }
+antimagnetic_gauss = { type = "int", note = "1 tesla = 10000 gauss; null when only ISO 764 baseline" }
+retail_price = { type = "int" }
+retail_currency = { type = "enum", values = ["USD", "CHF", "EUR", "GBP", "JPY"] }
+retail_date = { type = "month" }
+market_low = { type = "int" }
+market_high = { type = "int" }
+market_currency = { type = "enum", values = ["USD", "CHF", "EUR", "GBP", "JPY"] }
+market_source = { type = "list", values = ["chrono24-asking", "ebay-asking", "ebay-sold", "watchcharts", "dealer-used", "auction", "forum"] }
+market_date = { type = "month" }
+image = { type = "link" }
+verified = { type = "bool" }
+rating = { type = "int", min = 1, max = 10 }
+acquired = { type = "date" }
+paid = { type = "int" }
+sold = { type = "date" }
+
+[kinds.brand]
+order = ["kind", "country", "founded", "parent_company", "website"]
+defaults = { kind = "brand" }
+
+[kinds.brand.fields]
+kind = { type = "enum", values = ["brand"] }
+country = { type = "enum", values = ["switzerland", "germany", "japan", "usa", "uk", "france", "italy", "denmark", "sweden", "finland", "netherlands", "austria", "china", "russia"] }
+founded = { type = "int" }
+parent_company = { type = "str", note = "group name as the group writes it, e.g. 'Swatch Group', 'Richemont', 'Hans Wilsdorf Foundation'; null if independent" }
+website = { type = "url" }
+
+[kinds.movement]
+order = ["kind", "maker", "calibre", "movement_type", "power_reserve_h", "frequency_vph", "jewels", "escapement", "hairspring", "certification", "antimagnetic_gauss", "complications"]
+defaults = { kind = "movement" }
+
+[kinds.movement.fields]
+kind = { type = "enum", values = ["movement"] }
+maker = { type = "link", note = "brand note of whoever makes it" }
+calibre = { type = "str", note = "maker's calibre designation exactly, e.g. 'MT5400-U', '3861'" }
+movement_type = { type = "enum", values = ["automatic", "manual", "quartz", "spring-drive", "solar", "kinetic"] }
+power_reserve_h = { type = "int" }
+frequency_vph = { type = "int" }
+jewels = { type = "int" }
+escapement = { type = "enum", values = ["lever", "co-axial", "detent", "other"] }
+hairspring = { type = "enum", values = ["silicon", "nivachron", "parachrom", "steel-alloy", "other"] }
+certification = { type = "list", values = ["cosc", "metas", "iso-3159", "geneva-seal", "patek-seal", "fleurier"], note = "[] when uncertified" }
+antimagnetic_gauss = { type = "int" }
+complications = { type = "list", values = ["date", "day-date", "gmt", "chronograph", "moonphase", "power-reserve", "small-seconds", "world-time", "alarm", "annual-calendar", "perpetual-calendar", "tourbillon", "minute-repeater"] }

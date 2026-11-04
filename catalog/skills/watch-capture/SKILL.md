@@ -6,17 +6,16 @@ description: "Add or update a watch in the private Obsidian watch collection (60
 # watch-capture
 
 One Markdown note per **reference number** in the private vault area. Specs go in
-frontmatter (the schema comes from `00 Meta/01 Templates/Watch.md`), opinions in
-the body. Everything goes through the `notes` MCP; never write vault files with
+frontmatter using the controlled vocabulary in `schema.toml`, opinions in the body. Everything goes through the `notes` MCP; never write vault files with
 shell or file tools.
 
 ## Layout
 
 | What | Where | Type | Title |
 |---|---|---|---|
-| Watch | `62 Watch Collecting/Watches/` | `watch` | `<Brand> <Model> <Reference>` (e.g. `Tudor Black Bay 58 M79030N`) |
+| Watch | `62 Watch Collecting/Watches/` | `watch` | `<Brand> <Model> <Reference>` (e.g. `Tudor Black Bay 58 M7939A1A0NU-0002`) |
 | Brand | `62 Watch Collecting/Brands/` | `reference` | `<Brand>` |
-| Movement | `62 Watch Collecting/Movements/` | `reference` | `<Maker> <Calibre>` (e.g. `Tudor MT5402`) |
+| Movement | `62 Watch Collecting/Movements/` | `reference` | `<Maker> <Calibre>` (e.g. `Tudor MT5400-U`) |
 | Image | `62 Watch Collecting/Images/` | file | `<Reference>.png` |
 
 Category `62` lives in the private nested repo. If `notes_index` does not list
@@ -39,7 +38,7 @@ into shared categories.
 4. **Prices.** Retail: manufacturer site in the user's market (USD unless told
    otherwise), with `retail_date`. Market: a low/high range from recent listings
    or sales (Chrono24 asking prices run high; say so if that is the only source),
-   with `market_source` and `market_date`. Dates are `YYYY-MM`.
+   with `market_source` (list from the schema) and `market_date`.
 5. **Image.** Find a manufacturer press or product shot on a plain background.
    Download it into a new empty directory in the scratchpad (untrusted data),
    then normalize it (script dir = this skill's `scripts/`):
@@ -54,52 +53,69 @@ into shared categories.
    Put the returned `embed` at the top of the body and set `image` to the same
    wikilink (`"[[<Reference>.png]]"`) so the Bases card view shows it.
 6. **Brand and movement.** Create the brand note (and movement note when the
-   calibre is known) if missing, with `folder="Brands"` / `folder="Movements"`.
-   Link them from the watch as `"[[Tudor]]"` / `"[[Tudor MT5402]]"`.
-7. **Write the watch.** `notes_create(category_id="62", type="watch",
+   calibre is known) if missing, with `folder="Brands"` / `folder="Movements"`
+   and `type="reference"`. Link them from the watch as `"[[Tudor]]"` /
+   `"[[Tudor MT5400-U]]"`. Copy `movement_type`, `power_reserve_h` and
+   `frequency_vph` from the movement note into the watch so the table can sort
+   on them.
+7. **Check the frontmatter** for every note before writing it. Write the dict to
+   a JSON file in the scratchpad and run:
+
+   ```bash
+   python "<skill>/scripts/check_frontmatter.py" check watch "<scratch>/fm.json"   # or brand / movement
+   ```
+
+   Fix every line it prints until it says `ok`. Never write a note that fails.
+8. **Write the watch.** `notes_create(category_id="62", note_type="watch",
    folder="Watches", title=..., body="", source=[...], frontmatter={...})`
    seeds the template body. Then `notes_update(path, body=...)` with the full
    body below (the create call appends `body` after the template, so the image
    would land at the bottom). Keep `verified: false`; only the user flips it.
-8. **Report** a compact table of the key specs and prices, the sources, and
+9. **Report** a compact table of the key specs and prices, the sources, and
    anything left `null` or disputed.
 
-## Frontmatter
+## Frontmatter vocabulary
 
-The template supplies every key with `null`; pass only what you found. The MCP
-owns `type`, `status`, `created`, `updated`, `tags`, `related`, `source`, `qmd`;
-pass `source` as its own argument and never inside `frontmatter`.
+`schema.toml` (next to this file) is the single source of truth: every key, its
+type, and the only values an enum or list may take. Read it before filling a
+note. The template `00 Meta/01 Templates/Watch.md` is generated from it
+(`check_frontmatter.py template watch`); regenerate the template whenever the
+schema changes, and migrate existing notes with `notes_update(frontmatter=...,
+remove_keys=[...])`.
 
-| Key | Example | Notes |
-|---|---|---|
-| `brand` | `"[[Tudor]]"` | wikilink to the brand note |
-| `model` | `Black Bay 58` | |
-| `reference` | `M79030N-0001` | exact, with suffix when the maker uses one |
-| `style` | `diver` | one of `diver`, `dress`, `field`, `pilot`, `chronograph`, `gmt`, `sports`, `integrated-bracelet`, `racing`, `digital`; pick the maker's own category when it fits, else the closest |
-| `ownership` | `wishlist` | `owned`, `wishlist`, `interested`, `sold`, `passed`; default `interested` |
-| `release_year` | `2018` | |
-| `case_diameter_mm`, `thickness_mm`, `lug_to_lug_mm`, `lug_width_mm` | `39`, `11.9`, `47.75`, `20` | numbers only |
-| `case_material`, `bezel`, `dial`, `crystal`, `bracelet` | `steel`, `aluminium insert`, `black`, `sapphire`, `riveted steel` | short lowercase |
-| `water_resistance_m` | `200` | |
-| `movement` | `"[[Tudor MT5402]]"` | |
-| `movement_type` | `automatic` | `automatic`, `manual`, `quartz`, `spring drive` |
-| `power_reserve_h`, `frequency_vph` | `70`, `28800` | |
-| `retail_price`, `retail_currency`, `retail_date` | `4400`, `USD`, `2026-11` | |
-| `market_low`, `market_high`, `market_currency`, `market_source`, `market_date` | `3200`, `3700`, `USD`, `Chrono24 asking`, `2026-11` | dated snapshot |
-| `image` | `"[[M79030N.png]]"` | |
-| `verified` | `false` | |
-| `rating`, `acquired`, `paid`, `sold` | | user fills these |
+Rules the checker enforces:
 
-Brand note `frontmatter`: `kind: brand`, `country`, `founded`, `parent_company`,
-`website`. Movement note: `kind: movement`, `maker`, `movement_type`,
-`power_reserve_h`, `frequency_vph`, `jewels`, `certification`.
+- One fact, one key, one spelling. Enum and list values are lowercase
+  kebab-case from `schema.toml` only (`sapphire`, not `Sapphire` or `sapphire
+  crystal`). If a real value is missing from the list, add it to `schema.toml`
+  first (and say so), never write it free-form.
+- Features are booleans, not prose: a T-fit, Glidelock or Omega comfort-setting
+  clasp is `microadjust: true`; a domed crystal is `crystal_domed: true`; a
+  sapphire caseback is `caseback: display`.
+- Numbers carry no units; the unit is in the key (`case_diameter_mm: 39`).
+- Unknown is `null`. Never write `n/a`, `unknown`, or a guess.
+- Links are `"[[Note title]]"`; months `YYYY-MM`; dates `YYYY-MM-DD`; currency
+  ISO code; prices whole numbers.
+- There is no ownership field. Do not add one.
+- Anything that does not fit a key (marketing names like "step dial", rivet
+  styling, bracelet details, disagreements between sources) goes in the body's
+  `## Notes`, not in frontmatter.
+
+The MCP owns `type`, `status`, `created`, `updated`, `tags`, `related`, `source`,
+`qmd`: pass `source` as its own argument, never inside `frontmatter`.
+
+## Titles
+
+- Watch: `<Brand> <Model> <Reference>`, e.g. `Omega Speedmaster Moonwatch Professional 310.30.42.50.01.002`.
+- Movement: `<Maker> <Calibre>`, e.g. `Omega 3861`.
+- Image: `<Reference>.png`.
 
 ## Body
 
 ```markdown
-# Tudor Black Bay 58 M79030N
+# Tudor Black Bay 58 M7939A1A0NU-0002
 
-![[M79030N.png]]
+![[M7939A1A0NU-0002.png]]
 
 ## Why I like it
 
@@ -114,8 +130,8 @@ Keep the user's wording when updating. Do not overwrite `## Why I like it`.
 ## Collection view
 
 The hub note `62 Watch Collecting.md` holds a ```` ```base ```` block (Obsidian
-Bases) with a table and a cards view over `Watches/`. If it is missing, add it
-with `notes_append(path=<hub>, heading="Collection", text=<block>)`:
+Bases) with a Specs table and a Gallery cards view over `Watches/`. If it is
+missing, add it with `notes_append(path=<hub>, heading="Collection", text=<block>)`:
 
 ````markdown
 ```base
@@ -125,10 +141,10 @@ filters:
 views:
   - type: table
     name: Specs
-    order: [file.name, brand, reference, style, ownership, case_diameter_mm, thickness_mm, lug_to_lug_mm, water_resistance_m, movement, retail_price, market_low, market_high, market_date, verified]
+    order: [file.name, brand, reference, style, case_diameter_mm, thickness_mm, lug_to_lug_mm, water_resistance_m, crystal, strap_type, microadjust, movement, movement_type, power_reserve_h, retail_price, market_low, market_high, market_date, verified]
   - type: cards
     name: Gallery
     image: note.image
-    order: [file.name, brand, style, ownership, case_diameter_mm]
+    order: [file.name, brand, style, case_diameter_mm]
 ```
 ````
