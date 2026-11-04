@@ -132,7 +132,9 @@ Title and image only, nothing else:
 ![[M7939A1A0NU-0002.png]]
 ```
 
-Brand and movement notes follow the same rule: frontmatter plus `# <Title>`.
+Brand and movement notes: `# <Title>`, one factual sentence or two, then a
+`## Watches` (brand) or `## Used in` (movement) list of wikilinks to watch
+records. Add the new watch to those lists when you create it.
 
 ## Collection view
 
