@@ -5,9 +5,13 @@ description: "Add or update a watch in the private Obsidian watch collection (60
 
 # watch-capture
 
-One Markdown note per **reference number** in the private vault area. Specs go in
-frontmatter using the controlled vocabulary in `schema.toml`, opinions in the body. Everything goes through the `notes` MCP; never write vault files with
-shell or file tools.
+A spec database, not a journal: one Markdown note per **reference number** in
+the private vault area, holding that reference's specs and prices. Everything
+goes in frontmatter using the controlled vocabulary in `schema.toml`; the body is
+only the title and the image. No opinions, notes sections, ownership or service
+history; the user's own notes live elsewhere and link to these records.
+Everything goes through the `notes` MCP; never write vault files with shell or
+file tools.
 
 ## Layout
 
@@ -33,8 +37,9 @@ into shared categories.
 3. **Specs.** Manufacturer page first, then one or two secondary sources
    (Hodinkee, Monochrome, Fratello, watchbase). Put every URL used in `source`.
    A spec you cannot find stays `null`; never estimate. If sources disagree,
-   use the manufacturer figure and note the disagreement in the body.
-   Thickness and lug-to-lug are often missing or wrong; say which source gave them.
+   use the manufacturer figure and mention the disagreement in the report.
+   Thickness and lug-to-lug are often missing or wrong; say in the report which
+   source gave them.
 4. **Prices.** Retail: manufacturer site in the user's market (USD unless told
    otherwise), with `retail_date`. Market: a low/high range from recent listings
    or sales (Chrono24 asking prices run high; say so if that is the only source),
@@ -74,9 +79,9 @@ into shared categories.
    Fix every line it prints until it says `ok`. Never write a note that fails.
 8. **Write the watch.** `notes_create(category_id="62", note_type="watch",
    folder="Watches", title=..., body="", source=[...], frontmatter={...})`
-   seeds the template body. Then `notes_update(path, body=...)` with the full
-   body below (the create call appends `body` after the template, so the image
-   would land at the bottom). Keep `verified: false`; only the user flips it.
+   seeds the template body. Then `notes_update(path, body=...)` with the body
+   below (the create call appends `body` after the template, so the image would
+   land at the bottom). Keep `verified: false`; only the user flips it.
 9. **Report** a compact table of the key specs and prices, the sources, and
    anything left `null` or disputed.
 
@@ -102,10 +107,11 @@ Rules the checker enforces:
 - Unknown is `null`. Never write `n/a`, `unknown`, or a guess.
 - Links are `"[[Note title]]"`; months `YYYY-MM`; dates `YYYY-MM-DD`; currency
   ISO code; prices whole numbers.
-- There is no ownership field. Do not add one.
-- Anything that does not fit a key (marketing names like "step dial", rivet
-  styling, bracelet details, disagreements between sources) goes in the body's
-  `## Notes`, not in frontmatter.
+- No ownership or personal fields (owned, wishlist, rating, paid, acquired,
+  sold). Do not add any.
+- Details that do not fit a key (marketing names like "step dial", rivet
+  styling) are left out. If one matters enough to sort or filter on, propose a
+  new key in `schema.toml` instead of writing prose.
 
 The MCP owns `type`, `status`, `created`, `updated`, `tags`, `related`, `source`,
 `qmd`: pass `source` as its own argument, never inside `frontmatter`.
@@ -118,20 +124,15 @@ The MCP owns `type`, `status`, `created`, `updated`, `tags`, `related`, `source`
 
 ## Body
 
+Title and image only, nothing else:
+
 ```markdown
 # Tudor Black Bay 58 M7939A1A0NU-0002
 
 ![[M7939A1A0NU-0002.png]]
-
-## Why I like it
-
-## Notes
-- Spec notes: which source gave thickness / lug-to-lug, any disagreements.
-
-## Service history
 ```
 
-Keep the user's wording when updating. Do not overwrite `## Why I like it`.
+Brand and movement notes follow the same rule: frontmatter plus `# <Title>`.
 
 ## Collection view
 

@@ -29,7 +29,6 @@ GOOD_WATCH = {
     'microadjust': True,
     'retail_date': '2026-11',
     'market_source': ['ebay-asking', 'chrono24-asking'],
-    'rating': None,
     'verified': False,
 }
 
@@ -48,7 +47,7 @@ def test_conforming_watch_passes() -> None:
         ('retail_date', '2026-11-04'),
         ('complications', ['Date']),
         ('style', 'dive'),
-        ('rating', 11),
+        ('verified', 'yes'),
         ('verified', 0),
         ('release_year', 2026.5),
     ],
@@ -60,9 +59,9 @@ def test_nonstandard_values_are_flagged(key: str, value: object) -> None:
 
 
 def test_unknown_and_retired_keys_are_flagged() -> None:
-    problems = check('watch', {**GOOD_WATCH, 'ownership': 'wishlist', 'bracelet': 'rivet'}, SCHEMA)
+    problems = check('watch', {**GOOD_WATCH, 'ownership': 'wishlist', 'bracelet': 'rivet', 'rating': 8}, SCHEMA)
     assert sorted(problems) == sorted(
-        ['ownership: unknown key (not in schema.toml)', 'bracelet: unknown key (not in schema.toml)']
+        [f'{key}: unknown key (not in schema.toml)' for key in ('ownership', 'bracelet', 'rating')]
     )
 
 

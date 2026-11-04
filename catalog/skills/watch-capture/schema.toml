@@ -21,7 +21,7 @@ order = [
   "movement", "movement_type", "power_reserve_h", "frequency_vph", "antimagnetic_gauss",
   "retail_price", "retail_currency", "retail_date",
   "market_low", "market_high", "market_currency", "market_source", "market_date",
-  "image", "verified", "rating", "acquired", "paid", "sold",
+  "image", "verified",
 ]
 defaults = { verified = false }
 
@@ -68,10 +68,6 @@ market_source = { type = "list", values = ["chrono24-asking", "ebay-asking", "eb
 market_date = { type = "month" }
 image = { type = "link" }
 verified = { type = "bool" }
-rating = { type = "int", min = 1, max = 10 }
-acquired = { type = "date" }
-paid = { type = "int" }
-sold = { type = "date" }
 
 [kinds.brand]
 order = ["kind", "country", "founded", "parent_company", "website"]
