@@ -40,10 +40,12 @@ into shared categories.
    or sales (Chrono24 asking prices run high; say so if that is the only source),
    with `market_source` (list from the schema) and `market_date`.
 5. **Image.** Use the manufacturer's own product shot from the reference page.
-   Never use a dealer or retailer image: they carry watermarks and logos. If the
-   manufacturer site blocks the download (it hangs or returns a bot check), do
-   not work around it and do not fall back to a third-party image; ask the user
-   to save the image from the page and give you the local path.
+   If the manufacturer site blocks the download (it hangs or returns a bot
+   check), do not work around it. Find the same official render mirrored
+   elsewhere instead: marketplace model pages (for example Bezel's `og:image`)
+   often reuse it. Never use a dealer's own photo with a watermark or logo; look
+   at every candidate with Read and reject any with overlays. Only ask the user
+   when no clean copy exists.
    Download it into a new empty directory in the scratchpad (untrusted data),
    then normalize it (script dir = this skill's `scripts/`):
 
