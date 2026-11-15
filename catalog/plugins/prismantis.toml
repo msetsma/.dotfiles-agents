@@ -1,0 +1,37 @@
+name        = "prismantis"
+description = "Redraws Claude Code replies in the terminal: themed markdown, tables, alerts, mermaid diagrams, figures, diff cards, copy buttons."
+clients     = ["claude-code"]
+plugin      = "prismantis@prismantis"
+
+[marketplace]
+source = "github"
+repo   = "NahumLitvin/prismantis"
+
+# Merged into settings.json -> pluginConfigs["prismantis@prismantis"].options.
+# Option reference: the prismantis README "Configure" section.
+[options]
+enabled           = true
+theme             = "catppuccin-mocha"
+headingStyle      = "uppercase"
+tableStyle        = "rules"
+promptStyle       = "bubble"
+replyStyle        = "auto"
+clock             = "12h"
+toolStyle         = "tree-dim"
+toolOutput        = "quiet"
+taskStyle         = "progress"
+listMarker        = "dots"
+rtl               = "auto"
+highlightNumbers  = true
+highlightPaths    = true
+mermaidAscii      = false
+toolRows          = true
+diffStyle         = "card"
+pieStyle          = "bars"
+mermaid           = true
+copyButtons       = true
+copyButtonStyle   = "hover"
+textCopyButtons   = true
+issueHint         = true
+diagramHints      = true
+latex             = true
