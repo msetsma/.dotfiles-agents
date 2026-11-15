@@ -94,7 +94,7 @@ no block is skipped.
 | opencode       | instructions | `~/.config/opencode/AGENTS.md`                                    | block    |
 | Claude Code    | mcp          | `~/.claude.json` → `mcpServers`                                   | merge    |
 | Claude Code    | skills       | `~/.claude/skills/`                                               | symlink  |
-| Claude Code    | plugins      | `~/.claude/settings.json` → `enabledPlugins` + `extraKnownMarketplaces` | merge    |
+| Claude Code    | plugins      | `~/.claude/settings.json` → `enabledPlugins` + `extraKnownMarketplaces` + `pluginConfigs` | merge    |
 | Claude Code    | hooks        | `~/.claude/settings.json` → `hooks`                               | merge    |
 | Claude Desktop | mcp          | `~/Library/Application Support/Claude/claude_desktop_config.json` | merge    |
 | Codex          | mcp          | `~/.codex/config.toml` → `[mcp_servers]`                          | merge    |
@@ -119,7 +119,9 @@ catalog/packages/<name>.toml     # source + optional resource filters
   `"directory"` + `path`). Sync enables it and registers the marketplace in
   `~/.claude/settings.json`, then runs `claude plugin install`. Listing a plugin
   under `plugins` in `retired.toml` disables and uninstalls it and removes a
-  marketplace nothing else uses. Install plugins here, not with
+  marketplace nothing else uses. An optional `[options]` table becomes the
+  plugin's `pluginConfigs["<id>"].options` (what `/config` edits), so copy
+  options changed in `/config` back into the TOML. Install plugins here, not with
   `claude plugin install`.
 - **Hooks**: merged additively; retire one via `hook_commands` in `catalog/retired.toml`.
 - **Instructions**: per-client, wrapped in a `<!-- dotfiles-agents:begin/end -->` block.

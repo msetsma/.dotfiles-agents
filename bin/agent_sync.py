@@ -214,6 +214,8 @@ def load_plugins(ctx: dict, local: dict | None = None) -> dict:
         if 'marketplace' in raw:
             item['id'] = raw['plugin']
             item['marketplace'] = expand(raw['marketplace'], ctx)
+            if 'options' in raw:
+                item['options'] = dict(raw['options'])
         else:
             source = CATALOG / 'plugins' / f'{name}.ts'
             if not source.is_file():
@@ -568,10 +570,19 @@ def run_plugin_cli(cli: dict, args: list[str]) -> None:
     subprocess.run([exe, *command[1:], *args], check=False)
 
 
-def _plugin_changes(enabled: dict, markets: dict, desired: dict, retired: list):
+def _options_drift(configs: dict, plugin_id: str, plugin: dict) -> bool:
+    return 'options' in plugin and configs.get(plugin_id, {}).get('options') != plugin['options']
+
+
+def _plugin_changes(enabled: dict, markets: dict, configs: dict, desired: dict, retired: list):
     want_markets = {market_of(i): {'source': p['marketplace']} for i, p in desired.items()}
     added = sorted(i for i in desired if enabled.get(i) is not True)
-    changed = sorted(i for i in desired if i not in added and markets.get(market_of(i)) != want_markets[market_of(i)])
+    changed = sorted(
+        i
+        for i, p in desired.items()
+        if i not in added
+        and (markets.get(market_of(i)) != want_markets[market_of(i)] or _options_drift(configs, i, p))
+    )
     removed = sorted(i for i in enabled if i.partition('@')[0] in retired and i not in desired)
     return want_markets, added, changed, removed
 
@@ -587,10 +598,11 @@ def sync_marketplace_plugins(client: str, cli: dict, plugins: dict, retired: lis
     doc = json.loads(strip_jsonc(target.read_text(encoding='utf-8'))) if target.exists() else {}
     enabled = doc.get('enabledPlugins', {})
     markets = doc.get('extraKnownMarketplaces', {})
+    configs = doc.get('pluginConfigs', {})
     desired = {
         p['id']: p for n, p in plugins.items() if client in p['clients'] and 'id' in p and n not in retired
     }
-    want_markets, added, changed, removed = _plugin_changes(enabled, markets, desired, retired)
+    want_markets, added, changed, removed = _plugin_changes(enabled, markets, configs, desired, retired)
     dirty = report(client, target, added, changed, removed, kind='plugins')
     if CONFIG.dry_run or not dirty:
         return dirty
@@ -598,6 +610,9 @@ def sync_marketplace_plugins(client: str, cli: dict, plugins: dict, retired: lis
     orphans = _orphan_markets(enabled, removed, want_markets)
     doc['enabledPlugins'] = {i: v for i, v in enabled.items() if i not in removed} | dict.fromkeys(desired, True)
     doc['extraKnownMarketplaces'] = {m: s for m, s in markets.items() if m not in orphans} | want_markets
+    # A plugin's `[options]` table owns pluginConfigs[id].options; other keys survive.
+    want_configs = {i: configs.get(i, {}) | {'options': p['options']} for i, p in desired.items() if 'options' in p}
+    doc['pluginConfigs'] = {i: c for i, c in configs.items() if i not in removed} | want_configs
     write_json(target, doc)
 
     # The settings declare intent; the CLI fetches marketplaces and plugin caches.

@@ -119,3 +119,31 @@ def test_load_plugins_reads_marketplace_entries(engine, tmp_path: Path, monkeypa
     loaded = engine.load_plugins({})['caveman']
     assert loaded['id'] == 'caveman@caveman'
     assert loaded['marketplace'] == {'source': 'github', 'repo': 'JuliusBrussee/caveman'}
+
+
+def test_options_merge_into_plugin_configs(engine, calls, tmp_path: Path) -> None:
+    target = tmp_path / 'settings.json'
+    target.write_text(json.dumps({
+        'enabledPlugins': {'p@m': True},
+        'extraKnownMarketplaces': {'m': {'source': {'source': 'github', 'repo': 'u/p'}}},
+        'pluginConfigs': {'p@m': {'options': {'theme': 'old'}}, 'mine@hand': {'options': {'a': 1}}},
+    }))
+    catalog = {'p': plugin('p', 'm', 'u/p') | {'options': {'theme': 'mocha', 'clock': '12h'}}}
+    assert engine.sync_plugins('claude-code', cli(target), catalog, [])
+    doc = json.loads(target.read_text())
+    assert doc['pluginConfigs'] == {
+        'p@m': {'options': {'theme': 'mocha', 'clock': '12h'}},
+        'mine@hand': {'options': {'a': 1}},
+    }
+    assert calls == []
+    assert not engine.sync_plugins('claude-code', cli(target), catalog, [])
+
+
+def test_retired_plugin_drops_its_config(engine, calls, tmp_path: Path) -> None:
+    target = tmp_path / 'settings.json'
+    target.write_text(json.dumps({
+        'enabledPlugins': {'old@m': True},
+        'pluginConfigs': {'old@m': {'options': {'x': 1}}},
+    }))
+    assert engine.sync_plugins('claude-code', cli(target), {}, ['old'])
+    assert 'old@m' not in json.loads(target.read_text())['pluginConfigs']
