@@ -6,7 +6,7 @@ clients     = ["opencode"]
 
 [launch]
 command = "npx"
-args    = ["-y", "{{package}}"]
+args    = ["-y", "{{package}}", "--headless"]
 
 [package]
 manager = "npm"

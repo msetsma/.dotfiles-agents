@@ -139,7 +139,7 @@ def test_list_command_prefixes_args(engine) -> None:
     srv = engine.load_mcp(engine.build_context(local), local)['playwright']
     assert srv['command'] == 'cmd'
     assert srv['args'][:2] == ['/c', 'npx']
-    assert srv['args'][2:] == ['-y', '@playwright/mcp@latest']
+    assert srv['args'][2:] == ['-y', '@playwright/mcp@latest', '--headless']
 
 
 # --------------------------------------------------------------------------- #
