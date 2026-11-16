@@ -1,9 +1,9 @@
 name        = "sharepoint-mcp"
-description = "SharePoint: OneDrive-synced libraries on disk plus SharePoint lists via Microsoft Graph (Azure CLI token). Read-only by default; list writes are opt-in via SHAREPOINT_ENABLE_WRITES."
+description = "SharePoint (macOS + Windows): OneDrive-synced libraries on disk plus SharePoint lists via Microsoft Graph (Azure CLI token). Read-only by default; list writes are opt-in via SHAREPOINT_ENABLE_WRITES."
 kind        = "local"
 origin      = "custom"
 clients     = ["opencode", "claude-code", "claude-desktop"]
-tags        = ["work", "macos"]
+tags        = ["work"]
 
 [launch]
 command = "uv"
