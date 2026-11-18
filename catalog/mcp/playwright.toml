@@ -1,5 +1,5 @@
 name        = "playwright"
-description = "Microsoft Playwright browser automation. (Claude Code still has a project-scoped copy under docs/Analytics.wiki that this repo does not manage.)"
+description = "Microsoft Playwright browser automation, headless."
 kind        = "local"
 origin      = "external"
 clients     = ["opencode"]

@@ -8,11 +8,11 @@ and no upstream installer.
 
 ## Why
 
-The old setup used a shallow, single-tag clone at `~/.ai-dev-kit` plus its own
-`.venv`, created by ai-dev-kit's `install.sh`. That clone had no branch or
-upstream, so updates had to be done by rerunning the installer. Here the two
-monorepo packages (`databricks-mcp-server`, `databricks-tools-core`;
-the latter has no PyPI release) are pulled from **one pinned git tag**:
+ai-dev-kit's own `install.sh` makes a shallow, single-tag clone with no branch
+or upstream, which only the installer can update. This project instead pulls
+the two monorepo packages (`databricks-mcp-server`, `databricks-tools-core`;
+the latter has no PyPI release) from **one pinned git tag**, which
+`make agent-update` bumps:
 
 ```toml
 dependencies = [
@@ -34,11 +34,9 @@ uv run --project ~/.dotfiles-agents/mcp/databricks-mcp databricks-mcp
 
 ```sh
 make agent-outdated   # shows: databricks  uv-project  v0.2.0 -> v0.2.x
-make agent-update     # rewrites the tag above, re-locks, re-syncs
+make agent-update     # rewrites the tag above, re-locks, then re-syncs every client
 ```
 
 Because the catalog launches via `--project` (the tag lives here, not in the
-agent configs), a version bump never rewrites any agent config.
-
-> `~/.ai-dev-kit` can supply **skills**, but it isn't the source of the
-> `databricks` MCP server.
+agent configs), a version bump leaves the agent configs unchanged; the re-sync
+after `make agent-update` finds nothing to rewrite for this server.

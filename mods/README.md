@@ -18,20 +18,29 @@ GitHub source, the same way third-party plugins come in.
 Mods in the same tier nest in `enabledPlugins` order in `~/.claude/settings.json`,
 first outermost. A band hook that answers without calling `next` hides
 everything beneath it, so `style` only frames a mod's band when it sits above
-it: keep `style@msetsma-mods` first in `enabledPlugins`. A mod installed later
-lands after it, which is the order that works.
+it: `style@msetsma-mods` stays first in `enabledPlugins`. Its catalog entry
+sets `order = 0`, and sync puts plugins with an `order` first, lowest first.
 
 ### Installing from the private repos
 
 The mod repos are private, and plain `git@github.com` SSH here logs in as the
 work account (`~/.gitconfig-personal` only applies inside an existing clone).
 Claude Code clones each mod into its plugin cache on install and on each
-update, so run those with the personal key:
+update, so run sync with the personal key. `make sync` registers the
+marketplace, then installs and enables every mod in the catalog:
 
 ```sh
 export GIT_SSH_COMMAND="ssh -F /dev/null -i ~/.ssh/id_ed25519_personal -o IdentitiesOnly=yes -o HostName=ssh.github.com -p 443"
+make sync
+```
+
+Fallback, for pulling a pushed change into a mod that is already installed, or
+for recovering a failed install (same `GIT_SSH_COMMAND`):
+
+```sh
 claude plugin marketplace update msetsma-mods
-claude plugin install <mod>@msetsma-mods   # or `claude plugin update <mod>@msetsma-mods`
+claude plugin update <mod>@msetsma-mods    # refresh an installed mod
+claude plugin install <mod>@msetsma-mods   # retry a failed install
 ```
 
 ## Layout
@@ -70,14 +79,19 @@ A mod repo has this shape:
    path   = "${AGENT_HOME}/mods"
    ```
 
-5. `claude plugin marketplace update msetsma-mods`, then `make sync` (with the
-   personal-key `GIT_SSH_COMMAND` above) registers the marketplace and installs
-   the mod.
+5. `make sync` (with the personal-key `GIT_SSH_COMMAND` above) registers the
+   marketplace and installs and enables the mod. If the install fails because
+   the marketplace listing is stale, run
+   `claude plugin marketplace update msetsma-mods` and sync again.
+6. Add a row to the Mods table above and to the Claude Code plugins table in
+   the root [`README.md`](../README.md).
 
 ## Editing a mod
 
 Clone the mod's repo anywhere and start a session with
 `claude --plugin-dir <clone>`. That loads the working tree and reloads on every
 save. Check it with `claude plugin validate <clone>` and
-`claude plugin test <clone>`. Push the change, then run
-`claude plugin update <mod-name>@msetsma-mods` on each machine to pick it up.
+`claude plugin test <clone>`. Push the change, then on each machine refresh the
+installed copy with the fallback commands above
+(`claude plugin marketplace update msetsma-mods`, then
+`claude plugin update <mod-name>@msetsma-mods`).

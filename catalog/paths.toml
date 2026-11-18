@@ -1,14 +1,13 @@
-# Machine-specific bits of the catalog.
+# Machine-specific bits of the catalog, as set on the primary (macOS) machine.
 #
 # Server definitions reference these logical command names and ${VARS} instead
-# of absolute paths, so `catalog/mcp/*.toml` stays portable between
-# machines. Only this file (and catalog/clients.toml paths) should need editing
-# on a new box.
+# of absolute paths, so `catalog/mcp/*.toml` stays portable between machines.
+# Override any of them per machine in the untracked catalog/local.toml (see
+# catalog/local.toml.example) rather than editing this tracked file.
 
 [commands]
 npx            = "/opt/homebrew/bin/npx"
 uv             = "/opt/homebrew/bin/uv"
-python         = "/Users/msetsma/.ai-dev-kit/.venv/bin/python"
 obscura        = "/Users/msetsma/.local/bin/obscura"
 apple-mail-mcp = "/Users/msetsma/.local/bin/apple-mail-mcp"
 entra-mcp      = "/Users/msetsma/.local/bin/entra-mcp"

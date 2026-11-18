@@ -10,4 +10,4 @@ args    = ["mcp", "--stealth"]
 
 [package]
 manager = "manual"
-name    = "obscura (binary in ~/.local/bin)"
+name    = "obscura (prebuilt binary; path via [commands] obscura)"

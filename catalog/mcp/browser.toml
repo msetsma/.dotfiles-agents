@@ -1,0 +1,15 @@
+name = "browser"
+description = "Headless browser automation for first-party testing."
+kind = "local"
+clients = ["opencode", "claude-code", "claude-desktop"]
+
+[launch]
+command = "uv"
+args = ["run", "--directory", "${AGENT_HOME}/vendor/obscura-facade",
+        "obscura-facade", "--stealth", "--allow-private-network",
+        "--storage-state", "${AGENT_HOME}/vendor/obscura-facade/state.json"]
+
+[package]
+manager = "git"
+repo = "msetsma/obscura-facade"
+path = "${AGENT_HOME}/vendor/obscura-facade"

@@ -59,8 +59,12 @@ style     = "claude-code"
 [claude-code.skills]
 path = "~/.claude/skills"
 
-# Marketplace plugins: agent-sync merges enabledPlugins + extraKnownMarketplaces,
-# then runs `claude plugin` to fetch, install, and uninstall. Plugins installed
+# Marketplace plugins: agent-sync merges enabledPlugins + extraKnownMarketplaces
+# (catalog plugins with an `order` key first, lowest first, ties by name; every
+# other entry, catalog or hand-installed, keeps its slot; new catalog plugins
+# append by name) and owns
+# pluginConfigs[<id>].options for catalog plugins (set from `[options]`, removed
+# when a plugin has none), then runs `claude plugin` to fetch, install, and uninstall. Plugins installed
 # by hand stay enabled until listed under `plugins` in retired.toml.
 [claude-code.plugins]
 path    = "~/.claude/settings.json"
@@ -72,6 +76,11 @@ path      = "~/.claude/settings.json"
 format    = "json"
 container = ["hooks"]
 style     = "claude-code"
+
+# Claude Code's global instructions. agent-sync owns a marked block; the rest
+# of CLAUDE.md (hand-written rules, other tools' blocks) is left alone.
+[claude-code.instructions]
+path = "~/.claude/CLAUDE.md"
 
 [claude-desktop.mcp]
 path        = "~/Library/Application Support/Claude/claude_desktop_config.json"
@@ -91,6 +100,10 @@ path      = "~/.codex/hooks.json"
 format    = "json"
 container = ["hooks"]
 style     = "codex"
+
+# Codex's global instructions (managed block, as above).
+[codex.instructions]
+path = "~/.codex/AGENTS.md"
 
 # pi rewrites settings.json itself (changelog version, `pi install`, `pi config`),
 # so agent-sync only merges the `packages` list: catalog entries are replaced by

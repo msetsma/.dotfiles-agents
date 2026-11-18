@@ -5,9 +5,11 @@ origin      = "external"
 clients     = ["claude-code", "claude-desktop"]
 tags        = ["personal"]
 
-# Needs Node >= 26.8.1. Build after cloning: `npm ci && npm run build`, then
-# `npm run auth` once. Credentials and tokens live in the clone's
-# spotify-config.json (gitignored upstream and under vendor/).
+# Needs Node >= 26.8.1. `make agent-update` runs the [package] build after
+# every clone or pull, and again on later runs until a build succeeds at the
+# current HEAD; run `npm run auth` in the clone once. Credentials and
+# tokens live in the clone's spotify-config.json (gitignored upstream and
+# under vendor/).
 [launch]
 command = "node"
 args    = ["${AGENT_HOME}/vendor/spotify-mcp-server/build/index.js"]
@@ -16,3 +18,4 @@ args    = ["${AGENT_HOME}/vendor/spotify-mcp-server/build/index.js"]
 manager = "git"
 repo    = "marcelmarais/spotify-mcp-server"
 path    = "${AGENT_HOME}/vendor/spotify-mcp-server"
+build   = [["npm", "ci"], ["npm", "run", "build"]]

@@ -11,3 +11,6 @@ clients     = []
 [launch]
 command = "solidcraft-cli"
 args    = ["mcp"]
+
+[package]
+manager = "manual"

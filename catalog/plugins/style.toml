@@ -2,6 +2,7 @@ name        = "style"
 description = "Restyles Claude Code's UI (prompts, tool calls, bands, notices, badges) from a /style pane. Keep first in enabledPlugins so it frames other mods' bands."
 clients     = ["claude-code"]
 plugin      = "style@msetsma-mods"
+order       = 0
 
 [marketplace]
 source = "directory"
