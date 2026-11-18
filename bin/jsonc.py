@@ -1,9 +1,12 @@
-"""jsonc - strip // and /* */ comments from JSONC without touching strings."""
+"""jsonc - parse JSONC (comments, trailing commas) without touching strings."""
 
 from __future__ import annotations
 
+import json
+from typing import Any
 
-__all__ = ['strip_jsonc']
+
+__all__ = ['has_comments', 'loads_jsonc', 'strip_jsonc', 'strip_trailing_commas']
 
 
 def _consume_string(text: str, start: int) -> tuple[str, int]:
@@ -55,3 +58,48 @@ def strip_jsonc(text: str) -> str:
         out.append(ch)
         i += 1
     return ''.join(out)
+
+
+def has_comments(text: str) -> bool:
+    """True when ``text`` holds a // or /* */ comment outside string literals."""
+    return strip_jsonc(text) != text
+
+
+def _next_significant(text: str, start: int) -> str:
+    """The first non-whitespace character at or after ``start`` (``''`` at EOF).
+
+    Scans by index: slicing the rest of the text per comma is quadratic.
+    """
+    i, n = start, len(text)
+    while i < n and text[i] in ' \t\r\n':
+        i += 1
+    return text[i] if i < n else ''
+
+
+def strip_trailing_commas(text: str) -> str:
+    """Drop commas directly before ``}`` or ``]`` (outside string literals).
+
+    Expects comment-free input (run :func:`strip_jsonc` first).
+    """
+    out: list[str] = []
+    i, n = 0, len(text)
+    while i < n:
+        ch = text[i]
+        if ch == '"':
+            literal, i = _consume_string(text, i)
+            out.append(literal)
+            continue
+        if ch == ',' and _next_significant(text, i + 1) in ('}', ']'):
+            i += 1
+            continue
+        out.append(ch)
+        i += 1
+    return ''.join(out)
+
+
+def loads_jsonc(text: str) -> Any:
+    """Parse JSONC: comments and trailing commas allowed.
+
+    Raises :class:`json.JSONDecodeError` on anything else that is not JSON.
+    """
+    return json.loads(strip_trailing_commas(strip_jsonc(text)))

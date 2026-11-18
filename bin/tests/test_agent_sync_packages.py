@@ -1,28 +1,21 @@
-"""Offline tests for the pi packages merge in bin/agent_sync.py.
+"""Offline tests for the pi packages merge (bin/agentsync/packages.py).
 
 Run with: uv run --with pytest pytest bin/tests/test_agent_sync_packages.py
 """
 
 from __future__ import annotations
 
-import importlib.util
 import json
 from pathlib import Path
 
 import pytest
+from agentsync import common
+from agentsync.packages import package_id, sync_packages
 
 
-AGENT_SYNC = (Path(__file__).resolve().parents[1] / 'agent_sync.py').resolve()
-
-
-@pytest.fixture
-def engine():
-    spec = importlib.util.spec_from_file_location('agent_sync', AGENT_SYNC)
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    spec.loader.exec_module(module)
-    module.CONFIG.dry_run = False
-    return module
+@pytest.fixture(autouse=True)
+def _live_run(monkeypatch) -> None:
+    monkeypatch.setattr(common.CONFIG, 'dry_run', False)
 
 
 def pkg(source: str, **filters) -> dict:
@@ -42,25 +35,25 @@ def pkg(source: str, **filters) -> dict:
         ('./local', './local'),
     ],
 )
-def test_package_id(engine, source: str, expected: str) -> None:
-    assert engine.package_id(source) == expected
+def test_package_id(source: str, expected: str) -> None:
+    assert package_id(source) == expected
 
 
-def test_merge_keeps_unmanaged_and_other_keys(engine, tmp_path: Path) -> None:
+def test_merge_keeps_unmanaged_and_other_keys(tmp_path: Path) -> None:
     target = tmp_path / 'settings.json'
     target.write_text(json.dumps({'theme': 'dark', 'packages': ['npm:mine', 'npm:@s/a@1.0.0']}))
     catalog = {'a': pkg('npm:@s/a', skills=[]), 'b': pkg('npm:b')}
-    assert engine.sync_packages('pi', {'path': str(target)}, catalog, [])
+    assert sync_packages('pi', {'path': str(target)}, catalog, [])
     doc = json.loads(target.read_text())
     assert doc['theme'] == 'dark'
     assert doc['packages'] == ['npm:mine', {'source': 'npm:@s/a', 'skills': []}, 'npm:b']
     # Second run is a no-op.
-    assert not engine.sync_packages('pi', {'path': str(target)}, catalog, [])
+    assert not sync_packages('pi', {'path': str(target)}, catalog, [])
 
 
-def test_retired_removed_and_other_clients_ignored(engine, tmp_path: Path) -> None:
+def test_retired_removed_and_other_clients_ignored(tmp_path: Path) -> None:
     target = tmp_path / 'settings.json'
     target.write_text(json.dumps({'packages': ['npm:old@1', 'npm:keep']}))
     other = {'name': 'x', 'clients': ['opencode'], 'source': 'npm:x', 'filters': {}}
-    assert engine.sync_packages('pi', {'path': str(target)}, {'x': other}, ['npm:old'])
+    assert sync_packages('pi', {'path': str(target)}, {'x': other}, ['npm:old'])
     assert json.loads(target.read_text())['packages'] == ['npm:keep']

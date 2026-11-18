@@ -10,33 +10,19 @@ Run with: uv run --with pytest --with tomlkit pytest bin/tests/test_agent_sync_p
 
 from __future__ import annotations
 
-import importlib.util
 from pathlib import Path
 
 import pytest
+from agent_profile import deep_merge, is_selected, select_clients, split_command
+from agentsync import common
+from agentsync.catalog import LOADERS, load_catalogs, load_mcp
+from agentsync.common import build_context, load_local
+from agentsync.skills import sync_skills
 
 
-BIN = Path(__file__).resolve().parents[1]
-
-
-def load_module(name: str):
-    spec = importlib.util.spec_from_file_location(name, BIN / f'{name}.py')
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    spec.loader.exec_module(module)
-    return module
-
-
-@pytest.fixture
-def engine():
-    module = load_module('agent_sync')
-    module.CONFIG.dry_run = False
-    return module
-
-
-@pytest.fixture
-def profile():
-    return load_module('agent_profile')
+@pytest.fixture(autouse=True)
+def _live_run(monkeypatch) -> None:
+    monkeypatch.setattr(common.CONFIG, 'dry_run', False)
 
 
 CLIENTS = {
@@ -49,20 +35,20 @@ CLIENTS = {
 # --------------------------------------------------------------------------- #
 # no profile == today's behaviour
 # --------------------------------------------------------------------------- #
-def test_no_profile_selects_whole_catalog(engine) -> None:
-    ctx = engine.build_context()
-    filtered = engine.load_catalogs(ctx, {}, {})
-    unfiltered = {kind: loader(ctx) for kind, loader in engine.LOADERS.items()}
+def test_no_profile_selects_whole_catalog() -> None:
+    ctx = build_context(load_local())
+    filtered = load_catalogs(ctx, {}, {})
+    unfiltered = {kind: loader(ctx, {}) for kind, loader in LOADERS.items()}
     assert filtered == unfiltered
     assert 'entra-mcp' in filtered['mcp']
 
 
-def test_no_profile_selects_every_client(profile) -> None:
-    assert profile.select_clients(CLIENTS, {}) == list(CLIENTS)
+def test_no_profile_selects_every_client() -> None:
+    assert select_clients(CLIENTS, {}) == list(CLIENTS)
 
 
-def test_empty_override_keeps_clients_identical(profile) -> None:
-    assert profile.deep_merge(CLIENTS, {}) == CLIENTS
+def test_empty_override_keeps_clients_identical() -> None:
+    assert deep_merge(CLIENTS, {}) == CLIENTS
 
 
 # --------------------------------------------------------------------------- #
@@ -78,27 +64,27 @@ def test_empty_override_keeps_clients_identical(profile) -> None:
         ({'name': 'notes'}, True),
     ],
 )
-def test_is_selected(profile, item: dict, expected: bool) -> None:
+def test_is_selected(item: dict, expected: bool) -> None:
     rules = {'exclude_tags': ['work', 'macos'], 'exclude': ['obscura']}
-    assert profile.is_selected(item, rules) is expected
+    assert is_selected(item, rules) is expected
 
 
-def test_profile_filters_real_catalog(engine) -> None:
+def test_profile_filters_real_catalog() -> None:
     rules = {'exclude_tags': ['work', 'macos'], 'exclude': ['python-clean', 'python-clean-stop']}
-    catalogs = engine.load_catalogs(engine.build_context(), {}, rules)
+    catalogs = load_catalogs(build_context(load_local()), {}, rules)
     assert not {'entra-mcp', 'teams-browser', 'sharepoint-mcp', 'apple-mail', 'iMCP'} & set(catalogs['mcp'])
     assert {'github', 'notes', 'playwright'} <= set(catalogs['mcp'])
     assert not {'python-clean', 'python-clean-stop'} & set(catalogs['hooks'])
 
 
-def test_explicit_client_list_keeps_catalog_order(profile) -> None:
+def test_explicit_client_list_keeps_catalog_order() -> None:
     rules = {'clients': ['claude-desktop', 'claude-code']}
-    assert profile.select_clients(CLIENTS, rules) == ['claude-code', 'claude-desktop']
+    assert select_clients(CLIENTS, rules) == ['claude-code', 'claude-desktop']
 
 
-def test_auto_detects_clients_by_config_dir(profile) -> None:
+def test_auto_detects_clients_by_config_dir() -> None:
     present = {Path('~/.claude.json').expanduser().parent, Path('/mac/Claude')}
-    detected = profile.select_clients(CLIENTS, {'clients': 'auto'}, exists=lambda p: p in present)
+    detected = select_clients(CLIENTS, {'clients': 'auto'}, exists=lambda p: p in present)
     # ~/.claude.json's parent is $HOME, which opencode's ~/.config/opencode is not.
     assert detected == ['claude-code', 'claude-desktop']
 
@@ -106,19 +92,19 @@ def test_auto_detects_clients_by_config_dir(profile) -> None:
 # --------------------------------------------------------------------------- #
 # overrides
 # --------------------------------------------------------------------------- #
-def test_client_override_deep_merges(profile) -> None:
+def test_client_override_deep_merges() -> None:
     desktop = {'path': '~/AppData/Roaming/Claude/claude_desktop_config.json', 'inject_path': ''}
     local = {'claude-desktop': {'mcp': desktop}}
-    merged = profile.deep_merge(CLIENTS, local)
+    merged = deep_merge(CLIENTS, local)
     assert merged['claude-desktop']['mcp'] == desktop
     assert merged['claude-code'] == CLIENTS['claude-code']
     assert CLIENTS['claude-desktop']['mcp']['inject_path'] == '/opt/homebrew/bin'  # input untouched
 
 
-def test_mcp_override_replaces_clients_and_merges_env(engine) -> None:
+def test_mcp_override_replaces_clients_and_merges_env() -> None:
     local = {'mcp': {'playwright': {'clients': ['claude-code']}, 'notes': {'env': {'VAULT_PATH': 'C:/vault'}}}}
-    base = engine.load_mcp(engine.build_context(), {})
-    mcp = engine.load_mcp(engine.build_context(local), local)
+    base = load_mcp(build_context(load_local()), {})
+    mcp = load_mcp(build_context(local), local)
     assert mcp['playwright']['clients'] == ['claude-code']
     # The override replaces the keys it sets and inherits the catalog's other
     # env vars. Derive the expectation from the catalog so the test tracks
@@ -130,13 +116,13 @@ def test_mcp_override_replaces_clients_and_merges_env(engine) -> None:
 @pytest.mark.parametrize(
     ('command', 'expected'), [('npx', ('npx', [])), (['cmd', '/c', 'npx'], ('cmd', ['/c', 'npx']))]
 )
-def test_split_command(profile, command, expected) -> None:
-    assert profile.split_command(command) == expected
+def test_split_command(command, expected) -> None:
+    assert split_command(command) == expected
 
 
-def test_list_command_prefixes_args(engine) -> None:
+def test_list_command_prefixes_args() -> None:
     local = {'commands': {'npx': ['cmd', '/c', 'npx']}}
-    srv = engine.load_mcp(engine.build_context(local), local)['playwright']
+    srv = load_mcp(build_context(local), local)['playwright']
     assert srv['command'] == 'cmd'
     assert srv['args'][:2] == ['/c', 'npx']
     assert srv['args'][2:] == ['-y', '@playwright/mcp@latest', '--headless']
@@ -145,13 +131,13 @@ def test_list_command_prefixes_args(engine) -> None:
 # --------------------------------------------------------------------------- #
 # windows hygiene
 # --------------------------------------------------------------------------- #
-def test_skill_link_is_a_directory(engine, tmp_path: Path) -> None:
+def test_skill_link_is_a_directory(tmp_path: Path) -> None:
     source = tmp_path / 'src' / 'demo'
     source.mkdir(parents=True)
     (source / 'SKILL.md').write_text('# demo\n', encoding='utf-8')
     skills = {'demo': {'name': 'demo', 'clients': ['claude-code'], 'dir': source}}
     try:
-        engine.sync_skills('claude-code', {'path': str(tmp_path / 'skills')}, skills, [])
+        sync_skills('claude-code', {'path': str(tmp_path / 'skills')}, skills, [])
     except OSError as exc:  # symlinks unavailable (Windows without Developer Mode)
         pytest.skip(f'symlinks unsupported: {exc}')
     assert (tmp_path / 'skills' / 'demo' / 'SKILL.md').read_text(encoding='utf-8') == '# demo\n'

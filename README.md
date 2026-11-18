@@ -47,12 +47,16 @@ from the includeIf on their own.
 │   ├── plugins/<name>.toml # opencode plugins (<name>.ts) + Claude Code marketplace plugins
 │   ├── hooks/<name>.toml   # Claude Code / Codex event hooks
 │   ├── instructions/*.toml # per-tool prompts (content in <name>.md)
-│   ├── packages/*.toml     # pi packages (npm / git / local source)
+│   ├── packages/*.toml     # pi packages (directory created with the first one)
 │   ├── clients.toml        # where each agent keeps each kind
-│   ├── paths.toml          # machine paths + ${VARS}
+│   ├── paths.toml          # primary-machine commands + ${VARS}
+│   ├── local.toml          # untracked per-machine overrides (see local.toml.example)
 │   └── retired.toml        # resources to scrub from every client
 ├── bin/                    # agent-sync, agent-update, clean-python, peek, demo-gif
+│   ├── agent_sync.py       # sync entry point (wrapped by agent-sync)
+│   └── agentsync/          # sync engine: one module per resource kind + common.py
 ├── mods/                   # msetsma-mods marketplace: lists each mod's GitHub repo
+├── docs/                   # design notes (proposals; not loaded by sync)
 ├── mcp/
 │   └── databricks-mcp/     # pins ai-dev-kit's MCP from git
 └── vendor/                 # gitignored; server repos cloned by `make agent-update`
@@ -70,7 +74,7 @@ flowchart LR
   C[catalog/] --> S[bin/agent-sync]
   S -- merge --> M[MCP + hooks in shared client configs]
   S -- symlink --> P[skills/ and plugins/ dirs]
-  S -- block --> I[global AGENTS.md]
+  S -- block --> I[global AGENTS.md / CLAUDE.md]
 ```
 
 `catalog/` is the single source of truth. `bin/agent-sync` renders it into each
@@ -83,7 +87,9 @@ client with one of three strategies:
 | **block**   | instructions       | replace one marked region in the client's global file              |
 
 A client declares one `[<client>.<kind>]` block per kind it supports; a kind with
-no block is skipped.
+no block is skipped, and sync warns when a catalog item lists a client that
+lacks that kind. A JSON/JSONC client config that contains comments is never
+rewritten: sync warns and prints the entries to apply by hand.
 
 ## Clients
 
@@ -96,9 +102,11 @@ no block is skipped.
 | Claude Code    | skills       | `~/.claude/skills/`                                               | symlink  |
 | Claude Code    | plugins      | `~/.claude/settings.json` → `enabledPlugins` + `extraKnownMarketplaces` + `pluginConfigs` | merge    |
 | Claude Code    | hooks        | `~/.claude/settings.json` → `hooks`                               | merge    |
+| Claude Code    | instructions | `~/.claude/CLAUDE.md`                                             | block    |
 | Claude Desktop | mcp          | `~/Library/Application Support/Claude/claude_desktop_config.json` | merge    |
 | Codex          | mcp          | `~/.codex/config.toml` → `[mcp_servers]`                          | merge    |
 | Codex          | hooks        | `~/.codex/hooks.json` → `hooks`                                   | merge    |
+| Codex          | instructions | `~/.codex/AGENTS.md`                                              | block    |
 | pi             | packages     | `~/.pi/agent/settings.json` → `packages`                          | merge    |
 
 opencode has no `skills` row; it inherits `~/.claude/skills/`.
@@ -121,10 +129,13 @@ catalog/packages/<name>.toml     # source + optional resource filters
   under `plugins` in `retired.toml` disables and uninstalls it and removes a
   marketplace nothing else uses. An optional `[options]` table becomes the
   plugin's `pluginConfigs["<id>"].options` (what `/config` edits), so copy
-  options changed in `/config` back into the TOML. Install plugins here, not with
-  `claude plugin install`.
+  options changed in `/config` back into the TOML. An optional integer `order`
+  puts the plugin first in `enabledPlugins`, lowest first (Claude Code nests
+  mods in that order); plugins installed by hand keep their position. Install
+  plugins here, not with `claude plugin install`.
 - **Hooks**: merged additively; retire one via `hook_commands` in `catalog/retired.toml`.
-- **Instructions**: per-client, wrapped in a `<!-- dotfiles-agents:begin/end -->` block.
+- **Instructions**: per-client (opencode, Claude Code, Codex), wrapped in a
+  `<!-- dotfiles-agents:begin/end -->` block.
 - **Packages** (pi): merged into the `packages` list by identity (source minus
   `@version`), so packages you `pi install` by hand stay put. Optional
   `extensions` / `skills` / `prompts` / `themes` arrays become pi's resource
@@ -132,8 +143,8 @@ catalog/packages/<name>.toml     # source + optional resource filters
   changed. Edits made with `pi config` to a catalog package are overwritten on
   the next sync, so copy them into the TOML.
 
-`catalog/skills/github-glowup/`, `catalog/skills/peek/`, `catalog/skills/demo-gif/` and `catalog/skills/watch-capture/` (private watch collection in the notes vault; tagged `personal`) are real skills;
-`example-skill/` and `hooks/example-hook.toml` are templates.
+The [Inventory](#inventory) lists every skill, hook, plugin and instruction;
+`skills/example-skill` and `hooks/example-hook.toml` are templates.
 
 `bin/peek` runs a CLI or TUI in a hidden tmux pane and prints its screen as
 text, or with `-o shot.png` saves a real Ghostty screenshot, so an agent can
@@ -148,9 +159,16 @@ way: `ln -s ~/.dotfiles-agents/bin/demo-gif ~/.local/bin/demo-gif`.
 
 ## Inventory
 
-Full table of what this repo manages. `custom` means written by me, with the
-source in its own repo under github.com/msetsma, cloned into `vendor/`.
-`external` means a third-party server (npx, uv tool, app, git source).
+Everything this repo manages, one table per kind. Every catalog entry has a
+row here.
+
+### MCP servers
+
+`custom` means written by me, with the source in its own repo under
+github.com/msetsma, cloned into `vendor/`. `external` means a third-party
+server (npx, uv tool, app, git source). Bare command names (`uv`, `npx`,
+`obscura`, `imcp`, ...) resolve through `[commands]` in `catalog/paths.toml`
+and `catalog/local.toml`.
 
 <details>
 <summary>Show the table</summary>
@@ -161,18 +179,49 @@ source in its own repo under github.com/msetsma, cloned into `vendor/`.
 | [`notes`](https://github.com/msetsma/notes-mcp) | custom   | `uv run --directory ~/.dotfiles-agents/vendor/notes-mcp notes-mcp`      | opencode, Claude Code, Claude Desktop        |
 | [`teams-browser`](https://github.com/msetsma/teams-mcp) | custom   | `uv run --directory ~/.dotfiles-agents/vendor/teams-mcp --extra mcp teams-browser-mcp` | opencode, Claude Code, Claude Desktop        |
 | [`entra-mcp`](https://github.com/msetsma/entra-mcp) | custom   | `entra-mcp` (uv tool)                                                   | opencode, Claude Code, Claude Desktop, Codex |
-| `obscura`                                    | external | `~/.local/bin/obscura mcp --stealth`                                    | opencode, Claude Code, Claude Desktop        |
+| `obscura`                                    | external | `obscura mcp --stealth` (prebuilt binary)                               | opencode, Claude Code, Claude Desktop        |
+| [`browser`](https://github.com/msetsma/obscura-facade) | custom   | `uv run --directory ~/.dotfiles-agents/vendor/obscura-facade obscura-facade --stealth --allow-private-network` | opencode, Claude Code, Claude Desktop |
 | `apple-mail`                                 | external | `apple-mail-mcp` (uv tool)                                              | opencode, Claude Desktop                     |
-| `databricks`                                 | external | `uv run --project ~/.dotfiles-agents/mcp/databricks-mcp databricks-mcp` | opencode, Claude Code, Claude Desktop, Codex |
-| `azure`                                      | external | `npx @azure/mcp@3.0.0-beta.29 server start`                             | opencode, Claude Code, Claude Desktop        |
-| `azure-devops`                               | external | `npx @azure-devops/mcp ${ADO_ORG}`                                      | opencode, Claude Code, Claude Desktop        |
+| `databricks`                                 | external | `uv run --quiet --project ~/.dotfiles-agents/mcp/databricks-mcp databricks-mcp` | opencode, Claude Code, Claude Desktop, Codex |
+| `azure`                                      | external | `npx @azure/mcp@latest server start`                                    | opencode, Claude Code, Claude Desktop        |
+| `azure-devops`                               | external | `npx @azure-devops/mcp@latest ${ADO_ORG}`                               | opencode, Claude Code, Claude Desktop        |
 | `github`                                     | external | remote `api.githubcopilot.com/mcp/`                                     | opencode, Claude Code                        |
 | `iMCP`                                       | external | `/Applications/iMCP.app/…/imcp-server`                                  | opencode, Claude Code, Claude Desktop, Codex |
-| `playwright`                                 | external | `npx @playwright/mcp@latest`                                            | opencode                                     |
+| `playwright`                                 | external | `npx @playwright/mcp@latest --headless`                                 | opencode                                     |
 | [`spotify`](https://github.com/marcelmarais/spotify-mcp-server) | external | `node ~/.dotfiles-agents/vendor/spotify-mcp-server/build/index.js` | Claude Code, Claude Desktop                  |
 | `solidcraft`                                 | external | `solidcraft-cli mcp` (ships with the SolidCraft app)                    | Claude Code, Claude Desktop (Windows box only, via `local.toml`) |
 
 </details>
+
+### Skills
+
+| Skill | Clients | Tags | What it does |
+|---|---|---|---|
+| `github-glowup` | Claude Code | | Audits a GitHub repo and suggests or applies quality-of-life improvements: README presentation, badges, `.github/` health files and automation, repo settings, signed commits |
+| `peek` | Claude Code | `macos` | Runs a CLI or TUI in a hidden tmux pane and reads the screen back as text or a Ghostty screenshot (`bin/peek`) |
+| `demo-gif` | Claude Code | `macos` | Records a terminal demo GIF with vhs from an isolated, offline tape, then pulls frames out to check it (`bin/demo-gif`) |
+| `watch-capture` | Claude Code | `personal` | Adds or updates a watch in the private Obsidian watch collection: exact reference, sourced specs, dated prices, a normalized image, brand and movement links |
+| `example-skill` | Claude Code | | Template: placeholder skill proving the skills pipeline |
+
+### Hooks
+
+| Hook | Clients | Event | What it does |
+|---|---|---|---|
+| `python-clean` | Claude Code | `PostToolUse` (`Write\|Edit\|MultiEdit`) | Runs `bin/clean-python`: ruff `check --fix` + format on agent-written Python, then reports what could not be fixed |
+| `python-clean-stop` | Claude Code | `Stop` | Refuses to end the turn while Python written this session still fails ruff |
+| `example-hook` | none (inert) | `SessionStart` | Template: no-op hook to copy |
+
+### opencode plugins
+
+| Plugin | Clients | What it does |
+|---|---|---|
+| `python-clean` | opencode | Runs `bin/clean-python` after opencode writes or edits Python: appends unfixable findings to the tool result, injects a follow-up prompt to fix them, and exposes `python_clean_skip` / `python_clean_refactor` |
+
+### Instructions
+
+| Instruction | Clients | What it does |
+|---|---|---|
+| `opencode-delegation` | opencode | Fan out to subagents (explore/general) by default |
 
 ### Claude Code plugins
 
@@ -180,17 +229,18 @@ source in its own repo under github.com/msetsma, cloned into `vendor/`.
 |---|---|---|
 | `caveman` | [JuliusBrussee/caveman](https://github.com/JuliusBrussee/caveman) | Terse reply mode plus commit, review, and memory-compress skills |
 | `context7` | [anthropics/claude-plugins-official](https://github.com/anthropics/claude-plugins-official) | Context7 MCP server for current library docs |
+| `frontend-design` | [anthropics/claude-code](https://github.com/anthropics/claude-code) (claude-code-plugins) | Skill with distinctive frontend/UI design guidance |
 | `prismantis` | [NahumLitvin/prismantis](https://github.com/NahumLitvin/prismantis) | Redraws replies: themed markdown, tables, alerts, mermaid, diff cards, copy buttons; options in its TOML |
 | `style` | [`mods/`](mods/) (msetsma-mods) | Restyles Claude Code's UI from a `/style` pane; keep first among mods in `enabledPlugins` |
 | `sidebar` | [`mods/`](mods/) (msetsma-mods) | `/sidebar` pane: usage, cost, git, todos, subagents, MCP servers, tool activity |
 
 ### pi packages
 
-No pi packages are currently managed — the whole set was retired (see
-[`catalog/retired.toml`](catalog/retired.toml)) and `catalog/packages/` is empty.
-The mechanism is unchanged: drop a `catalog/packages/<name>.toml` (see
-[Resource kinds](#resource-kinds)), remove its source from `retired.toml`, then
-`make sync`.
+The catalog manages no pi packages: `catalog/packages/` does not exist, and
+[`catalog/retired.toml`](catalog/retired.toml) lists the sources sync scrubs
+from pi. To add one, create `catalog/packages/<name>.toml` (the directory comes
+with the first package; see [Resource kinds](#resource-kinds)), remove its
+source from `retired.toml` if listed there, then `make sync`.
 
 ## Secrets
 
@@ -220,12 +270,29 @@ inject_path = ""
 clients = ["claude-code", "claude-desktop"]
 ```
 
-Catalog entries carry `tags`: `work` (azure, azure-devops, databricks,
-entra-mcp, teams-browser, sharepoint-mcp) and `macos` (apple-mail, iMCP,
-sharepoint-mcp). Excluded resources are simply not synced; nothing is scrubbed.
-`"auto"` picks clients whose config directory exists. Selection logic lives in
+Catalog entries carry `tags`:
+
+| Tag | Entries |
+|---|---|
+| `work` | azure, azure-devops, databricks, entra-mcp, teams-browser, sharepoint-mcp |
+| `macos` | apple-mail, iMCP, sharepoint-mcp, peek, demo-gif |
+| `personal` | spotify, watch-capture |
+
+Excluded resources are not synced. Sync leaves an excluded MCP server, hook,
+Claude Code plugin or pi package in place in a client config; only `retired.toml`
+removes those. The catalog-owned outputs drop an excluded item: its managed skill
+and opencode-plugin symlinks are removed, and the managed instruction block is
+re-rendered without it.
+
+`clients = "auto"` keeps every client in `catalog/clients.toml` (after
+`local.toml` overrides) for which the parent directory of at least one of its
+configured `path`s exists. Claude Code always matches, because the parent of
+`~/.claude.json` is the home directory. Selection logic lives in
 [`bin/agent_profile.py`](bin/agent_profile.py); full example in
 `catalog/local.toml.example`.
+
+`${AGENT_HOME}` and other `~` paths expand with forward slashes on Windows too,
+because they land in bash hook commands.
 
 On Windows: install uv (`irm https://astral.sh/uv/install.ps1 | iex`), enable
 Developer Mode (skill symlinks), and run `make` from Git Bash. The
@@ -238,17 +305,31 @@ placeholder resolved at render time.
 
 ```sh
 make agent-outdated   # report
-make agent-update     # apply, then re-sync
+make agent-update     # apply updates, then re-sync
 ```
 
-| manager             | how it updates                                                    |
-|---------------------|-------------------------------------------------------------------|
-| `npm`               | bump the pinned `ref`; floating tags left alone                   |
-| `uv-tool`           | `uv tool upgrade <tool>`                                          |
-| `uv-project`        | bump the pinned git tag + re-lock                                 |
-| `git`               | `git pull --ff-only`; clones a missing `repo` into `path`; tag-pinned / no-upstream reported as manual |
-| `source`            | always current (runs from a working tree)                         |
-| `manual` / `remote` | a binary/app or hosted endpoint; nothing to do                    |
+`make agent-update` re-syncs every client after applying anything.
+
+| manager      | how it updates                                                    |
+|--------------|-------------------------------------------------------------------|
+| `npm`        | bump the pinned `ref`; floating tags left alone                   |
+| `uv-tool`    | `uv tool upgrade <tool>`                                          |
+| `uv-project` | bump the pinned git tag + re-lock                                 |
+| `git`        | `git pull --ff-only`; clones a missing `repo` into `path`; tag-pinned / no-upstream reported as manual |
+| `source`     | always current (runs from a working tree)                         |
+| `manual`     | a binary or app updated by hand; not tracked (optional `name` labels it) |
+| `remote`     | a hosted endpoint; nothing to do                                  |
+
+A `git` package may add `build`, a list of argv lists run in `path` after each
+clone or pull (`build = [["npm", "ci"], ["npm", "run", "build"]]`). `argv[0]`
+goes through `[commands]`, so `local.toml` can map `npm` to a specific Node. A
+successful build records HEAD in `.git/agent-update-build`; until the recorded
+HEAD matches, the report shows `(build pending)` and `make agent-update` runs
+the build again.
+
+Other report states: `fetch failed: ...` (the remote could not be reached),
+`(not checked: --no-fetch)`, `on <branch>, not <default>` (the clone is off its
+default branch), and `manual (not tracked)`.
 
 ## Adding or changing a resource
 
@@ -257,10 +338,15 @@ make agent-update     # apply, then re-sync
    For a custom server, create its repo under github.com/msetsma, point
    `[package]` at it (`manager = "git"`, `repo`, `path = "${AGENT_HOME}/vendor/<repo>"`)
    and run `make agent-update` to clone it.
-2. **Skill**: add `catalog/skills/<name>.toml` + `catalog/skills/<name>/SKILL.md`.
-3. **Hook**: add `catalog/hooks/<name>.toml`.
+2. **Skill**: add `catalog/skills/<name>.toml` + `catalog/skills/<name>/SKILL.md`
+   (tag it `macos` if it needs macOS-only tools).
+3. **Hook**: add `catalog/hooks/<name>.toml`. **Plugin**: add
+   `catalog/plugins/<name>.toml` (+ `<name>.ts` for opencode, or `plugin` + a
+   `[marketplace]` block for Claude Code). **Instruction**: add
+   `catalog/instructions/<name>.toml` + `<name>.md`.
 4. **pi package**: add `catalog/packages/<name>.toml` (`source = "npm:..."`,
    `clients = ["pi"]`) instead of running `pi install`.
 5. **Retire**: add the name (for hooks the command, for packages the source) to `catalog/retired.toml`.
 6. `make agent-check`, then `make sync`.
-7. New server or package? Add a row to the Inventory tables above.
+7. Add or update the resource's row in the [Inventory](#inventory) tables
+   above: every server, skill, plugin, hook, instruction and package has one.

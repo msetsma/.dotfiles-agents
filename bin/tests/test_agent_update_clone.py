@@ -13,6 +13,11 @@ from pathlib import Path
 AGENT_UPDATE = Path(__file__).resolve().parents[1] / 'agent_update.py'
 
 
+def of[T](updates: tuple[object, ...], kind: type[T]) -> tuple[T, ...]:
+    """The updates of one kind, in check order."""
+    return tuple(u for u in updates if isinstance(u, kind))
+
+
 def load():
     spec = importlib.util.spec_from_file_location('agent_update', AGENT_UPDATE)
     module = importlib.util.module_from_spec(spec)
@@ -31,20 +36,25 @@ def test_missing_repo_path_is_planned_and_cloned(tmp_path, monkeypatch):
     dest = tmp_path / 'vendor' / 'notes-mcp'
     pkg = {'manager': 'git', 'repo': 'msetsma/notes-mcp', 'path': str(dest)}
 
-    plan = up.Plan()
-    status = up.git_status('notes', pkg, {}, do_fetch=False, plan=plan)
+    server = up.Server.from_catalog('notes', Path('notes.toml'), pkg, {})
+    status = up.git_status(server, up.Check(fetch=False))
+    plan = up.Plan(updates=status.updates)
 
-    assert status.startswith('not cloned')
-    assert plan.git_clones == [('notes', 'msetsma/notes-mcp', str(dest))]
+    assert status.text.startswith('not cloned')
+    assert of(plan.updates, up.Clone) == (up.Clone(server),)
+    assert (server.name, server.repo, server.checkout) == ('notes', 'msetsma/notes-mcp', str(dest))
     assert calls == []  # reporting never touches the network
 
-    up.apply_updates(plan)
+    resyncs = []
+    monkeypatch.setattr(up, 'resync', lambda: resyncs.append(1) or True)
+    assert up.apply_updates(plan) == []
     assert dest.parent.is_dir()
     assert ['git', 'clone', '--quiet', 'git@github.com:msetsma/notes-mcp.git', str(dest)] in calls
+    assert resyncs == [1]  # a new clone is applied work, so configs are re-synced
 
 
 def test_existing_path_is_not_cloned(tmp_path):
     up = load()
-    plan = up.Plan()
-    up.git_status('x', {'manager': 'git', 'repo': 'o/x', 'path': str(tmp_path)}, {}, do_fetch=False, plan=plan)
-    assert plan.git_clones == []
+    server = up.Server.from_catalog('x', Path('x.toml'), {'manager': 'git', 'repo': 'o/x', 'path': str(tmp_path)}, {})
+    status = up.git_status(server, up.Check(fetch=False))
+    assert of(status.updates, up.Clone) == ()

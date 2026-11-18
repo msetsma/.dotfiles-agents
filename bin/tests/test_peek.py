@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+
 PEEK = (Path(__file__).resolve().parents[1] / 'peek').resolve()
 
 pytestmark = pytest.mark.skipif(shutil.which('tmux') is None, reason='tmux not installed')
@@ -29,7 +30,9 @@ def test_terminal_has_the_requested_size() -> None:
 
 
 def test_keys_are_typed_in_order_and_until_waits_for_the_result() -> None:
-    out = peek('-s', '40x6', '-k', 'abc', '-K', 'Enter', '-u', 'got abc', '--', 'sh', '-c', 'read x; echo "got $x"; sleep 5')
+    out = peek(
+        '-s', '40x6', '-k', 'abc', '-K', 'Enter', '-u', 'got abc', '--', 'sh', '-c', 'read x; echo "got $x"; sleep 5'
+    )
     assert 'got abc' in out
 
 

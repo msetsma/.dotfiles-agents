@@ -1,0 +1,224 @@
+# Ruff configuration (copy of the global ~/.config/ruff/ruff.toml)
+
+line-length = 120
+indent-width = 4
+cache-dir = "~/.cache/ruff"
+output-format = "full"
+show-fixes = true
+# This repo has no pyproject.toml for ruff to read requires-python from, so the
+# floor is set here (the repo targets Python >= 3.14).
+target-version = "py314"
+src = ["src", "."]
+exclude = [
+  ".bzr",
+  ".direnv",
+  ".eggs",
+  ".git",
+  ".git-rewrite",
+  ".hg",
+  ".ipynb_checkpoints",
+  ".mypy_cache",
+  ".nox",
+  ".pants.d",
+  ".pyenv",
+  ".pytest_cache",
+  ".pytype",
+  ".ruff_cache",
+  ".svn",
+  ".tox",
+  ".venv",
+  ".vscode",
+  "__pypackages__",
+  "_build",
+  "buck-out",
+  "build",
+  "dist",
+  "node_modules",
+  "site-packages",
+  "venv",
+  "migrations",
+]
+
+# =============================================================================
+# LINTING
+# =============================================================================
+[lint]
+# Preview is enabled ONLY so a single preview rule can be selected: PLR1702
+# (too-many-nested-blocks). `explicit-preview-rules` keeps every other preview
+# rule off - without both settings PLR1702 silently does nothing.
+preview = true
+explicit-preview-rules = true
+select = [
+  # Core
+  "E",
+  "W",  # pycodestyle
+  "F",  # pyflakes
+  "I",  # isort
+  "N",  # pep8-naming
+  "UP",  # pyupgrade
+  # Bug prevention
+  "B",  # flake8-bugbear
+  "A",  # flake8-builtins (shadowing builtins)
+  # "C4",   # flake8-comprehensions
+  "DTZ",  # flake8-datetimez
+  "T10",  # flake8-debugger
+  "EM",  # flake8-errmsg
+  "ISC",  # flake8-implicit-str-concat
+  "PIE",  # flake8-pie
+  "RSE",  # flake8-raise
+  "RET",  # flake8-return
+  "SIM",  # flake8-simplify
+  "TID",  # flake8-tidy-imports
+  "ARG",  # flake8-unused-arguments
+  "PTH",  # flake8-use-pathlib
+  "PGH",  # pygrep-hooks
+  "PLE",
+  "PLW",
+  "PLR",  # pylint
+  "TRY",  # tryceratops
+  "FLY",  # flynt (f-string conversion)
+  "PERF",  # perflint
+  "FURB",  # refurb
+  "LOG",  # flake8-logging
+  "RUF",  # ruff-specific
+  # Security
+  "S",  # flake8-bandit
+  # Complexity
+  "C90",  # mccabe
+  "PLR1702",  # too-many-nested-blocks (preview; threshold: [lint.pylint] max-nested-blocks)
+  # Code quality
+  "Q",  # flake8-quotes
+  "ERA",  # eradicate (commented-out code)
+  # Testing
+  "PT",  # flake8-pytest-style
+]
+ignore = [
+  # Formatter handles these
+  "E501",
+  "W291",
+  "W293",
+  # Stylistic preferences
+  "E731",  # lambda assignment
+  "EM101",  # string literal in exception
+  "EM102",  # f-string in exception
+  "TRY003",  # long exception messages
+  # Too noisy
+  "S101",  # assert (fine in tests and often useful)
+  "S104",  # binding to all interfaces
+  "S311",  # pseudo-random (fine for non-crypto)
+  "S603",  # subprocess without shell (fires on any non-literal argv; S602/S605 cover shell=True)
+  "PLR0913",  # too many arguments
+  "PLR2004",  # magic values (too noisy for numeric code)
+  "ARG001",  # unused function arg (needed for API compatibility)
+  "ARG002",  # unused method arg
+  "TID252",  # relative imports (preference)
+  # Type checking imports - often breaks runtime needs
+  "TC001",
+  "TC002",
+  "TC003",
+  # Minor preferences
+  "PTH123",  # open() vs Path.open()
+  "PLR0915",  # statements
+]
+fixable = ["ALL"]
+unfixable = ["ERA001", "F401", "F841"]  # Require manual review
+
+[lint.per-file-ignores]
+"__init__.py" = ["F401", "F403"]
+"**/tests/**/*.py" = ["S101", "S603", "ARG", "PLR2004", "S105", "S106"]
+"**/test_*.py" = ["S101", "S603", "ARG", "PLR2004", "S105", "S106"]
+"conftest.py" = ["F401", "ARG"]
+"conf*.py" = ["ERA001", "E501"]
+"settings*.py" = ["ERA001"]
+
+[lint.mccabe]
+max-complexity = 10
+
+[lint.isort]
+combine-as-imports = true
+force-sort-within-sections = false
+lines-after-imports = 2
+# Align with [format] skip-magic-trailing-comma = true (ruff warns otherwise).
+split-on-trailing-comma = false
+
+[lint.pylint]
+max-args = 6
+max-returns = 8
+max-branches = 15
+max-statements = 60
+max-locals = 20
+max-public-methods = 25
+allow-magic-value-types = ["str", "bytes", "int"]
+
+[lint.flake8-bugbear]
+# Functions returning immutable values - safe as default arguments
+extend-immutable-calls = [
+  "fastapi.Depends",
+  "fastapi.Query",
+  "fastapi.Path",
+  "fastapi.Body",
+  "fastapi.Header",
+  "fastapi.Cookie",
+  "fastapi.Form",
+  "fastapi.File",
+  "typer.Option",
+  "typer.Argument",
+]
+
+[lint.flake8-pytest-style]
+fixture-parentheses = false
+mark-parentheses = false
+parametrize-names-type = "tuple"
+parametrize-values-type = "list"
+
+[lint.pep8-naming]
+ignore-names = [
+  "setUp",
+  "tearDown",
+  "setUpClass",
+  "tearDownClass",
+  "setUpModule",
+  "tearDownModule",
+  "asyncSetUp",
+  "asyncTearDown",
+]
+classmethod-decorators = [
+  "classmethod",
+  "pydantic.validator",
+  "pydantic.field_validator",
+]
+
+[lint.flake8-type-checking]
+exempt-modules = ["typing", "typing_extensions"]
+# Classes that need type annotations at runtime
+runtime-evaluated-base-classes = [
+  "pydantic.BaseModel",
+  "pydantic_settings.BaseSettings",
+  "sqlalchemy.orm.DeclarativeBase",
+]
+runtime-evaluated-decorators = [
+  "pydantic.validate_call",
+  "attrs.define",
+  "attrs.frozen",
+]
+
+[lint.flake8-tidy-imports]
+ban-relative-imports = "parents"
+
+[lint.flake8-quotes]
+inline-quotes = "single"
+docstring-quotes = "double"
+avoid-escape = true
+
+[lint.flake8-bandit]
+hardcoded-tmp-directory-extend = ["/var/tmp", "/dev/shm"]
+
+# =============================================================================
+# FORMATTING
+# =============================================================================
+[format]
+quote-style = "single"
+indent-style = "space"
+line-ending = "auto"
+skip-magic-trailing-comma = true
+docstring-code-format = true

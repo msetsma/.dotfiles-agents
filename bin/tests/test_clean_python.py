@@ -24,6 +24,42 @@ import pytest
 
 CLEAN_PYTHON = (Path(__file__).resolve().parents[1] / 'clean-python').resolve()
 
+# The gate is a bash script; run it through bash so Windows (which cannot exec
+# a shebang script directly) behaves like macOS and Linux.
+BASH = shutil.which('bash')
+pytestmark = pytest.mark.skipif(BASH is None, reason='clean-python needs bash on PATH')
+
+# Only tests that reach a ruff run need ruff; the resolution probes and the
+# early-exit paths run on bash alone.
+needs_ruff = pytest.mark.skipif(shutil.which('ruff') is None, reason='this test needs ruff on PATH')
+
+
+def test_script_uses_lf_line_endings() -> None:
+    # A CR after the shebang breaks the gate on macOS and Linux (`bash\r`).
+    assert b'\r' not in CLEAN_PYTHON.read_bytes()
+
+
+def gate(*args: str) -> list[str]:
+    return [str(BASH), str(CLEAN_PYTHON), *args]
+
+
+def native(path: str) -> str:
+    # Git Bash on Windows prints POSIX paths (/tmp/...); map them back so they
+    # compare equal to Python's native paths. A no-op where cygpath is absent.
+    cygpath = shutil.which('cygpath')
+    if not path or cygpath is None:
+        return path
+    return subprocess.run([cygpath, '-w', path], capture_output=True, text=True, check=True).stdout.strip()
+
+
+# Ruff's preview mode reports rule names instead of codes; accept either.
+RULE_NAMES = {'F401': 'unused-import', 'PLR1702': 'too-many-nested-blocks'}
+
+
+def reports(stderr: str, code: str) -> bool:
+    return code in stderr or RULE_NAMES[code] in stderr
+
+
 # A small, deterministic ruff config: F401 is deliberately unfixable so we can
 # prove the "hand it back" path, and PLR1702 is enabled (preview, explicit) so
 # we can prove the nesting gate.
@@ -62,23 +98,16 @@ def write(root: Path, name: str, content: str) -> Path:
 
 
 def run_path(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
-    return subprocess.run([str(CLEAN_PYTHON), *args], capture_output=True, text=True, check=False, env=env)
+    return subprocess.run(gate(*args), capture_output=True, text=True, check=False, env=env)
 
 
 def run_stdin(payload: dict[str, object], env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [str(CLEAN_PYTHON)], input=json.dumps(payload), capture_output=True, text=True, check=False, env=env
-    )
+    return subprocess.run(gate(), input=json.dumps(payload), capture_output=True, text=True, check=False, env=env)
 
 
 def run_stop(payload: dict[str, object], env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [str(CLEAN_PYTHON), '--stop-check'],
-        input=json.dumps(payload),
-        capture_output=True,
-        text=True,
-        check=False,
-        env=env,
+        gate('--stop-check'), input=json.dumps(payload), capture_output=True, text=True, check=False, env=env
     )
 
 
@@ -91,6 +120,7 @@ def pending_file(project: Path, session: str) -> Path:
     return project / 'clean-python' / f'pending-{session}'
 
 
+@needs_ruff
 def test_clean_file_passes(project: Path) -> None:
     path = write(project, 'clean.py', 'x = 1\n')
     result = run_path(str(path))
@@ -109,6 +139,7 @@ def test_missing_file_is_a_noop(project: Path) -> None:
     assert result.returncode == 0, result.stderr
 
 
+@needs_ruff
 def test_fixable_is_rewritten_and_passes(project: Path) -> None:
     path = write(project, 'fmt.py', "x = {'a':1,'b':2}\n")
     before = path.read_text()
@@ -118,20 +149,23 @@ def test_fixable_is_rewritten_and_passes(project: Path) -> None:
     assert "'a': 1" in path.read_text()
 
 
+@needs_ruff
 def test_unfixable_is_handed_back(project: Path) -> None:
     path = write(project, 'unused.py', 'import os\n')
     result = run_path(str(path))
     assert result.returncode == 2
-    assert 'F401' in result.stderr
+    assert reports(result.stderr, 'F401')
 
 
+@needs_ruff
 def test_suppression_is_ignored(project: Path) -> None:
     path = write(project, 'noqa.py', 'import os  # noqa: F401\n')
     result = run_path(str(path))
     assert result.returncode == 2
-    assert 'F401' in result.stderr
+    assert reports(result.stderr, 'F401')
 
 
+@needs_ruff
 def test_nesting_is_enforced(project: Path) -> None:
     path = write(
         project,
@@ -150,14 +184,15 @@ def test_nesting_is_enforced(project: Path) -> None:
     )
     result = run_path(str(path))
     assert result.returncode == 2
-    assert 'PLR1702' in result.stderr
+    assert reports(result.stderr, 'PLR1702')
 
 
+@needs_ruff
 def test_claude_stdin_payload(project: Path) -> None:
     path = write(project, 'stdin_case.py', 'import os\n')
     result = run_stdin({'tool_input': {'file_path': str(path)}, 'tool_response': {}})
     assert result.returncode == 2
-    assert 'F401' in result.stderr
+    assert reports(result.stderr, 'F401')
 
 
 def test_claude_stdin_payload_for_non_python_is_noop(project: Path) -> None:
@@ -166,16 +201,18 @@ def test_claude_stdin_payload_for_non_python_is_noop(project: Path) -> None:
     assert result.returncode == 0, result.stderr
 
 
+@needs_ruff
 def test_tool_response_fallback(project: Path) -> None:
     path = write(project, 'fallback.py', 'import os\n')
     result = run_stdin({'tool_input': {}, 'tool_response': {'filePath': str(path)}})
     assert result.returncode == 2
-    assert 'F401' in result.stderr
+    assert reports(result.stderr, 'F401')
 
 
 # --------------------------------------------------------------------------- #
 # enforcement: pending state + Stop hook
 # --------------------------------------------------------------------------- #
+@needs_ruff
 def test_posttooluse_records_pending_on_failure(project: Path) -> None:
     session = 'sess-record'
     path = write(project, 'unfixed.py', 'import os\n')
@@ -183,9 +220,12 @@ def test_posttooluse_records_pending_on_failure(project: Path) -> None:
     assert result.returncode == 2
     state = pending_file(project, session)
     assert state.exists()
-    assert str(path) in state.read_text()
+    # The gate records the physical path (pwd -P), e.g. /private/var on macOS.
+    recorded = [Path(native(line.split('\t', 1)[1])).resolve() for line in state.read_text().splitlines()]
+    assert path.resolve() in recorded
 
 
+@needs_ruff
 def test_posttooluse_records_nothing_when_fixable(project: Path) -> None:
     session = 'sess-ok'
     path = write(project, 'fixable2.py', "x = {'a':1}\n")
@@ -194,6 +234,7 @@ def test_posttooluse_records_nothing_when_fixable(project: Path) -> None:
     assert not pending_file(project, session).exists()
 
 
+@needs_ruff
 def test_posttooluse_without_session_records_nothing(project: Path) -> None:
     path = write(project, 'nosess.py', 'import os\n')
     result = run_stdin({'tool_input': {'file_path': str(path)}})
@@ -201,15 +242,17 @@ def test_posttooluse_without_session_records_nothing(project: Path) -> None:
     assert not (project / 'clean-python').exists()
 
 
+@needs_ruff
 def test_stop_blocks_while_residue_remains(project: Path) -> None:
     session = 'sess-stop'
     path = write(project, 'broken.py', 'import os\n')
     run_stdin({'tool_input': {'file_path': str(path)}, 'session_id': session}, env=tmp_env(project))
     result = run_stop({'session_id': session}, env=tmp_env(project))
     assert result.returncode == 2
-    assert 'F401' in result.stderr
+    assert reports(result.stderr, 'F401')
 
 
+@needs_ruff
 def test_stop_releases_and_clears_after_fix(project: Path) -> None:
     session = 'sess-fix'
     path = write(project, 'broken2.py', 'import os\n')
@@ -220,6 +263,7 @@ def test_stop_releases_and_clears_after_fix(project: Path) -> None:
     assert not pending_file(project, session).exists()
 
 
+@needs_ruff
 def test_stop_gives_up_after_max_blocks(project: Path) -> None:
     session = 'sess-giveup'
     path = write(project, 'eternal.py', 'import os\n')
@@ -235,6 +279,7 @@ def test_stop_without_session_is_noop(project: Path) -> None:
     assert result.returncode == 0, result.stderr
 
 
+@needs_ruff
 def test_stop_drops_deleted_file(project: Path) -> None:
     session = 'sess-gone'
     path = write(project, 'gone.py', 'import os\n')
@@ -259,11 +304,15 @@ def git_project() -> Iterator[Path]:
 
 
 def config_for(path: Path, env: dict[str, str] | None = None) -> str:
-    result = subprocess.run(
-        [str(CLEAN_PYTHON), '--config-for', str(path)], capture_output=True, text=True, check=False, env=env
-    )
+    result = subprocess.run(gate('--config-for', str(path)), capture_output=True, text=True, check=False, env=env)
     assert result.returncode == 0, result.stderr
-    return result.stdout.strip()
+    return native(result.stdout.strip())
+
+
+def ruff_for(path: Path) -> str:
+    result = subprocess.run(gate('--ruff-for', str(path)), capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stderr
+    return native(result.stdout.strip())
 
 
 def isolated_env(root: Path) -> dict[str, str]:
@@ -306,6 +355,7 @@ def test_nested_config_is_ignored(git_project: Path, tmp_path: Path) -> None:
     assert config_for(path, env=isolated_env(tmp_path)) == ''
 
 
+@needs_ruff
 def test_ruff_runs_from_the_package_dir(git_project: Path, tmp_path: Path) -> None:
     # A user-level config resolves `src` against the cwd, so the gate must run
     # from pkg/ (nearest pyproject.toml) to see src/mypkg as first-party.
@@ -324,6 +374,17 @@ def test_ruff_runs_from_the_package_dir(git_project: Path, tmp_path: Path) -> No
     assert path.read_text() == source
 
 
+@pytest.mark.parametrize('venv_ruff', ['bin/ruff', 'Scripts/ruff.exe'])
+def test_project_venv_ruff_is_preferred(git_project: Path, venv_ruff: str) -> None:
+    # POSIX venvs put ruff in .venv/bin, Windows venvs in .venv/Scripts.
+    ruff = git_project / '.venv' / venv_ruff
+    ruff.parent.mkdir(parents=True)
+    ruff.write_text('#!/bin/sh\n')
+    ruff.chmod(0o755)
+    path = write(git_project, 'a.py', 'x = 1\n')
+    assert ruff_for(path) == str(ruff)
+
+
 def test_no_config_anywhere_resolves_to_nothing(git_project: Path, tmp_path: Path) -> None:
     path = write(git_project, 'a.py', 'x = 1\n')
     assert config_for(path, env=isolated_env(tmp_path)) == ''
@@ -332,6 +393,7 @@ def test_no_config_anywhere_resolves_to_nothing(git_project: Path, tmp_path: Pat
 # --------------------------------------------------------------------------- #
 # off-topic waivers
 # --------------------------------------------------------------------------- #
+@needs_ruff
 def test_waive_suppresses_residue(project: Path) -> None:
     path = write(project, 'unused.py', 'import os\n')
     assert run_path(str(path)).returncode == 2
@@ -339,17 +401,19 @@ def test_waive_suppresses_residue(project: Path) -> None:
     assert run_path(str(path), env=tmp_env(project)).returncode == 0
 
 
+@needs_ruff
 def test_waiver_matches_across_path_spellings(project: Path) -> None:
     path = write(project, 'unused.py', 'import os\n')
     # Waive by absolute path, then address the same file relatively: the waiver
     # must still match because the gate normalises the path before hashing.
     assert run_path('--waive', str(path), env=tmp_env(project)).returncode == 0
     result = subprocess.run(
-        [str(CLEAN_PYTHON), 'unused.py'], cwd=project, capture_output=True, text=True, check=False, env=tmp_env(project)
+        gate('unused.py'), cwd=project, capture_output=True, text=True, check=False, env=tmp_env(project)
     )
     assert result.returncode == 0, result.stderr
 
 
+@needs_ruff
 def test_waive_on_clean_file_is_a_noop(project: Path) -> None:
     path = write(project, 'clean.py', 'x = 1\n')
     assert run_path('--waive', str(path), env=tmp_env(project)).returncode == 0
@@ -357,6 +421,7 @@ def test_waive_on_clean_file_is_a_noop(project: Path) -> None:
     assert not state.exists() or not list(state.glob('waived-*'))
 
 
+@needs_ruff
 def test_waiver_expires_when_findings_change(project: Path) -> None:
     path = write(project, 'unused.py', 'import os\n')
     run_path('--waive', str(path), env=tmp_env(project))
@@ -365,6 +430,7 @@ def test_waiver_expires_when_findings_change(project: Path) -> None:
     assert run_path(str(path), env=tmp_env(project)).returncode == 2
 
 
+@needs_ruff
 def test_waive_releases_stop(project: Path) -> None:
     session = 'sess-waive'
     path = write(project, 'broken.py', 'import os\n')
@@ -375,6 +441,7 @@ def test_waive_releases_stop(project: Path) -> None:
     assert not pending_file(project, session).exists()
 
 
+@needs_ruff
 def test_fixing_clears_stale_waiver(project: Path) -> None:
     path = write(project, 'unused.py', 'import os\n')
     run_path('--waive', str(path), env=tmp_env(project))
@@ -382,3 +449,30 @@ def test_fixing_clears_stale_waiver(project: Path) -> None:
     assert run_path(str(path), env=tmp_env(project)).returncode == 0
     state = project / 'clean-python'
     assert not list(state.glob('waived-*'))
+
+
+# --------------------------------------------------------------------------- #
+# no working python: the gate stays non-blocking but says it is skipped
+# --------------------------------------------------------------------------- #
+def broken_python_env(project: Path) -> dict[str, str]:
+    # Shadow python3 and python with stubs that fail, like the Windows Store stub.
+    stubs = project / 'stub-bin'
+    stubs.mkdir()
+    for name in ('python3', 'python'):
+        stub = stubs / name
+        stub.write_text('#!/bin/sh\nexit 1\n', newline='\n')
+        stub.chmod(0o755)
+    return {**tmp_env(project), 'PATH': f'{stubs}{os.pathsep}{os.environ["PATH"]}'}
+
+
+def test_posttooluse_without_python_warns_and_passes(project: Path) -> None:
+    path = write(project, 'nopy.py', 'import os\n')
+    result = run_stdin({'tool_input': {'file_path': str(path)}, 'session_id': 's'}, env=broken_python_env(project))
+    assert result.returncode == 0, result.stderr
+    assert result.stderr.strip() == 'clean-python: no working python found; skipping the gate'
+
+
+def test_stop_without_python_warns_and_passes(project: Path) -> None:
+    result = run_stop({'session_id': 's'}, env=broken_python_env(project))
+    assert result.returncode == 0, result.stderr
+    assert result.stderr.strip() == 'clean-python: no working python found; skipping the gate'

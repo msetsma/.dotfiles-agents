@@ -7,26 +7,36 @@ MCP servers each live in their own repo under
 
 ## The one rule
 
-**When you create or change a resource, update its catalog entry and the
-Inventory table in [`README.md`](README.md).** The catalog is the single source of
-truth for everything the agents load: MCP servers (custom *and*
-third-party), skills, plugins, hooks, and instructions; the README table is the
-human index. No catalog entry, no resource.
+**When you create or change a resource, update its catalog entry and its row
+in the Inventory tables in [`README.md`](README.md).** The catalog is the single
+source of truth for everything the agents load: MCP servers (custom *and*
+third-party), skills, plugins, hooks, instructions, and pi packages; the README
+Inventory (one table per kind) is the human index. No catalog entry, no
+resource.
 
 Then run `make sync` to push the catalog into every
 agent. See [README.md](README.md) for the merge-vs-symlink model and
-[`bin/agent_sync.py`](bin/agent_sync.py) for the engine. Don't hand-edit the agent
+[`bin/agent_sync.py`](bin/agent_sync.py) (entry point) plus
+[`bin/agentsync/`](bin/agentsync/) (one module per resource kind) for the
+engine. Don't hand-edit the agent
 config files (`~/.claude.json`, `~/.config/opencode/opencode.jsonc`,
 `~/.codex/config.toml`, the Claude Desktop config); edit the catalog instead.
 
-Tag resources that shouldn't reach every machine (`tags = ["work"]`,
-`["macos"]`); secondary machines filter them via `[profile]` in the untracked
-`catalog/local.toml` (see README "Per-machine profiles"). No profile = sync
-everything, which is the primary (Mac) behaviour.
+Tag resources that shouldn't reach every machine: `tags = ["work"]` (work
+accounts), `["macos"]` (macOS-only apps or tools), `["personal"]` (personal
+accounts and data). Secondary machines filter them via `[profile]` in the
+untracked `catalog/local.toml` (see README "Per-machine profiles"). No profile =
+sync everything, which is the primary (Mac) behaviour. With
+`clients = "auto"`, a client counts as present when the parent directory of any
+of its configured paths exists, so Claude Code always matches (the parent of
+`~/.claude.json` is home).
 
 Servers carry a `[package]` block; `make agent-outdated` reports newer
-npm/uv/git versions and uncloned server repos, `make agent-update` applies them. Prefer `ref = "latest"`
-(float) unless you need a specific version.
+npm/uv/git versions and uncloned server repos, `make agent-update` applies them
+and then re-syncs. Prefer `ref = "latest"` (float) unless you need a specific
+version. A `git` package may list `build` steps (argv lists, `argv[0]` mapped
+through `[commands]`) that run after each clone or pull until one succeeds at
+the current HEAD; `manager = "manual"` marks a binary or app updated by hand.
 
 Also keep the server repo's own `README.md` (the deep docs) and
 `pyproject.toml` `description` in sync: `README.md` at the root is the summary,
@@ -50,16 +60,12 @@ the server README is the detail.
 - **Verify before registering.** Every server needs a way to prove it works
   offline (`test_*.py` / `test_server.py`) before it's wired into an agent.
 
-## Inventory (high level)
+## Inventory
 
-| Server | Repo | Purpose | Entry point |
-|---|---|---|---|
-| `sharepoint-mcp` | [msetsma/sharepoint-mcp](https://github.com/msetsma/sharepoint-mcp) | SharePoint (macOS + Windows): synced libraries read from disk (`sp_roots`/`sp_find`/`sp_read`) and sites and lists via Graph (`sp_my_sites`/`sp_lists`/`sp_list_items`/`sp_list_schema`/`sp_recent_changes`). No Full Disk Access; list tools need a signed-in `az`, read-only unless `SHAREPOINT_ENABLE_WRITES` is set. | `server.py` |
-| `notes` | [msetsma/notes-mcp](https://github.com/msetsma/notes-mcp) | Read/write the personal Obsidian vault: qmd search, git-committed edits, inbox capture and triage, related-note discovery, digests, a vault lint. | `notes-mcp` (console script) |
-| `teams-browser` | [msetsma/teams-mcp](https://github.com/msetsma/teams-mcp) | Teams meetings, transcripts, ad-hoc/1:1 calls, chats, channel messages, shared files, answered from a local SQLite archive; `sync_archive` signs in when needed and syncs incrementally. Also finds free slots across attendees and opens a prefilled Teams meeting form for review (never sends). | `teams-browser-mcp` (console script) |
-| `entra-mcp` | [msetsma/entra-mcp](https://github.com/msetsma/entra-mcp) | Entra ID org structure + access analysis: people search, group membership, reporting trees, manager lookup, membership comparison. Azure CLI delegated session, no app registration. Also ships the `entra` CLI. | `entra-mcp` (console script, uv tool) |
-
-Tool-level detail lives in each repo's `README.md`. Don't duplicate it here.
+The resource list lives in one place: the Inventory tables in
+[`README.md`](README.md) (MCP servers, skills, hooks, plugins, instructions,
+pi packages). Tool-level detail lives in each server repo's `README.md`. Don't
+copy either here.
 
 ## Skills, plugins, hooks, instructions & packages
 
@@ -96,7 +102,10 @@ The `python-clean` gate is the worked example: a Claude Code hook plus an
 opencode plugin over `bin/clean-python`.
 
 `catalog/clients.toml` declares a `[<client>.<kind>]` block for each kind a
-client supports; a kind with no block is skipped for that client.
+client supports; a kind with no block is skipped for that client, and sync
+warns when a catalog item lists such a client. A JSON/JSONC client config that
+contains comments is never rewritten: sync warns and prints the entries to
+apply by hand.
 
 ## Claude Code mods
 
@@ -119,7 +128,7 @@ on a mod, clone it and run `claude --plugin-dir <clone>`. Details in
 > catalog.
 
 Configured clients: **opencode**, **Claude Code**, **Claude Desktop**, **Codex**
-(MCP), plus **pi** (packages only so far).
+(MCP), plus **pi** (packages only).
 
 Always use an **absolute path to `uv`** (`/opt/homebrew/bin/uv`) in GUI apps;
 they don't inherit your shell `PATH`. Replace the command/args with the new
@@ -137,8 +146,8 @@ Launch commands:
 # notes
 /opt/homebrew/bin/uv run --directory /Users/msetsma/.dotfiles-agents/vendor/notes-mcp notes-mcp
 
-# entra-mcp
-/opt/homebrew/bin/uv run --directory /Users/msetsma/.dotfiles-agents/vendor/entra-mcp --extra mcp entra-mcp
+# entra-mcp (uv-tool binary; see below)
+/Users/msetsma/.local/bin/entra-mcp
 ```
 
 Each path is a clone of the server's repo; `make agent-update` creates it.
@@ -225,7 +234,7 @@ snippets above.
 4. `make agent-update` to clone it into `vendor/<repo>/`.
 5. `make agent-check`, then `make sync`, and confirm it connects
    (`opencode mcp list`, `claude mcp list`, or the client's MCP panel).
-6. Add a row to the Inventory tables in `README.md` and above.
+6. Add a row to the Inventory tables in `README.md`.
 7. For anything with secrets or auth, document the one-time login step in the
    server's README.
 
