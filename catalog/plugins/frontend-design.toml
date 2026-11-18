@@ -1,0 +1,8 @@
+name        = "frontend-design"
+description = "Skill with distinctive frontend/UI design guidance: aesthetic direction, typography, choices that avoid templated defaults."
+clients     = ["claude-code"]
+plugin      = "frontend-design@claude-code-plugins"
+
+[marketplace]
+source = "github"
+repo   = "anthropics/claude-code"
