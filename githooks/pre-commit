@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Global pre-commit: the Python gate on every staged .py/.pyi file, then the
+# repository's own pre-commit hook. Bypass deliberately with --no-verify.
+set -uo pipefail
+
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+bash "$here/../bin/clean-python" --staged || exit 1
+exec bash "$here/_chain" pre-commit "$@"

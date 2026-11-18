@@ -5,17 +5,23 @@
 # the model has to fix it. Suppressions (`# noqa`) are deliberately ignored on
 # the final pass: the only accepted resolution is a real fix.
 #
+# After ruff, bin/python_gate.py runs the checks ruff cannot express: file
+# length, mutable dataclasses, dead code only tests use (vulture), and type
+# errors (ty). Its findings join ruff's in the same report.
+#
 # Config: the gate resolves ruff's config explicitly from the *git project root*
 # (ruff.toml, .ruff.toml, or a pyproject.toml with a [tool.ruff] section). When
 # the project root has no such file the global ruff config is used; when that is
 # absent too, ruff's built-in defaults apply. Resolving it explicitly keeps a
 # stray config in a parent directory from silently changing the rules.
 #
-# Four ways in, so a single implementation serves every client:
+# Five ways in, so a single implementation serves every client:
 #   clean-python <path>          explicit file (used by the opencode plugin)
 #   ... | clean-python           Claude Code PostToolUse JSON on stdin
 #   clean-python --stop-check    Claude Code Stop JSON on stdin
 #   clean-python --waive <path>  record a user-approved "off-topic" skip
+#   clean-python --staged        check staged Python files, no fixes (git
+#                                pre-commit; see githooks/pre-commit)
 #
 # Tests also probe resolution through internal `--config-for <path>` and
 # `--ruff-for <path>` modes, which print the config / ruff binary this gate
@@ -24,6 +30,7 @@
 # Exit 0: clean / auto-fixed / not a Python file / no pending residue (no-op).
 # Exit 2: something auto-fix could not resolve -> report on stderr. For
 #         --stop-check, exit 2 also refuses the Stop hook, forcing another turn.
+#         For --staged, exit 1 when a staged file fails, which aborts the commit.
 #
 # The opencode plugin injects its own follow-up prompt when this exits 2, and
 # its python_clean_skip tool calls `--waive` once the user approves skipping an
@@ -37,6 +44,7 @@ set -uo pipefail
 
 MAX_BLOCKS=3
 state_dir="${TMPDIR:-/tmp}/clean-python"
+gate_script="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/python_gate.py"
 
 # --------------------------------------------------------------------------- #
 # ruff + config resolution
@@ -88,9 +96,19 @@ project_config_for() {
 }
 
 global_config() {
-    # Ruff's user-level config, the fallback when the project root has none.
-    local cfg="${XDG_CONFIG_HOME:-$HOME/.config}/ruff/ruff.toml"
-    [[ -f "$cfg" ]] && printf '%s' "$cfg"
+    # Ruff's user-level config, the fallback when the project root has none:
+    # ~/.config/ruff on macOS and Linux, %APPDATA%/ruff on Windows.
+    local cfg appdata="${APPDATA:-}"
+    if [[ -n "$appdata" ]] && command -v cygpath >/dev/null 2>&1; then
+        appdata="$(cygpath -u "$appdata")"
+    fi
+    for cfg in "${XDG_CONFIG_HOME:-$HOME/.config}/ruff/ruff.toml" ${appdata:+"$appdata/ruff/ruff.toml"}; do
+        if [[ -f "$cfg" ]]; then
+            printf '%s' "$cfg"
+            return 0
+        fi
+    done
+    return 1
 }
 
 config_for() {
@@ -144,12 +162,78 @@ ruff_run() {
     fi
 }
 
+gate_runner=()
+gate_runner_probed=0
+
+gate_python() {
+    # Fill gate_runner with the interpreter for bin/python_gate.py, which needs
+    # Python >= 3.14: uv's 3.14 first, then a python on PATH that is new enough.
+    # Probed once per run; leaves gate_runner empty when there is none.
+    [[ $gate_runner_probed -eq 1 ]] && return
+    gate_runner_probed=1
+    local candidate
+    if command -v uv >/dev/null 2>&1 && uv run --no-project --quiet --python 3.14 python -c '' >/dev/null 2>&1; then
+        gate_runner=(uv run --no-project --quiet --python 3.14 python)
+        return
+    fi
+    for candidate in python3 python; do
+        if "$candidate" -c 'import sys; sys.exit(sys.version_info < (3, 14))' >/dev/null 2>&1; then
+            gate_runner=("$candidate")
+            return
+        fi
+    done
+}
+
+native_path() {
+    # Windows Python cannot read MSYS paths (/c/Users/...); convert when cygpath exists.
+    if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
+}
+
+run_gate() {
+    # Run bin/python_gate.py with the remaining arguments; empty runner -> 127.
+    gate_python
+    [[ ${#gate_runner[@]} -gt 0 ]] || return 127
+    PYTHONUTF8=1 "${gate_runner[@]}" "$gate_script" "$@"
+}
+
+gate_report() {
+    # Run bin/python_gate.py on $1 (package dir for ty, git root for vulture).
+    # Prints findings and returns 1 only when it exited 1 *and* reported
+    # something; anything else (no Python >= 3.14, a crash, an unreadable file)
+    # is a skipped check with a warning, never a block.
+    local out status
+    out="$(run_gate "$(native_path "$1")" "$(native_path "$(package_dir_for "$1")")" "$(native_path "$(project_root_for "$1")")")"
+    status=$?
+    if [[ $status -eq 1 && -n "$out" ]]; then
+        printf '%s\n' "$out"
+        return 1
+    fi
+    if [[ $status -eq 127 ]]; then
+        echo "clean-python: no Python >= 3.14 (or uv) found; skipping the non-ruff checks" >&2
+    elif [[ $status -ne 0 ]]; then
+        echo "clean-python: python_gate.py failed (exit $status) on $1; non-ruff checks skipped" >&2
+    fi
+    return 0
+}
+
 check_report() {
-    # Run ruff on $1 with $ruff_bin; set RUFF_REPORT, return ruff's exit status.
-    # Note: ruff prints "All checks passed!" on a clean run, so callers must test
-    # the exit status, not whether RUFF_REPORT is empty.
-    RUFF_REPORT="$(ruff_run "$1" check --ignore-noqa --output-format concise)"
-    return $?
+    # Run ruff, then bin/python_gate.py, on $1 with $ruff_bin; set RUFF_REPORT
+    # and return non-zero when either finds something. Note: ruff prints "All
+    # checks passed!" on a clean run, so callers must test the exit status, not
+    # whether RUFF_REPORT is empty.
+    local ruff_out gate_out ruff_status gate_status
+    ruff_out="$(ruff_run "$1" check --ignore-noqa --output-format concise)"
+    ruff_status=$?
+    gate_out="$(gate_report "$1")"
+    gate_status=$?
+    if [[ $gate_status -eq 0 ]]; then
+        RUFF_REPORT="$ruff_out"
+    elif [[ $ruff_status -eq 0 ]]; then
+        RUFF_REPORT="$gate_out"
+    else
+        RUFF_REPORT="$ruff_out"$'\n'"$gate_out"
+    fi
+    [[ $ruff_status -eq 0 && $gate_status -eq 0 ]]
 }
 
 fix_and_format() {
@@ -202,7 +286,13 @@ record_pending() {
 }
 
 digest() {
-    printf '%s' "$1" | shasum -a 256 | awk '{print $1}'
+    # sha256 of $1. Hook environments may lack shasum (Git Bash keeps it
+    # outside the default PATH), so prefer sha256sum.
+    if command -v sha256sum >/dev/null 2>&1; then
+        printf '%s' "$1" | sha256sum | awk '{print $1}'
+    else
+        printf '%s' "$1" | shasum -a 256 | awk '{print $1}'
+    fi
 }
 
 abs_path() {
@@ -212,6 +302,27 @@ abs_path() {
     else
         printf '%s' "$1"
     fi
+}
+
+settled_file() {
+    printf '%s/settled-%s' "$state_dir" "$(printf '%s' "$1" | tr -cd 'A-Za-z0-9._-')"
+}
+
+mtime_of() {
+    date -r "$1" +%s 2>/dev/null || echo 0
+}
+
+settle() {
+    # $1 session, $2 path: the file is done (clean, waived or given up) at its
+    # current mtime, so the session scan does not re-add it until it changes.
+    mkdir -p "$state_dir" || return 0
+    printf '%s\t%s\n' "$(mtime_of "$2")" "$2" >>"$(settled_file "$1")"
+}
+
+is_settled() {
+    local sf
+    sf="$(settled_file "$1")"
+    [[ -f "$sf" ]] && grep -qxF "$(mtime_of "$2")"$'\t'"$2" "$sf"
 }
 
 waiver_file() {
@@ -261,22 +372,77 @@ if [[ "${1:-}" == "--waive" ]]; then
 fi
 
 # --------------------------------------------------------------------------- #
+# Staged mode: git pre-commit check of every staged Python file, no fixes.
+# The checks read the working-tree copy, so a staged file that also has
+# unstaged changes is refused: what would be committed is not what was checked.
+# Waivers do not apply here; `git commit --no-verify` is the deliberate escape.
+# --------------------------------------------------------------------------- #
+if [[ "${1:-}" == "--staged" ]]; then
+    repo="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+    failed=0
+    while IFS= read -r -d '' rel; do
+        target="$repo/$rel"
+        is_python "$target" && [[ -f "$target" ]] || continue
+        ruff_bin="$(ruff_for "$target")"
+        if [[ -z "$ruff_bin" ]]; then
+            echo "clean-python: ruff not found; skipping $rel" >&2
+            continue
+        fi
+        if ! git -C "$repo" diff --quiet -- "$rel"; then
+            echo "$rel: has unstaged changes; stage them (or stash them) so the check sees what you commit" >&2
+            failed=1
+            continue
+        fi
+        problems=""
+        check_report "$target" || problems="$RUFF_REPORT"$'\n'
+        if ! ruff_run "$target" format --check --quiet >/dev/null; then
+            problems+="$rel: not formatted (run: ruff format $rel)"$'\n'
+        fi
+        if [[ -n "$problems" ]]; then
+            printf '%s' "$problems" >&2
+            failed=1
+        fi
+    done < <(git -C "$repo" diff --cached --name-only -z --diff-filter=ACMR)
+    if [[ $failed -ne 0 ]]; then
+        echo "clean-python: commit refused; fix the findings above (suppressions are ignored)." >&2
+        exit 1
+    fi
+    exit 0
+fi
+
+# --------------------------------------------------------------------------- #
 # Stop mode: refuse to finish while Python written this session still fails
 # --------------------------------------------------------------------------- #
 if [[ "${1:-}" == "--stop-check" ]]; then
     payload="$(cat)"
     [[ -n "$payload" ]] || exit 0
     python="$(require_python)" || exit 0
-    session="$(printf '%s' "$payload" | "$python" -c '
+    parsed="$(printf '%s' "$payload" | "$python" -c '
 import json, sys
 try:
-    print(json.load(sys.stdin).get("session_id") or "")
-except Exception:
-    print("")
+    doc = json.load(sys.stdin)
+except ValueError:
+    doc = {}
+for key in ("session_id", "transcript_path", "cwd"):
+    print(doc.get(key) or "")
 ' 2>/dev/null)" || exit 0
+    session="$(printf '%s\n' "$parsed" | sed -n '1p')"
+    transcript="$(printf '%s\n' "$parsed" | sed -n '2p')"
+    cwd="$(printf '%s\n' "$parsed" | sed -n '3p')"
     [[ -n "$session" ]] || exit 0
 
     sf="$(state_file "$session")"
+    # Files written through the shell never reach PostToolUse: add every dirty
+    # Python file changed since the session started, unless it already passed
+    # (or was given up on) at its current mtime.
+    if [[ -n "$transcript" && -n "$cwd" ]]; then
+        while IFS= read -r changed; do
+            [[ -n "$changed" ]] || continue
+            command -v cygpath >/dev/null 2>&1 && changed="$(cygpath -u "$changed")"
+            changed="$(abs_path "$changed")"
+            is_settled "$session" "$changed" || record_pending "$session" "$changed"
+        done < <(run_gate --session-changes "$(native_path "$transcript")" "$(native_path "$cwd")" 2>/dev/null)
+    fi
     [[ -f "$sf" ]] || exit 0
 
     pending=""
@@ -289,23 +455,27 @@ except Exception:
         report=""
         if check_report "$path"; then
             rm -f "$(waiver_file "$path")"
+            settle "$session" "$path"
             continue # clean -> drop, and clear any stale waiver
         fi
         report="$RUFF_REPORT"
         if is_waived "$path" "$report"; then
+            settle "$session" "$path"
             continue # user approved skipping this off-topic file
         fi
         count=$((count + 1))
         if [[ "$count" -le "$MAX_BLOCKS" ]]; then
             pending+="${count}"$'\t'"${path}"$'\n'
             findings+="$report"$'\n'
+        else
+            settle "$session" "$path" # given up: only a new edit brings it back
         fi
     done <"$sf"
 
     if [[ -n "$pending" ]]; then
         printf '%s' "$pending" >"$sf"
         {
-            echo "clean-python: Python you wrote still has ruff findings that auto-fix could not resolve."
+            echo "clean-python: Python you wrote still has findings that auto-fix could not resolve."
             echo
             printf '%s' "$findings"
             echo "Fix the code itself. Suppression (# noqa) is ignored on this check."
@@ -378,7 +548,7 @@ if [[ -n "$session" ]]; then
 fi
 
 {
-    echo "clean-python: ruff found issues auto-fix could not resolve in $target"
+    echo "clean-python: found issues auto-fix could not resolve in $target"
     echo
     echo "$report"
     echo

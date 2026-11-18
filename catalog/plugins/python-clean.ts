@@ -23,8 +23,20 @@
 //                          never lands in the main session's context. Configure
 //                          the child's agent with the plugin `refactorAgent` option.
 import { spawnSync } from "node:child_process"
+import { existsSync } from "node:fs"
+import { homedir } from "node:os"
 
-const HOOK = `${process.env.HOME}/.dotfiles-agents/bin/clean-python`
+// Run through bash: Windows cannot exec a shebang script, and HOME is unset there.
+const HOOK = `${homedir().replaceAll("\\", "/")}/.dotfiles-agents/bin/clean-python`
+
+// Git Bash on Windows; a bare `bash` there resolves to WSL first, which cannot
+// read C:/ paths.
+function bashPath(): string {
+  if (process.platform !== "win32") return "bash"
+  const candidates = [process.env.CLAUDE_CODE_GIT_BASH_PATH, `${process.env.ProgramFiles}/Git/bin/bash.exe`]
+  return candidates.find((c) => c && existsSync(c)) ?? "bash"
+}
+const BASH = bashPath()
 const MAX_PROMPTS = 3
 const REFACTOR_TIMEOUT_MS = 5 * 60 * 1000
 
@@ -39,7 +51,7 @@ function isPython(file: unknown): file is string {
 }
 
 function runGate(file: string, cwd?: string) {
-  return spawnSync(HOOK, [file], { encoding: "utf8", cwd })
+  return spawnSync(BASH, [HOOK, file], { encoding: "utf8", cwd })
 }
 
 export default {
@@ -69,7 +81,7 @@ export default {
             if (!isPython(file)) {
               return { content: "python_clean_skip: a Python `file` path is required." }
             }
-            const waived = spawnSync(HOOK, ["--waive", file], { encoding: "utf8", cwd })
+            const waived = spawnSync(BASH, [HOOK, "--waive", file], { encoding: "utf8", cwd })
             const note = (waived.stderr || waived.stdout || "").trim()
             return { content: note || `Waived ${file} for its current findings.` }
           },

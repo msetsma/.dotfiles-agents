@@ -122,7 +122,7 @@ def pending_file(project: Path, session: str) -> Path:
 
 @needs_ruff
 def test_clean_file_passes(project: Path) -> None:
-    path = write(project, 'clean.py', 'x = 1\n')
+    path = write(project, 'clean.py', 'print(1)\n')
     result = run_path(str(path))
     assert result.returncode == 0, result.stderr
 
@@ -141,7 +141,7 @@ def test_missing_file_is_a_noop(project: Path) -> None:
 
 @needs_ruff
 def test_fixable_is_rewritten_and_passes(project: Path) -> None:
-    path = write(project, 'fmt.py', "x = {'a':1,'b':2}\n")
+    path = write(project, 'fmt.py', "print({'a':1,'b':2})\n")
     before = path.read_text()
     result = run_path(str(path))
     assert result.returncode == 0, result.stderr
@@ -228,7 +228,7 @@ def test_posttooluse_records_pending_on_failure(project: Path) -> None:
 @needs_ruff
 def test_posttooluse_records_nothing_when_fixable(project: Path) -> None:
     session = 'sess-ok'
-    path = write(project, 'fixable2.py', "x = {'a':1}\n")
+    path = write(project, 'fixable2.py', "print({'a':1})\n")
     result = run_stdin({'tool_input': {'file_path': str(path)}, 'session_id': session}, env=tmp_env(project))
     assert result.returncode == 0, result.stderr
     assert not pending_file(project, session).exists()
@@ -257,7 +257,7 @@ def test_stop_releases_and_clears_after_fix(project: Path) -> None:
     session = 'sess-fix'
     path = write(project, 'broken2.py', 'import os\n')
     run_stdin({'tool_input': {'file_path': str(path)}, 'session_id': session}, env=tmp_env(project))
-    path.write_text('x = 1\n')
+    path.write_text('print(1)\n')
     result = run_stop({'session_id': session}, env=tmp_env(project))
     assert result.returncode == 0, result.stderr
     assert not pending_file(project, session).exists()
@@ -316,8 +316,8 @@ def ruff_for(path: Path) -> str:
 
 
 def isolated_env(root: Path) -> dict[str, str]:
-    # No global ruff config: XDG_CONFIG_HOME points at an empty tree.
-    return {**os.environ, 'XDG_CONFIG_HOME': str(root)}
+    # No global ruff config: XDG_CONFIG_HOME and APPDATA point at an empty tree.
+    return {**os.environ, 'XDG_CONFIG_HOME': str(root), 'APPDATA': str(root)}
 
 
 def test_project_config_is_the_git_root(project: Path) -> None:
@@ -415,7 +415,7 @@ def test_waiver_matches_across_path_spellings(project: Path) -> None:
 
 @needs_ruff
 def test_waive_on_clean_file_is_a_noop(project: Path) -> None:
-    path = write(project, 'clean.py', 'x = 1\n')
+    path = write(project, 'clean.py', 'print(1)\n')
     assert run_path('--waive', str(path), env=tmp_env(project)).returncode == 0
     state = project / 'clean-python'
     assert not state.exists() or not list(state.glob('waived-*'))
@@ -445,7 +445,7 @@ def test_waive_releases_stop(project: Path) -> None:
 def test_fixing_clears_stale_waiver(project: Path) -> None:
     path = write(project, 'unused.py', 'import os\n')
     run_path('--waive', str(path), env=tmp_env(project))
-    path.write_text('x = 1\n')
+    path.write_text('print(1)\n')
     assert run_path(str(path), env=tmp_env(project)).returncode == 0
     state = project / 'clean-python'
     assert not list(state.glob('waived-*'))

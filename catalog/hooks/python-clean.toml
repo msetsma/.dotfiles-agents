@@ -1,6 +1,7 @@
 # Runs after the agent writes or edits a Python file: ruff auto-fixes and
-# formats what it can, then the remaining findings are handed back to the model
-# to fix. Suppressions (`# noqa`) are ignored on the final pass, so the only
+# formats what it can, bin/python_gate.py adds the checks ruff cannot express
+# (file length, mutable dataclasses, dead code, ty type errors), then the
+# remaining findings are handed back to the model to fix. Suppressions (`# noqa`) are ignored on the final pass, so the only
 # accepted resolution is a real fix.
 #
 # Ruff's config is resolved from the git project root (ruff.toml, .ruff.toml, or
@@ -22,5 +23,5 @@ clients     = ["claude-code"]
 
 [command]
 run           = "${AGENT_HOME}/bin/clean-python"
-timeout       = 30
+timeout       = 90
 statusMessage = "ruff: fix + verify"

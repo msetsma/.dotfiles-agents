@@ -52,9 +52,10 @@ from the includeIf on their own.
 │   ├── paths.toml          # primary-machine commands + ${VARS}
 │   ├── local.toml          # untracked per-machine overrides (see local.toml.example)
 │   └── retired.toml        # resources to scrub from every client
-├── bin/                    # agent-sync, agent-update, clean-python, peek, demo-gif
+├── bin/                    # agent-sync, agent-update, clean-python (+ python_gate.py), peek, demo-gif
 │   ├── agent_sync.py       # sync entry point (wrapped by agent-sync)
 │   └── agentsync/          # sync engine: one module per resource kind + common.py
+├── githooks/               # global git hooks: Python gate on commit, then the repo's own hooks
 ├── mods/                   # msetsma-mods marketplace: lists each mod's GitHub repo
 ├── docs/                   # design notes (proposals; not loaded by sync)
 ├── mcp/
@@ -201,14 +202,15 @@ and `catalog/local.toml`.
 | `peek` | Claude Code | `macos` | Runs a CLI or TUI in a hidden tmux pane and reads the screen back as text or a Ghostty screenshot (`bin/peek`) |
 | `demo-gif` | Claude Code | `macos` | Records a terminal demo GIF with vhs from an isolated, offline tape, then pulls frames out to check it (`bin/demo-gif`) |
 | `watch-capture` | Claude Code | `personal` | Adds or updates a watch in the private Obsidian watch collection: exact reference, sourced specs, dated prices, a normalized image, brand and movement links |
+| `python-review` | Claude Code | | Checklist for the Python judgement calls the gate cannot enforce: immutability, composition, records over threaded values, output-diffed refactors, dead-code checks before deleting |
 | `example-skill` | Claude Code | | Template: placeholder skill proving the skills pipeline |
 
 ### Hooks
 
 | Hook | Clients | Event | What it does |
 |---|---|---|---|
-| `python-clean` | Claude Code | `PostToolUse` (`Write\|Edit\|MultiEdit`) | Runs `bin/clean-python`: ruff `check --fix` + format on agent-written Python, then reports what could not be fixed |
-| `python-clean-stop` | Claude Code | `Stop` | Refuses to end the turn while Python written this session still fails ruff |
+| `python-clean` | Claude Code | `PostToolUse` (`Write\|Edit\|MultiEdit`) | Runs `bin/clean-python` on agent-written Python: ruff `check --fix` + format, then the [Python gate](#python-gate) checks, then reports what could not be fixed |
+| `python-clean-stop` | Claude Code | `Stop` | Refuses to end the turn while Python written this session still fails the gate |
 | `example-hook` | none (inert) | `SessionStart` | Template: no-op hook to copy |
 
 ### opencode plugins
@@ -241,6 +243,52 @@ The catalog manages no pi packages: `catalog/packages/` does not exist, and
 from pi. To add one, create `catalog/packages/<name>.toml` (the directory comes
 with the first package; see [Resource kinds](#resource-kinds)), remove its
 source from `retired.toml` if listed there, then `make sync`.
+
+## Python gate
+
+Python is checked by tools, not instructions. `bin/clean-python` runs on every
+Python file an agent writes (the `python-clean` hooks and opencode plugin) and,
+through `githooks/pre-commit`, on every staged Python file at commit time, so
+code written by hand or by another tool gets the same check.
+
+1. **ruff** with the project's config (git-root `ruff.toml`, `.ruff.toml`, or
+   `pyproject.toml` `[tool.ruff]`), else the global one (`~/.config/ruff` or
+   `%APPDATA%uff`, kept in the `.dotfiles` repo). It enforces typed
+   signatures (`ANN`), no `print` (`T20`), no blind `except` (`E722`, `BLE`),
+   `raise ... from` (`B904`), `X | None` (`UP045`), function size and argument
+   counts (`C901`, `PLR0913`, `PLR0915`, `PLR0917`) and no commented-out code
+   (`ERA`). `# noqa` is ignored.
+2. **`bin/python_gate.py`** (modules in `bin/pygate/`) adds what ruff cannot
+   express:
+
+   | Code | Check |
+   |---|---|
+   | `GATE001` | File longer than 800 lines |
+   | `GATE002` | `@dataclass` without `frozen=True`; mark a deliberate one `# gate: mutable: <why>` |
+   | `GATE003` | Dead code: vulture, scanning the whole git project with tests excluded, finds no use for a function, method, class, property or module constant. Registered functions (any non-plain decorator), overrides of imported base classes, `pyproject.toml` entry points, `pytest_*` hooks and convention files (`conf.py`, settings, migrations) count as used; anything else a framework calls goes in `vulture_whitelist.py` |
+   | `GATE004` | Type errors from ty, run from the package directory so it finds the package `.venv` (unresolved imports ignored) |
+   | `GATE005` | Type-check suppression comments (`# type: ignore`, `# ty: ignore`, `# pyright: ignore`) |
+   | `GATE006` | A broad `except` (or `suppress(Exception)`) that does not re-raise |
+
+   vulture and ty come from PATH or `uvx`; the gate needs Python >= 3.14 (via
+   uv). A missing tool, a missing Python or a crash in the gate skips these
+   checks with a warning; it never blocks.
+
+At edit time the hook auto-fixes and formats first. Files changed through the
+shell never reach the edit hook, so the Stop hook also checks every dirty
+Python file in the session's repository modified since the session started.
+At commit time (`clean-python --staged`) nothing is rewritten, unformatted files
+fail, and a staged file with unstaged changes is refused, since the check reads
+the working tree. `git commit --no-verify` is the deliberate escape hatch.
+
+Install the commit hook once per machine with `make githooks`, which sets the
+global `core.hooksPath` to `githooks/`. Every other hook there forwards to the
+repository's own `.git/hooks/<name>`, so pre-commit, git-lfs and similar tools
+keep working. A repository with its own `core.hooksPath` skips the global hooks.
+
+What no tool can check (immutability over mutation, composition, records
+instead of threaded values, output-diffed refactors) lives in the
+`python-review` skill.
 
 ## Secrets
 
@@ -295,8 +343,11 @@ configured `path`s exists. Claude Code always matches, because the parent of
 because they land in bash hook commands.
 
 On Windows: install uv (`irm https://astral.sh/uv/install.ps1 | iex`), enable
-Developer Mode (skill symlinks), and run `make` from Git Bash. The
-`python-clean` hooks are bash-only, so exclude them there.
+Developer Mode (skill symlinks), and run `make` from Git Bash. Claude Code runs
+the `python-clean` hooks through Git Bash; ruff's global config lives in
+`%APPDATA%
+uff
+uff.toml` there, which `bin/clean-python` also reads.
 
 ## Keeping up to date
 

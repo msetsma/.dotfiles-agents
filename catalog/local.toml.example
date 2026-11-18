@@ -20,12 +20,10 @@ ADO_ORG = "your-ado-org"
 # [profile]
 # clients      = ["claude-code", "claude-desktop"]  # or "auto": see below
 # exclude_tags = ["work", "macos"]                   # catalog `tags = [...]`: work, macos, personal
-# exclude      = ["obscura", "python-clean", "python-clean-stop"]  # names, any kind
+# exclude      = ["obscura"]                       # names, any kind
 #
 # "auto" keeps a client when the parent directory of any of its configured
 # paths exists; claude-code always matches (~/.claude.json sits in home).
-# The python-clean hooks run bin/clean-python under bash, so Windows excludes
-# them along with the python-clean opencode plugin.
 
 # Command overrides; a list becomes command + leading args (Windows needs
 # `cmd /c` in front of npx). They also apply to `[package] build` steps, so

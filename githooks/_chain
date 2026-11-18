@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# _chain <hook-name> [args...] - run the repository's own hook of that name.
+#
+# githooks/ is installed as the global core.hooksPath (`make githooks`), which
+# makes git ignore each repository's .git/hooks. Every hook file here forwards
+# to this script so hooks that tools install there (pre-commit, git-lfs, ...)
+# keep running. A repository that sets its own core.hooksPath overrides the
+# global one and never reaches these hooks.
+set -uo pipefail
+
+name="$1"
+shift
+common="$(git rev-parse --git-common-dir 2>/dev/null)" || exit 0
+hook="$common/hooks/$name"
+if [[ -x "$hook" ]]; then
+    exec "$hook" "$@"
+fi
+exit 0

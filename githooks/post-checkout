@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Forward to the repository's own hook of the same name; see _chain.
+exec bash "$(dirname "${BASH_SOURCE[0]}")/_chain" "$(basename "${BASH_SOURCE[0]}")" "$@"

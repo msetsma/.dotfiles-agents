@@ -1,0 +1,3 @@
+name        = "python-review"
+description = "Checklist for writing, refactoring or reviewing Python: the judgement calls the clean-python gate cannot enforce (immutability over mutation, composition over inheritance, records instead of threaded values, behaviour-preserving refactors checked against saved output, dead-code checks before deleting or splitting). Use before a Python refactor, when splitting or deleting code, and when reviewing a Python diff."
+clients     = ["claude-code"]

@@ -1,5 +1,5 @@
 # .dotfiles-agents task runner
-.PHONY: help sync agent-sync agent-check agent-outdated agent-update
+.PHONY: help sync agent-sync agent-check agent-outdated agent-update githooks
 
 help: ## list targets
 	@printf "\nUsage: make <target>\n\nTargets:\n\n"
@@ -18,3 +18,6 @@ agent-outdated: ## report newer npm / uv / git versions
 
 agent-update: ## apply updates, then re-sync
 	bash bin/agent-update --apply
+
+githooks: ## use githooks/ as the global git hooks dir (Python gate on every commit)
+	git config --global core.hooksPath "$(CURDIR)/githooks"

@@ -17,5 +17,5 @@ clients     = ["claude-code"]
 
 [command]
 run           = "${AGENT_HOME}/bin/clean-python --stop-check"
-timeout       = 30
+timeout       = 90
 statusMessage = "ruff: verify before stop"
