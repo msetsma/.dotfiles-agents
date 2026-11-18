@@ -275,7 +275,7 @@ Catalog entries carry `tags`:
 | Tag | Entries |
 |---|---|
 | `work` | azure, azure-devops, databricks, entra-mcp, teams-browser, sharepoint-mcp |
-| `macos` | apple-mail, iMCP, sharepoint-mcp, peek, demo-gif |
+| `macos` | apple-mail, iMCP, peek, demo-gif |
 | `personal` | spotify, watch-capture |
 
 Excluded resources are not synced. Sync leaves an excluded MCP server, hook,
