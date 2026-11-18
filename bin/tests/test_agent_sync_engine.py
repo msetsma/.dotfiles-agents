@@ -21,7 +21,7 @@ from agentsync.mcp import sync_codex_mcp, sync_json_mcp
 
 
 @pytest.fixture(autouse=True)
-def _live_run(monkeypatch) -> None:
+def _live_run(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(common.CONFIG, 'dry_run', False)
 
 
@@ -91,7 +91,7 @@ def test_json_mcp_merge_and_retire(tmp_path: Path) -> None:
     assert not sync_json_mcp('claude-code', mcp_cli(target), desired, ['old'])
 
 
-def test_json_mcp_bad_json_dies_with_path(tmp_path: Path, capsys) -> None:
+def test_json_mcp_bad_json_dies_with_path(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     target = tmp_path / 'broken.json'
     target.write_text('{"mcpServers": ')
     with pytest.raises(SystemExit):
@@ -99,7 +99,9 @@ def test_json_mcp_bad_json_dies_with_path(tmp_path: Path, capsys) -> None:
     assert str(target) in capsys.readouterr().err
 
 
-def test_jsonc_mcp_trailing_commas_parse_and_comments_are_not_destroyed(tmp_path: Path, capsys) -> None:
+def test_jsonc_mcp_trailing_commas_parse_and_comments_are_not_destroyed(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     target = tmp_path / 'opencode.jsonc'
     original = '{\n  // keep me\n  "mcp": {"servers": {"a": {"type": "local", "command": ["a"]},},},\n}\n'
     target.write_text(original)
@@ -112,7 +114,9 @@ def test_jsonc_mcp_trailing_commas_parse_and_comments_are_not_destroyed(tmp_path
     assert str(target) in err
 
 
-def test_jsonc_dry_run_warns_that_a_real_sync_will_not_write(tmp_path: Path, capsys) -> None:
+def test_jsonc_dry_run_warns_that_a_real_sync_will_not_write(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     target = tmp_path / 'opencode.jsonc'
     original = '{\n  // keep me\n  "mcp": {"servers": {}}\n}\n'
     target.write_text(original)
@@ -125,7 +129,7 @@ def test_jsonc_dry_run_warns_that_a_real_sync_will_not_write(tmp_path: Path, cap
     assert str(target) in err
 
 
-def test_unreadable_config_dies_with_path(tmp_path: Path, capsys) -> None:
+def test_unreadable_config_dies_with_path(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     target = tmp_path / 'settings.json'
     target.write_bytes(b'{"a": "\xff"}')
     with pytest.raises(SystemExit):
@@ -179,7 +183,7 @@ def test_hooks_preserve_user_hooks_and_are_idempotent(tmp_path: Path) -> None:
     assert not sync_hooks('claude-code', hook_cli(target), catalog, [])
 
 
-def test_hooks_edited_fields_replace_instead_of_duplicating(tmp_path: Path, capsys) -> None:
+def test_hooks_edited_fields_replace_instead_of_duplicating(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     target = tmp_path / 'settings.json'
     target.write_text(json.dumps({'hooks': {'PostToolUse': [USER_GROUP]}}))
     sync_hooks('claude-code', hook_cli(target), {'h': hook('h', '/r/bin/clean')}, [])
@@ -240,7 +244,7 @@ def test_hooks_user_group_matching_a_hook_for_another_client_is_kept(tmp_path: P
     assert groups(target, 'PostToolUse') == [mine]
 
 
-def test_hooks_delisted_client_drops_the_group_sync_wrote(tmp_path: Path, capsys) -> None:
+def test_hooks_delisted_client_drops_the_group_sync_wrote(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     target = tmp_path / 'settings.json'
     target.write_text(json.dumps({'hooks': {'PostToolUse': [USER_GROUP]}}))
     sync_hooks('claude-code', hook_cli(target), {'h': hook('h', '/r/bin/clean')}, [])
@@ -252,7 +256,7 @@ def test_hooks_delisted_client_drops_the_group_sync_wrote(tmp_path: Path, capsys
     assert not sync_hooks('claude-code', hook_cli(target), delisted, [])
 
 
-def test_hooks_same_event_and_command_in_two_hooks_dies(tmp_path: Path, capsys) -> None:
+def test_hooks_same_event_and_command_in_two_hooks_dies(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     target = tmp_path / 'settings.json'
     catalog = {'a': hook('a', '/r/bin/clean', matcher='Write'), 'b': hook('b', '/r/bin/clean', matcher='Bash')}
     with pytest.raises(SystemExit):
@@ -272,7 +276,7 @@ def test_clients_toml_wires_instructions_for_claude_code_and_codex() -> None:
     assert clients['codex']['instructions']['path'] == '~/.codex/AGENTS.md'
 
 
-def test_warns_when_item_lists_client_without_kind(capsys) -> None:
+def test_warns_when_item_lists_client_without_kind(capsys: pytest.CaptureFixture[str]) -> None:
     clients = {'opencode': {'mcp': {}}, 'codex': {'mcp': {}, 'skills': {}}}
     catalogs = {'skills': {'s': {'name': 's', 'clients': ['opencode', 'codex']}}, 'mcp': {}}
     warn_unsupported(clients, catalogs, ['opencode', 'codex'])
@@ -281,7 +285,7 @@ def test_warns_when_item_lists_client_without_kind(capsys) -> None:
     assert 'codex' not in err
 
 
-def test_no_warning_for_unselected_clients(capsys) -> None:
+def test_no_warning_for_unselected_clients(capsys: pytest.CaptureFixture[str]) -> None:
     clients = {'opencode': {'mcp': {}}, 'codex': {'mcp': {}}}
     catalogs = {'skills': {'s': {'name': 's', 'clients': ['opencode']}}}
     warn_unsupported(clients, catalogs, ['codex'])

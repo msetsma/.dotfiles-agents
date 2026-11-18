@@ -8,6 +8,9 @@ from __future__ import annotations
 import importlib.util
 import sys
 from pathlib import Path
+from types import ModuleType
+
+import pytest
 
 
 AGENT_UPDATE = Path(__file__).resolve().parents[1] / 'agent_update.py'
@@ -18,16 +21,17 @@ def of[T](updates: tuple[object, ...], kind: type[T]) -> tuple[T, ...]:
     return tuple(u for u in updates if isinstance(u, kind))
 
 
-def load():
+def load() -> ModuleType:
     spec = importlib.util.spec_from_file_location('agent_update', AGENT_UPDATE)
-    module = importlib.util.module_from_spec(spec)
+    assert spec is not None
     assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
     sys.modules['agent_update'] = module  # @dataclass resolves its module by name
     spec.loader.exec_module(module)
     return module
 
 
-def test_missing_repo_path_is_planned_and_cloned(tmp_path, monkeypatch):
+def test_missing_repo_path_is_planned_and_cloned(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     up = load()
     calls = []
     monkeypatch.setattr(
@@ -53,7 +57,7 @@ def test_missing_repo_path_is_planned_and_cloned(tmp_path, monkeypatch):
     assert resyncs == [1]  # a new clone is applied work, so configs are re-synced
 
 
-def test_existing_path_is_not_cloned(tmp_path):
+def test_existing_path_is_not_cloned(tmp_path: Path) -> None:
     up = load()
     server = up.Server.from_catalog('x', Path('x.toml'), {'manager': 'git', 'repo': 'o/x', 'path': str(tmp_path)}, {})
     status = up.git_status(server, up.Check(fetch=False))

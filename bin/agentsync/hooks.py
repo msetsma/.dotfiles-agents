@@ -3,6 +3,7 @@ event map (Claude Code, Codex)."""
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from pathlib import Path
 
@@ -10,6 +11,8 @@ from .common import CONFIG, Diff, deep_get, die, read_json_config, refuse_commen
 
 
 __all__ = ['HOOK_RENDERERS', 'r_hook_claude_code', 'r_hook_codex', 'sync_hooks']
+
+log = logging.getLogger(__name__)
 
 
 # --------------------------------------------------------------------------- #
@@ -133,7 +136,7 @@ def _hook_diff(desired: dict, managed: dict, retired_labels: list, names: dict) 
 
 def sync_hooks(client: str, cli: dict, hooks: dict, retired_commands: list) -> bool:
     if cli['style'] not in HOOK_RENDERERS:
-        print(f'[{client}] hooks: style {cli["style"]!r} not supported yet; skipping')
+        log.info('[%s] hooks: style %r not supported yet; skipping', client, cli['style'])
         return False
     target = Path(cli['path']).expanduser()
     renderer = HOOK_RENDERERS[cli['style']]

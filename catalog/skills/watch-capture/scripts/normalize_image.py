@@ -94,12 +94,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.target.suffix.lower() != '.png':
         log.error('target must be a .png file: %s', args.target)
         return 2
+    error = _try_normalize(args)
+    if error is not None:
+        log.error('%s', error)
+        return 1
+    return 0
+
+
+def _try_normalize(args: argparse.Namespace) -> NormalizeError | None:
+    """Run ``normalize`` for the parsed options; the error that stopped it, if any."""
     try:
         normalize(args.source, args.target, size=args.size, padding=args.padding, cut=not args.keep_background)
     except NormalizeError as exc:
-        log.error('%s', exc)
-        return 1
-    return 0
+        return exc
+    return None
 
 
 if __name__ == '__main__':

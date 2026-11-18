@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import shutil
 import subprocess
 from pathlib import Path
@@ -10,6 +11,8 @@ from .common import CONFIG, read_json_config, refuse_commented, report, write_js
 
 
 __all__ = ['package_id', 'render_package', 'sync_packages']
+
+log = logging.getLogger(__name__)
 
 
 # --------------------------------------------------------------------------- #
@@ -71,5 +74,5 @@ def sync_packages(client: str, cli: dict, packages: dict, retired: list) -> bool
         if shutil.which(install[0]):
             subprocess.run(install, check=False)
         else:
-            print(f'  {install[0]} not on PATH; run `{" ".join(install)}` to install')
+            log.info('  %s not on PATH; run `%s` to install', install[0], ' '.join(install))
     return dirty

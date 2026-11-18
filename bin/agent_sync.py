@@ -40,6 +40,7 @@ Usage
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 
@@ -49,7 +50,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from agent_profile import deep_merge, select_clients
 from agentsync import common
 from agentsync.catalog import load_catalogs, load_retired
-from agentsync.common import CONFIG, build_context, die, load_local, load_toml, warn
+from agentsync.common import CONFIG, attach_console, build_context, die, load_local, load_toml, warn
 from agentsync.hooks import sync_hooks
 from agentsync.instructions import sync_instructions
 from agentsync.mcp import MCP_SYNCERS, mcp_client_kind, render
@@ -59,6 +60,8 @@ from agentsync.skills import sync_skills
 
 
 __all__ = ['main', 'sync_client', 'warn_unsupported']
+
+log = logging.getLogger(__name__)
 
 
 # --------------------------------------------------------------------------- #
@@ -102,6 +105,7 @@ def main() -> int:
     ap.add_argument('--dry-run', action='store_true', help='show changes, write nothing')
     ap.add_argument('--client', action='append', help='limit to a client (repeatable)')
     args = ap.parse_args()
+    attach_console(log)
     CONFIG.dry_run = args.dry_run
 
     local = load_local()
@@ -122,11 +126,11 @@ def main() -> int:
     dirty_any = False
     for client in selected:
         dirty_any |= sync_client(client, clients[client], catalogs, retired)
-    print()
+    log.info('')
     if CONFIG.dry_run:
-        print('dry-run complete - nothing written')
+        log.info('dry-run complete - nothing written')
     else:
-        print('done' if dirty_any else 'already in sync')
+        log.info('done' if dirty_any else 'already in sync')
     return 0
 
 

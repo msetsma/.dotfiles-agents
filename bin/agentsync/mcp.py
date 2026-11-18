@@ -109,7 +109,8 @@ CODEX_SELF_KEYS = frozenset({'tools'})
 
 def _plain(value: object) -> object:
     """A tomlkit item as plain Python, so it compares equal to rendered dicts."""
-    return value.unwrap() if hasattr(value, 'unwrap') else value
+    unwrap = getattr(value, 'unwrap', None)
+    return unwrap() if callable(unwrap) else value
 
 
 def _codex_managed_keys(entry: MutableMapping, srv: dict) -> list[str]:
@@ -198,7 +199,6 @@ MCP_CLIENT_KINDS = {'toml': 'codex', 'json': 'json', 'jsonc': 'json'}
 
 
 def mcp_client_kind(cli: dict) -> str:
-    kind = MCP_CLIENT_KINDS.get(cli['format'])
-    if kind is None:
+    if cli['format'] not in MCP_CLIENT_KINDS:
         die(f'unsupported format {cli["format"]!r}')
-    return kind
+    return MCP_CLIENT_KINDS[cli['format']]

@@ -3,6 +3,7 @@ and pluginConfigs into settings.json, then reconcile with ``claude plugin``."""
 
 from __future__ import annotations
 
+import logging
 import shutil
 import subprocess
 from pathlib import Path
@@ -11,6 +12,8 @@ from .common import CONFIG, Diff, read_json_config, refuse_commented, report, wr
 
 
 __all__ = ['market_of', 'marketplace_arg', 'plugin_load_order', 'run_plugin_cli', 'sync_marketplace_plugins']
+
+log = logging.getLogger(__name__)
 
 
 # --------------------------------------------------------------------------- #
@@ -33,7 +36,7 @@ def run_plugin_cli(cli: dict, args: list[str]) -> None:
     command = cli['command']
     exe = shutil.which(command[0])
     if not exe:
-        print(f'  {command[0]} not on PATH; run `{" ".join([*command, *args])}`')
+        log.info('  %s not on PATH; run `%s`', command[0], ' '.join([*command, *args]))
         return
     subprocess.run([exe, *command[1:], *args], check=False)
 

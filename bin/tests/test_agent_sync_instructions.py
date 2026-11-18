@@ -25,7 +25,7 @@ from jsonc import strip_jsonc
 
 
 @pytest.fixture(autouse=True)
-def _live_run(monkeypatch) -> None:
+def _live_run(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(common.CONFIG, 'dry_run', False)
 
 
@@ -116,7 +116,7 @@ def test_sync_is_idempotent(target: Path) -> None:
     assert target.read_text() == before
 
 
-def test_sync_reports_edit_as_changed(target: Path, capsys) -> None:
+def test_sync_reports_edit_as_changed(target: Path, capsys: pytest.CaptureFixture[str]) -> None:
     cli = {'path': str(target)}
     sync_instructions('opencode', cli, catalog(), [])
     capsys.readouterr()

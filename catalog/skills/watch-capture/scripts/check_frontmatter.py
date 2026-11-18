@@ -101,7 +101,11 @@ def check(kind: str, frontmatter: Mapping[str, Any], schema: Mapping[str, Any]) 
     for key, value in frontmatter.items():
         if key in fields:
             problems.extend(_check_value(key, value, fields[key]))
-    if kind == 'watch' and frontmatter.get('bracelet_links') is not None and frontmatter.get('strap_type') != 'bracelet':
+    if (
+        kind == 'watch'
+        and frontmatter.get('bracelet_links') is not None
+        and frontmatter.get('strap_type') != 'bracelet'
+    ):
         problems.append('bracelet_links: set only when strap_type is bracelet')
     return problems
 
@@ -118,7 +122,13 @@ def render_template(kind: str, schema: Mapping[str, Any]) -> str:
     """The template frontmatter: MCP-owned keys, then the schema keys in order (defaults or null)."""
     spec = _kind(schema, kind)
     defaults = spec.get('defaults', {})
-    lines = ['---', f'type: {kind}', 'status: active', 'created: "{{date:YYYY-MM-DD}}"', 'updated: "{{date:YYYY-MM-DD}}"']
+    lines = [
+        '---',
+        f'type: {kind}',
+        'status: active',
+        'created: "{{date:YYYY-MM-DD}}"',
+        'updated: "{{date:YYYY-MM-DD}}"',
+    ]
     lines += [f'{key}:{_yaml_scalar(defaults.get(key))}' for key in spec['order']]
     lines += ['tags: []', 'related: []', 'source: []', 'qmd:', '  metadata:', f'    type: {kind}', '    status: active']
     lines += ['    tags: []', '---']

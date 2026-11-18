@@ -9,9 +9,13 @@ Run with: uv run --with pytest pytest bin/tests/test_agent_update_engine.py
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 import sys
 import tomllib
+from collections.abc import Sequence
 from pathlib import Path
+from types import ModuleType
+from typing import Any, NoReturn
 
 import pytest
 from agentsync.common import build_context
@@ -26,20 +30,21 @@ def of[T](updates: tuple[object, ...], kind: type[T]) -> tuple[T, ...]:
     return tuple(u for u in updates if isinstance(u, kind))
 
 
-def load():
+def load() -> ModuleType:
     spec = importlib.util.spec_from_file_location('agent_update', BIN / 'agent_update.py')
-    module = importlib.util.module_from_spec(spec)
+    assert spec is not None
     assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
     sys.modules['agent_update'] = module  # @dataclass resolves its module by name
     spec.loader.exec_module(module)
     return module
 
 
 @pytest.fixture
-def up(monkeypatch):
+def up(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     module = load()
 
-    def no_real_run(cmd, **kw):
+    def no_real_run(cmd: Sequence[str], **kw: Any) -> NoReturn:
         raise AssertionError(f'test reached a real subprocess: {cmd}')
 
     # A test that needs subprocess.run (resync) patches it again itself.
@@ -47,18 +52,18 @@ def up(monkeypatch):
     return module
 
 
-def record_resync(up, monkeypatch, ok: bool = True) -> list:
+def record_resync(up: ModuleType, monkeypatch: pytest.MonkeyPatch, ok: bool = True) -> list:
     """Patch ``resync``; the returned list grows by one per re-sync."""
     runs: list = []
     monkeypatch.setattr(up, 'resync', lambda: runs.append(1) or ok)
     return runs
 
 
-def fake_sh(up, monkeypatch, responses: dict[str, tuple[int, str, str]]) -> list:
+def fake_sh(up: ModuleType, monkeypatch: pytest.MonkeyPatch, responses: dict[str, tuple[int, str, str]]) -> list:
     """Patch ``sh``: the first key found in the joined argv picks the result."""
     calls: list = []
 
-    def sh(cmd, cwd=None):
+    def sh(cmd: Sequence[str], cwd: str | None = None) -> subprocess.CompletedProcess[str]:
         calls.append((list(cmd), cwd))
         line = ' '.join(cmd)
         for key, (rc, out, err) in responses.items():
@@ -87,12 +92,12 @@ def git_pkg(path: Path) -> dict:
     return {'manager': 'git', 'repo': 'o/x', 'path': str(path)}
 
 
-def server(up, pkg: dict, ctx: dict | None = None, name: str = 'x'):
+def server(up: ModuleType, pkg: dict, ctx: dict | None = None, name: str = 'x') -> Any:
     """The catalog ``Server`` for ``pkg``, resolved through ``ctx``."""
     return up.Server.from_catalog(name, Path(f'{name}.toml'), pkg, {} if ctx is None else ctx)
 
 
-def at(up, path: Path, build: list[list[str]] | None = None, name: str = 'x'):
+def at(up: ModuleType, path: Path, build: list[list[str]] | None = None, name: str = 'x') -> Any:
     """A ``Server`` checked out at ``path`` with ``build`` steps (apply-side records)."""
     return up.Server(name, Path(f'{name}.toml'), {}, str(path), tuple(map(tuple, build or [])))
 
@@ -100,7 +105,7 @@ def at(up, path: Path, build: list[list[str]] | None = None, name: str = 'x'):
 # --------------------------------------------------------------------------- #
 # M4: re-sync goes through bash and reports failure
 # --------------------------------------------------------------------------- #
-def test_resync_runs_agent_sync_through_bash(up, monkeypatch):
+def test_resync_runs_agent_sync_through_bash(up: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
     seen = []
     monkeypatch.setattr(
         up.subprocess, 'run', lambda cmd, **kw: seen.append(cmd) or up.subprocess.CompletedProcess(cmd, 0)
@@ -111,7 +116,7 @@ def test_resync_runs_agent_sync_through_bash(up, monkeypatch):
     assert Path(cmd[1]) == REPO / 'bin' / 'agent-sync'
 
 
-def test_resync_failure_is_an_apply_failure(up, monkeypatch, tmp_path):
+def test_resync_failure_is_an_apply_failure(up: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     cat = tmp_path / 'x.toml'
     cat.write_text('[package]\nref = "1.0"\n')
     monkeypatch.setattr(up.subprocess, 'run', lambda cmd, **kw: up.subprocess.CompletedProcess(cmd, 2))
@@ -123,13 +128,13 @@ def test_resync_failure_is_an_apply_failure(up, monkeypatch, tmp_path):
 # --------------------------------------------------------------------------- #
 # M5: footer counts uv-project bumps
 # --------------------------------------------------------------------------- #
-def test_footer_counts_uv_project_bumps(up, tmp_path):
+def test_footer_counts_uv_project_bumps(up: ModuleType, tmp_path: Path) -> None:
     plan = up.Plan(updates=(up.ProjectBump(up.Server('x', tmp_path / 'x.toml', {}, str(tmp_path)), 'v1', 'v2'),))
     assert 'apply' in up.report_footer(plan, fetched=True)
     assert up.report_footer(up.Plan(), fetched=True) == 'everything is current'
 
 
-def test_footer_with_no_fetch_does_not_claim_current(up):
+def test_footer_with_no_fetch_does_not_claim_current(up: ModuleType) -> None:
     footer = up.report_footer(up.Plan(), fetched=False)
     assert footer == 'nothing pending (remotes not checked: --no-fetch)'
     assert 'current' not in footer
@@ -138,34 +143,36 @@ def test_footer_with_no_fetch_does_not_claim_current(up):
 # --------------------------------------------------------------------------- #
 # --apply re-syncs whenever something was applied
 # --------------------------------------------------------------------------- #
-def test_successful_pull_triggers_resync(up, monkeypatch, tmp_path):
+def test_successful_pull_triggers_resync(up: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     fake_sh(up, monkeypatch, {'pull': (0, 'Fast-forward\n', '')})
     runs = record_resync(up, monkeypatch)
     assert up.apply_updates(up.Plan(updates=(up.Pull(at(up, tmp_path), 'main'),))) == []
     assert runs == [1]
 
 
-def test_uv_tool_upgrade_triggers_resync(up, monkeypatch):
+def test_uv_tool_upgrade_triggers_resync(up: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
     fake_sh(up, monkeypatch, {'upgrade': (0, 'Updated t\n', '')})
     runs = record_resync(up, monkeypatch)
     assert up.apply_updates(up.Plan(updates=(up.UvUpgrade('t'),))) == []
     assert runs == [1]
 
 
-def test_nothing_applied_skips_resync(up, monkeypatch):
+def test_nothing_applied_skips_resync(up: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
     runs = record_resync(up, monkeypatch)
     assert up.apply_updates(up.Plan()) == []
     assert runs == []
 
 
-def test_only_failed_steps_skip_resync(up, monkeypatch):
+def test_only_failed_steps_skip_resync(up: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
     fake_sh(up, monkeypatch, {'upgrade': (1, '', 'boom\n')})
     runs = record_resync(up, monkeypatch)
     assert up.apply_updates(up.Plan(updates=(up.UvUpgrade('t'),))) == ['uv tool upgrade t: boom']
     assert runs == []
 
 
-def test_resync_failure_after_pull_is_a_failure(up, monkeypatch, tmp_path):
+def test_resync_failure_after_pull_is_a_failure(
+    up: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     fake_sh(up, monkeypatch, {'pull': (0, 'Fast-forward\n', '')})
     record_resync(up, monkeypatch, ok=False)
     failures = up.apply_updates(up.Plan(updates=(up.Pull(at(up, tmp_path), 'main'),)))
@@ -175,7 +182,7 @@ def test_resync_failure_after_pull_is_a_failure(up, monkeypatch, tmp_path):
 # --------------------------------------------------------------------------- #
 # M6: a failed fetch is reported, never "up to date"
 # --------------------------------------------------------------------------- #
-def test_failed_fetch_is_reported(up, monkeypatch, tmp_path):
+def test_failed_fetch_is_reported(up: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     fake_sh(
         up, monkeypatch, repo_responses(**{'fetch --quiet': (128, '', 'fatal: could not read from remote\nmore\n')})
     )
@@ -188,7 +195,7 @@ def test_failed_fetch_is_reported(up, monkeypatch, tmp_path):
 # --------------------------------------------------------------------------- #
 # L4: apply failures are collected
 # --------------------------------------------------------------------------- #
-def test_clone_and_pull_failures_are_collected(up, monkeypatch, tmp_path):
+def test_clone_and_pull_failures_are_collected(up: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     fake_sh(up, monkeypatch, {'clone': (128, '', 'Permission denied\n'), 'pull': (1, '', 'not ff\n')})
     clone = up.Clone(up.Server('a', Path('a.toml'), {'repo': 'o/a'}, str(tmp_path / 'a')))
     plan = up.Plan(updates=(clone, up.Pull(at(up, tmp_path, name='b'), 'main')))
@@ -197,7 +204,7 @@ def test_clone_and_pull_failures_are_collected(up, monkeypatch, tmp_path):
     assert any('Permission denied' in f for f in failures)
 
 
-def test_uv_lock_failure_is_collected(up, monkeypatch, tmp_path):
+def test_uv_lock_failure_is_collected(up: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     fake_sh(up, monkeypatch, {'lock': (2, '', 'resolution failed\n')})
     proj = tmp_path / 'proj'
     proj.mkdir()
@@ -209,7 +216,7 @@ def test_uv_lock_failure_is_collected(up, monkeypatch, tmp_path):
     assert any('resolution failed' in f for f in failures)
 
 
-def test_uv_tool_upgrade_failure_is_collected(up, monkeypatch):
+def test_uv_tool_upgrade_failure_is_collected(up: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
     fake_sh(up, monkeypatch, {'upgrade': (1, '', 'boom\n')})
     assert up.apply_updates(up.Plan(updates=(up.UvUpgrade('t'),))) == ['uv tool upgrade t: boom']
 
@@ -217,20 +224,20 @@ def test_uv_tool_upgrade_failure_is_collected(up, monkeypatch):
 # --------------------------------------------------------------------------- #
 # L5: build steps run after a clone or pull
 # --------------------------------------------------------------------------- #
-def test_build_steps_accept_argv_lists_and_strings(up):
+def test_build_steps_accept_argv_lists_and_strings(up: ModuleType) -> None:
     ctx = {'commands': {'npm': ['cmd', '/c', 'npm']}}
     pkg = {'build': [['npm', 'ci'], 'npm run build']}
     assert up.build_steps(pkg, ctx) == (('cmd', '/c', 'npm', 'ci'), ('cmd', '/c', 'npm', 'run', 'build'))
     assert up.build_steps({}, ctx) == ()
 
 
-def test_build_npm_honours_local_commands_mapping(up):
+def test_build_npm_honours_local_commands_mapping(up: ModuleType) -> None:
     ctx = build_context({'commands': {'npm': ['C:/node/npm.cmd', '--no-fund']}})
     steps = up.build_steps({'build': [['npm', 'ci']]}, ctx)
     assert steps == (('C:/node/npm.cmd', '--no-fund', 'ci'),)
 
 
-def test_unmapped_npm_resolves_through_which(up, monkeypatch, tmp_path):
+def test_unmapped_npm_resolves_through_which(up: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     shim = r'C:\Program Files\nodejs\npm.cmd'
     monkeypatch.setattr(up.shutil, 'which', lambda name, path=None: shim if name == 'npm' else None)
     seen = []
@@ -243,12 +250,12 @@ def test_unmapped_npm_resolves_through_which(up, monkeypatch, tmp_path):
     assert seen == [[shim, 'ci']]
 
 
-def test_build_steps_reject_bad_shape(up):
+def test_build_steps_reject_bad_shape(up: ModuleType) -> None:
     with pytest.raises(ValueError, match='build'):
         up.build_steps({'build': [3]}, {'commands': {}})
 
 
-def test_clone_then_build_in_package_path(up, monkeypatch, tmp_path):
+def test_clone_then_build_in_package_path(up: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     marker = tmp_path / 'marker'
     calls = fake_sh(
         up,
@@ -269,7 +276,7 @@ def test_clone_then_build_in_package_path(up, monkeypatch, tmp_path):
     assert marker.read_text().strip() == 'abc123'
 
 
-def test_build_after_pull_and_failure_counts(up, monkeypatch, tmp_path):
+def test_build_after_pull_and_failure_counts(up: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     calls = fake_sh(up, monkeypatch, {'pull': (0, 'Fast-forward\n', ''), 'npm': (1, '', 'ERR! missing\n')})
     record_resync(up, monkeypatch)
     plan = up.Plan(updates=(up.Pull(at(up, tmp_path, [['npm', 'ci'], ['npm', 'run', 'build']]), 'main'),))
@@ -278,7 +285,7 @@ def test_build_after_pull_and_failure_counts(up, monkeypatch, tmp_path):
     assert (['npm', 'run', 'build'], str(tmp_path)) not in calls  # stops at the first failing step
 
 
-def test_no_build_when_clone_fails(up, monkeypatch, tmp_path):
+def test_no_build_when_clone_fails(up: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     calls = fake_sh(up, monkeypatch, {'clone': (128, '', 'denied\n')})
     dest = up.Server('x', Path('x.toml'), {'repo': 'o/x'}, str(tmp_path / 'x'), (('npm', 'ci'),))
     plan = up.Plan(updates=(up.Clone(dest),))
@@ -286,7 +293,7 @@ def test_no_build_when_clone_fails(up, monkeypatch, tmp_path):
     assert not any(cmd[0] == 'npm' for cmd, _ in calls)
 
 
-def test_spotify_catalog_declares_build():
+def test_spotify_catalog_declares_build() -> None:
     pkg = tomllib.loads((REPO / 'catalog' / 'mcp' / 'spotify.toml').read_text())['package']
     assert pkg['build'] == [['npm', 'ci'], ['npm', 'run', 'build']]
 
@@ -294,7 +301,7 @@ def test_spotify_catalog_declares_build():
 # --------------------------------------------------------------------------- #
 # L6: an up-to-date tag pin is not manual work
 # --------------------------------------------------------------------------- #
-def test_current_tag_pin_is_not_queued(up, monkeypatch, tmp_path):
+def test_current_tag_pin_is_not_queued(up: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     fake_sh(
         up,
         monkeypatch,
@@ -311,7 +318,7 @@ def test_current_tag_pin_is_not_queued(up, monkeypatch, tmp_path):
     assert of(status.updates, up.Manual) == ()
 
 
-def test_stale_tag_pin_is_queued(up, monkeypatch, tmp_path):
+def test_stale_tag_pin_is_queued(up: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     fake_sh(
         up,
         monkeypatch,
@@ -328,7 +335,7 @@ def test_stale_tag_pin_is_queued(up, monkeypatch, tmp_path):
     assert status.updates[0].server.checkout == str(tmp_path)
 
 
-def test_no_fetch_tag_pin_skips_ls_remote(up, monkeypatch, tmp_path):
+def test_no_fetch_tag_pin_skips_ls_remote(up: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     calls = fake_sh(
         up,
         monkeypatch,
@@ -345,7 +352,9 @@ def test_no_fetch_tag_pin_skips_ls_remote(up, monkeypatch, tmp_path):
     assert not up.Plan(updates=status.updates).pending()
 
 
-def test_failed_ls_remote_is_an_error_not_up_to_date(up, monkeypatch, tmp_path):
+def test_failed_ls_remote_is_an_error_not_up_to_date(
+    up: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     fake_sh(
         up,
         monkeypatch,
@@ -362,7 +371,9 @@ def test_failed_ls_remote_is_an_error_not_up_to_date(up, monkeypatch, tmp_path):
     assert 'up to date' not in status.text
 
 
-def test_full_clone_at_current_tag_compares_tags_not_origin_head(up, monkeypatch, tmp_path):
+def test_full_clone_at_current_tag_compares_tags_not_origin_head(
+    up: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     fake_sh(
         up,
         monkeypatch,
@@ -382,7 +393,9 @@ def test_full_clone_at_current_tag_compares_tags_not_origin_head(up, monkeypatch
     assert not up.Plan(updates=status.updates).pending()
 
 
-def test_full_clone_at_stale_tag_reports_newer_tag(up, monkeypatch, tmp_path):
+def test_full_clone_at_stale_tag_reports_newer_tag(
+    up: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     fake_sh(
         up,
         monkeypatch,
@@ -401,7 +414,9 @@ def test_full_clone_at_stale_tag_reports_newer_tag(up, monkeypatch, tmp_path):
     assert status.updates == (up.Manual(server(up, git_pkg(tmp_path))),)
 
 
-def test_detached_off_tag_still_compares_to_origin_head(up, monkeypatch, tmp_path):
+def test_detached_off_tag_still_compares_to_origin_head(
+    up: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     fake_sh(
         up,
         monkeypatch,
@@ -422,7 +437,7 @@ def test_detached_off_tag_still_compares_to_origin_head(up, monkeypatch, tmp_pat
 # --------------------------------------------------------------------------- #
 # L7: --no-fetch does not claim a uv project is current
 # --------------------------------------------------------------------------- #
-def test_uv_project_no_fetch_is_not_checked(up, monkeypatch, tmp_path):
+def test_uv_project_no_fetch_is_not_checked(up: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     calls = fake_sh(up, monkeypatch, {})
     pkg = {'manager': 'uv-project', 'repo': 'o/x', 'ref': 'v1', 'path': str(tmp_path)}
     status = up.uv_project_status(server(up, pkg), up.Check(fetch=False))
@@ -433,13 +448,13 @@ def test_uv_project_no_fetch_is_not_checked(up, monkeypatch, tmp_path):
 # --------------------------------------------------------------------------- #
 # L8: manual packages
 # --------------------------------------------------------------------------- #
-def test_manual_manager_is_reported(up):
+def test_manual_manager_is_reported(up: ModuleType) -> None:
     status = up.server_status(server(up, {'manager': 'manual'}, name='s'), up.Check(fetch=False))
     assert status == up.Status('manual (not tracked)')
     assert status.updates == ()
 
 
-def test_solidcraft_catalog_is_manual():
+def test_solidcraft_catalog_is_manual() -> None:
     raw = tomllib.loads((REPO / 'catalog' / 'mcp' / 'solidcraft.toml').read_text())
     assert raw['package']['manager'] == 'manual'
 
@@ -447,7 +462,7 @@ def test_solidcraft_catalog_is_manual():
 # --------------------------------------------------------------------------- #
 # L9: warn when a clone is off its remote default branch
 # --------------------------------------------------------------------------- #
-def test_off_default_branch_is_flagged(up, monkeypatch, tmp_path):
+def test_off_default_branch_is_flagged(up: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     fake_sh(
         up,
         monkeypatch,
@@ -459,7 +474,7 @@ def test_off_default_branch_is_flagged(up, monkeypatch, tmp_path):
     assert 'on feat/idea-type, not main' in status.text
 
 
-def test_default_branch_is_not_flagged(up, monkeypatch, tmp_path):
+def test_default_branch_is_not_flagged(up: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     fake_sh(up, monkeypatch, repo_responses())
     status = up.git_status(server(up, git_pkg(tmp_path)), up.Check(fetch=True))
     assert status == up.Status('main up to date')
@@ -481,7 +496,7 @@ def build_pkg(path: Path) -> dict:
     return {**git_pkg(path), 'build': [['npm', 'ci']]}
 
 
-def test_missing_build_marker_plans_build(up, monkeypatch, tmp_path):
+def test_missing_build_marker_plans_build(up: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     fake_sh(up, monkeypatch, built_repo(tmp_path, None))
     srv = server(up, build_pkg(tmp_path), {'commands': {}})
     status = up.git_status(srv, up.Check(fetch=True))
@@ -491,13 +506,13 @@ def test_missing_build_marker_plans_build(up, monkeypatch, tmp_path):
     assert up.Plan(updates=status.updates).pending()
 
 
-def test_stale_build_marker_plans_build(up, monkeypatch, tmp_path):
+def test_stale_build_marker_plans_build(up: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     fake_sh(up, monkeypatch, built_repo(tmp_path, 'old999'))
     srv = server(up, build_pkg(tmp_path), {'commands': {}})
     assert up.git_status(srv, up.Check(fetch=True)).updates == (up.Rebuild(srv),)
 
 
-def test_current_build_marker_plans_nothing(up, monkeypatch, tmp_path):
+def test_current_build_marker_plans_nothing(up: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     fake_sh(up, monkeypatch, built_repo(tmp_path, 'abc123'))
     status = up.git_status(server(up, build_pkg(tmp_path), {'commands': {}}), up.Check(fetch=True))
     assert status.text == 'main up to date'
@@ -505,13 +520,13 @@ def test_current_build_marker_plans_nothing(up, monkeypatch, tmp_path):
     assert not up.Plan(updates=status.updates).pending()
 
 
-def test_no_build_steps_never_checks_marker(up, monkeypatch, tmp_path):
+def test_no_build_steps_never_checks_marker(up: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     calls = fake_sh(up, monkeypatch, built_repo(tmp_path, None))
     assert up.git_status(server(up, git_pkg(tmp_path)), up.Check(fetch=True)).text == 'main up to date'
     assert not any('--git-path' in ' '.join(cmd) for cmd, _ in calls)
 
 
-def test_pending_build_runs_and_records_marker(up, monkeypatch, tmp_path):
+def test_pending_build_runs_and_records_marker(up: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     calls = fake_sh(up, monkeypatch, {**built_repo(tmp_path, None), 'npm': (0, 'ok\n', '')})
     record_resync(up, monkeypatch)
     plan = up.Plan(updates=(up.Rebuild(at(up, tmp_path, [['npm', 'ci']])),))
@@ -520,14 +535,16 @@ def test_pending_build_runs_and_records_marker(up, monkeypatch, tmp_path):
     assert (tmp_path / '.git' / 'agent-update-build').read_text().strip() == 'abc123'
 
 
-def test_failed_build_leaves_no_marker(up, monkeypatch, tmp_path):
+def test_failed_build_leaves_no_marker(up: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     fake_sh(up, monkeypatch, {**built_repo(tmp_path, None), 'npm': (1, '', 'ERR!\n')})
     plan = up.Plan(updates=(up.Rebuild(at(up, tmp_path, [['npm', 'ci']])),))
     assert up.apply_updates(plan) == ['x: build `npm ci` failed: ERR!']
     assert not (tmp_path / '.git' / 'agent-update-build').exists()
 
 
-def test_build_is_not_planned_twice_when_pulling(up, monkeypatch, tmp_path):
+def test_build_is_not_planned_twice_when_pulling(
+    up: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     fake_sh(up, monkeypatch, {**built_repo(tmp_path, None), 'rev-list --count': (0, '2\n', '')})
     srv = server(up, build_pkg(tmp_path), {'commands': {}})
     plan = up.Plan(updates=up.git_status(srv, up.Check(fetch=True)).updates)
@@ -539,7 +556,7 @@ def test_build_is_not_planned_twice_when_pulling(up, monkeypatch, tmp_path):
 # --------------------------------------------------------------------------- #
 # resync: pick Git Bash on Windows, record a missing bash as a failure
 # --------------------------------------------------------------------------- #
-def test_find_bash_prefers_git_bash_on_windows(up, monkeypatch, tmp_path):
+def test_find_bash_prefers_git_bash_on_windows(up: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     git = tmp_path / 'Git' / 'cmd' / 'git.exe'
     bash = tmp_path / 'Git' / 'bin' / 'bash.exe'
     for f in (git, bash):
@@ -551,7 +568,7 @@ def test_find_bash_prefers_git_bash_on_windows(up, monkeypatch, tmp_path):
     assert up.find_bash(windows=True) == str(bash)
 
 
-def test_find_bash_skips_wsl_and_store_stubs(up, monkeypatch, tmp_path):
+def test_find_bash_skips_wsl_and_store_stubs(up: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     sys32 = tmp_path / 'Windows' / 'System32'
     apps = tmp_path / 'AppData' / 'Local' / 'Microsoft' / 'WindowsApps'
     good = tmp_path / 'msys' / 'usr' / 'bin'
@@ -563,13 +580,15 @@ def test_find_bash_skips_wsl_and_store_stubs(up, monkeypatch, tmp_path):
     assert up.find_bash(windows=True) == str(good / 'bash.exe')
 
 
-def test_find_bash_on_posix_uses_path(up, monkeypatch):
+def test_find_bash_on_posix_uses_path(up: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(up.shutil, 'which', lambda name, path=None: '/bin/bash' if name == 'bash' else None)
     assert up.find_bash(windows=False) == '/bin/bash'
 
 
-def test_resync_without_bash_is_a_failure_not_a_crash(up, monkeypatch, tmp_path):
-    def boom(cmd, **kw):
+def test_resync_without_bash_is_a_failure_not_a_crash(
+    up: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    def boom(cmd: Sequence[str], **kw: Any) -> NoReturn:
         raise FileNotFoundError(2, 'not found', cmd[0])
 
     monkeypatch.setattr(up.subprocess, 'run', boom)
@@ -580,7 +599,7 @@ def test_resync_without_bash_is_a_failure_not_a_crash(up, monkeypatch, tmp_path)
     assert any('agent-sync' in f for f in failures)
 
 
-def test_uv_argv_prefers_env_then_commands_then_path(up, monkeypatch):
+def test_uv_argv_prefers_env_then_commands_then_path(up: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv('UV', raising=False)
     assert up.uv_argv({'commands': {}}) == ['uv']
     assert up.uv_argv({'commands': {'uv': 'C:/bin/uv.exe'}}) == ['C:/bin/uv.exe']
@@ -589,7 +608,7 @@ def test_uv_argv_prefers_env_then_commands_then_path(up, monkeypatch):
     assert up.uv_argv({'commands': {'uv': 'C:/bin/uv.exe'}}) == ['/env/uv']
 
 
-def test_uv_tool_upgrade_uses_check_uv(up, monkeypatch):
+def test_uv_tool_upgrade_uses_check_uv(up: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
     calls = fake_sh(up, monkeypatch, {'upgrade': (0, 'Updated t\n', '')})
     record_resync(up, monkeypatch)
     check = up.Check(fetch=False, outdated={'t': ('1', '2')}, uv=('C:/bin/uv.exe',))
@@ -598,7 +617,7 @@ def test_uv_tool_upgrade_uses_check_uv(up, monkeypatch):
     assert calls[0][0] == ['C:/bin/uv.exe', 'tool', 'upgrade', 't']
 
 
-def test_uv_outdated_uses_given_uv(up, monkeypatch):
+def test_uv_outdated_uses_given_uv(up: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
     calls = fake_sh(up, monkeypatch, {'outdated': (0, 'ruff v0.1.0 [latest: 0.2.0]\n', '')})
     assert up.uv_outdated(['C:/bin/uv.exe']) == {'ruff': ('0.1.0', '0.2.0')}
     assert calls[0][0] == ['C:/bin/uv.exe', 'tool', 'list', '--outdated']
@@ -607,7 +626,7 @@ def test_uv_outdated_uses_given_uv(up, monkeypatch):
 # --------------------------------------------------------------------------- #
 # Server, the manager dispatch table and the plan's apply order
 # --------------------------------------------------------------------------- #
-def test_server_resolves_path_and_build_once(up):
+def test_server_resolves_path_and_build_once(up: ModuleType) -> None:
     ctx = {'AGENT_HOME': '/agents', 'commands': {'npm': ['cmd', '/c', 'npm']}}
     pkg = {'manager': 'git', 'repo': 'o/x', 'path': '${AGENT_HOME}/vendor/x', 'build': [['npm', 'ci']]}
     srv = up.Server.from_catalog('x', Path('x.toml'), pkg, ctx)
@@ -616,7 +635,7 @@ def test_server_resolves_path_and_build_once(up):
     assert (srv.manager, srv.repo) == ('git', 'o/x')
 
 
-def test_server_is_hashable_and_pkg_read_only(up):
+def test_server_is_hashable_and_pkg_read_only(up: ModuleType) -> None:
     pkg = {'manager': 'git', 'repo': 'o/x'}
     srv = up.Server.from_catalog('x', Path('x.toml'), pkg, {})
     assert hash(up.Pull(srv, 'main')) == hash(up.Pull(srv, 'main'))
@@ -626,32 +645,32 @@ def test_server_is_hashable_and_pkg_read_only(up):
         srv.pkg['repo'] = 'o/z'
 
 
-def test_build_steps_are_only_read_for_git(up):
+def test_build_steps_are_only_read_for_git(up: ModuleType) -> None:
     srv = up.Server.from_catalog('x', Path('x.toml'), {'manager': 'npm', 'build': [3]}, {})
     assert srv.build == ()
 
 
-def test_every_documented_manager_is_dispatched(up):
+def test_every_documented_manager_is_dispatched(up: ModuleType) -> None:
     assert set(up.STATUS) == {'npm', 'uv-tool', 'git', 'uv-project', 'source', 'remote', 'manual'}
     check = up.Check(fetch=False)
     assert up.server_status(server(up, {'manager': 'source'}), check).text == 'local source (always current)'
     assert up.server_status(server(up, {'manager': 'remote'}), check).text == 'remote (hosted)'
 
 
-def test_unknown_manager_is_reported_not_tracked(up):
+def test_unknown_manager_is_reported_not_tracked(up: ModuleType) -> None:
     status = up.server_status(server(up, {'manager': 'brew'}), up.Check(fetch=False))
     assert status == up.Status("unknown manager 'brew' (not tracked)")
     assert up.server_status(server(up, {}), up.Check(fetch=False)).text == "unknown manager '?' (not tracked)"
 
 
-def test_uv_tool_status_queues_upgrade_from_outdated_map(up):
+def test_uv_tool_status_queues_upgrade_from_outdated_map(up: ModuleType) -> None:
     check = up.Check(fetch=False, outdated={'ruff': ('0.1.0', '0.2.0')})
     status = up.uv_tool_status(server(up, {'manager': 'uv-tool', 'name': 'ruff'}), check)
     assert status == up.Status('0.1.0 -> 0.2.0', (up.UvUpgrade('ruff'),))
     assert up.uv_tool_status(server(up, {'manager': 'uv-tool', 'name': 'ty'}), check) == up.Status('up to date')
 
 
-def test_pinned_npm_queues_catalog_bump(up, monkeypatch):
+def test_pinned_npm_queues_catalog_bump(up: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
     fake_sh(up, monkeypatch, {'dist-tags.1.0.0': (0, '1.2.0\n', '')})
     srv = server(up, {'manager': 'npm', 'name': 'pkg', 'ref': '1.0.0'})
     assert up.npm_status(srv, up.Check(fetch=True)) == up.Status(
@@ -659,7 +678,7 @@ def test_pinned_npm_queues_catalog_bump(up, monkeypatch):
     )
 
 
-def test_plan_collects_updates_in_check_order(up, tmp_path):
+def test_plan_collects_updates_in_check_order(up: ModuleType, tmp_path: Path) -> None:
     a, b = at(up, tmp_path, name='a'), at(up, tmp_path, name='b')
     statuses = [up.Status('a', (up.Manual(a),)), up.Status('ok'), up.Status('b', (up.Pull(b, 'main'), up.Manual(b)))]
     plan = up.plan_from(statuses)
@@ -667,7 +686,7 @@ def test_plan_collects_updates_in_check_order(up, tmp_path):
     assert of(plan.updates, up.Manual) == (up.Manual(a), up.Manual(b))
 
 
-def test_apply_runs_kinds_in_fixed_order(up, monkeypatch, tmp_path):
+def test_apply_runs_kinds_in_fixed_order(up: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     calls = fake_sh(up, monkeypatch, {'pull': (0, 'ok\n', ''), 'clone': (0, '', ''), 'upgrade': (0, 'ok\n', '')})
     record_resync(up, monkeypatch)
     srv = at(up, tmp_path / 'x')

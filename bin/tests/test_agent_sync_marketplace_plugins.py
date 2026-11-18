@@ -6,6 +6,7 @@ Run with: uv run --with pytest pytest bin/tests/test_agent_sync_marketplace_plug
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
@@ -16,19 +17,19 @@ from agentsync.plugins import sync_plugins
 
 
 @pytest.fixture(autouse=True)
-def _live_run(monkeypatch) -> None:
+def _live_run(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(common.CONFIG, 'dry_run', False)
 
 
 @pytest.fixture
-def calls(monkeypatch) -> list:
+def calls(monkeypatch: pytest.MonkeyPatch) -> list:
     """Record CLI reconcile calls instead of running `claude plugin`."""
     recorded: list = []
     monkeypatch.setattr(marketplace, 'run_plugin_cli', lambda cli, args: recorded.append(args))
     return recorded
 
 
-def plugin(name: str, market: str, repo: str, clients=('claude-code',)) -> dict:
+def plugin(name: str, market: str, repo: str, clients: Sequence[str] = ('claude-code',)) -> dict:
     return {
         'name': name,
         'clients': list(clients),
@@ -47,7 +48,7 @@ def test_marketplace_arg() -> None:
     assert marketplace_arg({'source': 'directory', 'path': '/m'}) == '/m'
 
 
-def test_merge_enables_and_registers_keeping_other_keys(calls, tmp_path: Path) -> None:
+def test_merge_enables_and_registers_keeping_other_keys(calls: list, tmp_path: Path) -> None:
     target = tmp_path / 'settings.json'
     target.write_text(json.dumps({'model': 'opus', 'enabledPlugins': {'mine@hand': True}}))
     catalog = {'caveman': plugin('caveman', 'caveman', 'JuliusBrussee/caveman')}
@@ -65,7 +66,7 @@ def test_merge_enables_and_registers_keeping_other_keys(calls, tmp_path: Path) -
     assert calls == []
 
 
-def test_other_clients_and_ts_plugins_ignored(calls, tmp_path: Path) -> None:
+def test_other_clients_and_ts_plugins_ignored(calls: list, tmp_path: Path) -> None:
     target = tmp_path / 'settings.json'
     ts = {'name': 'python-clean', 'clients': ['opencode'], 'source': Path('x.ts')}
     other = plugin('x', 'm', 'u/x', clients=('opencode',))
@@ -73,7 +74,7 @@ def test_other_clients_and_ts_plugins_ignored(calls, tmp_path: Path) -> None:
     assert calls == []
 
 
-def test_retired_plugin_uninstalled_and_orphan_marketplace_pruned(calls, tmp_path: Path) -> None:
+def test_retired_plugin_uninstalled_and_orphan_marketplace_pruned(calls: list, tmp_path: Path) -> None:
     target = tmp_path / 'settings.json'
     target.write_text(
         json.dumps(
@@ -100,7 +101,7 @@ def test_retired_plugin_uninstalled_and_orphan_marketplace_pruned(calls, tmp_pat
     assert ['marketplace', 'remove', 'old-name'] in calls
 
 
-def test_dry_run_writes_nothing(calls, tmp_path: Path) -> None:
+def test_dry_run_writes_nothing(calls: list, tmp_path: Path) -> None:
     target = tmp_path / 'settings.json'
     target.write_text('{}')
     common.CONFIG.dry_run = True
@@ -110,7 +111,7 @@ def test_dry_run_writes_nothing(calls, tmp_path: Path) -> None:
     assert calls == []
 
 
-def test_load_plugins_reads_marketplace_entries(tmp_path: Path, monkeypatch) -> None:
+def test_load_plugins_reads_marketplace_entries(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     (tmp_path / 'plugins').mkdir()
     (tmp_path / 'plugins' / 'caveman.toml').write_text(
         'name = "caveman"\nclients = ["claude-code"]\nplugin = "caveman@caveman"\n'
@@ -122,7 +123,7 @@ def test_load_plugins_reads_marketplace_entries(tmp_path: Path, monkeypatch) -> 
     assert loaded['marketplace'] == {'source': 'github', 'repo': 'JuliusBrussee/caveman'}
 
 
-def test_options_merge_into_plugin_configs(calls, tmp_path: Path) -> None:
+def test_options_merge_into_plugin_configs(calls: list, tmp_path: Path) -> None:
     target = tmp_path / 'settings.json'
     target.write_text(
         json.dumps(
@@ -144,7 +145,7 @@ def test_options_merge_into_plugin_configs(calls, tmp_path: Path) -> None:
     assert not sync_plugins('claude-code', cli(target), catalog, [])
 
 
-def test_retired_plugin_drops_its_config(calls, tmp_path: Path) -> None:
+def test_retired_plugin_drops_its_config(calls: list, tmp_path: Path) -> None:
     target = tmp_path / 'settings.json'
     target.write_text(
         json.dumps({'enabledPlugins': {'old@m': True}, 'pluginConfigs': {'old@m': {'options': {'x': 1}}}})
@@ -153,7 +154,7 @@ def test_retired_plugin_drops_its_config(calls, tmp_path: Path) -> None:
     assert 'old@m' not in json.loads(target.read_text())['pluginConfigs']
 
 
-def test_dropped_options_are_removed_from_plugin_configs(calls, tmp_path: Path) -> None:
+def test_dropped_options_are_removed_from_plugin_configs(calls: list, tmp_path: Path) -> None:
     target = tmp_path / 'settings.json'
     target.write_text(
         json.dumps(
@@ -174,7 +175,7 @@ def test_dropped_options_are_removed_from_plugin_configs(calls, tmp_path: Path) 
     assert not sync_plugins('claude-code', cli(target), catalog, [])
 
 
-def test_load_plugins_reads_order(tmp_path: Path, monkeypatch) -> None:
+def test_load_plugins_reads_order(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     (tmp_path / 'plugins').mkdir()
     base = 'clients = ["claude-code"]\n[marketplace]\nsource = "directory"\npath = "/m"\n'
     (tmp_path / 'plugins' / 'a.toml').write_text(f'name = "a"\nplugin = "a@m"\norder = 5\n{base}')
@@ -185,7 +186,7 @@ def test_load_plugins_reads_order(tmp_path: Path, monkeypatch) -> None:
     assert loaded['b']['order'] is None
 
 
-def test_fresh_sync_orders_catalog_plugins_by_order_then_name(calls, tmp_path: Path) -> None:
+def test_fresh_sync_orders_catalog_plugins_by_order_then_name(calls: list, tmp_path: Path) -> None:
     target = tmp_path / 'settings.json'
     target.write_text(json.dumps({'enabledPlugins': {'mine@hand': True}}))
     catalog = {
@@ -198,7 +199,7 @@ def test_fresh_sync_orders_catalog_plugins_by_order_then_name(calls, tmp_path: P
     assert order == ['style@mods', 'mine@hand', 'caveman@caveman', 'sidebar@mods']
 
 
-def test_hand_installed_plugin_keeps_its_position(calls, tmp_path: Path) -> None:
+def test_hand_installed_plugin_keeps_its_position(calls: list, tmp_path: Path) -> None:
     target = tmp_path / 'settings.json'
     target.write_text(
         json.dumps(
@@ -221,7 +222,7 @@ def test_hand_installed_plugin_keeps_its_position(calls, tmp_path: Path) -> None
     assert not sync_plugins('claude-code', cli(target), catalog, [])
 
 
-def test_ranked_plugin_moves_to_front_past_hand_installed(calls, tmp_path: Path) -> None:
+def test_ranked_plugin_moves_to_front_past_hand_installed(calls: list, tmp_path: Path) -> None:
     target = tmp_path / 'settings.json'
     target.write_text(
         json.dumps(
@@ -243,7 +244,7 @@ def test_ranked_plugin_moves_to_front_past_hand_installed(calls, tmp_path: Path)
     assert not sync_plugins('claude-code', cli(target), catalog, ['old'])
 
 
-def test_out_of_order_catalog_plugins_are_reordered(calls, tmp_path: Path) -> None:
+def test_out_of_order_catalog_plugins_are_reordered(calls: list, tmp_path: Path) -> None:
     target = tmp_path / 'settings.json'
     target.write_text(
         json.dumps(
@@ -260,7 +261,7 @@ def test_out_of_order_catalog_plugins_are_reordered(calls, tmp_path: Path) -> No
     assert not sync_plugins('claude-code', cli(target), catalog, [])
 
 
-def test_unordered_catalog_plugins_keep_their_existing_order(calls, tmp_path: Path) -> None:
+def test_unordered_catalog_plugins_keep_their_existing_order(calls: list, tmp_path: Path) -> None:
     target = tmp_path / 'settings.json'
     target.write_text(
         json.dumps(
@@ -274,7 +275,7 @@ def test_unordered_catalog_plugins_keep_their_existing_order(calls, tmp_path: Pa
     assert not sync_plugins('claude-code', cli(target), catalog, [])
 
 
-def test_bad_order_dies(tmp_path: Path, monkeypatch) -> None:
+def test_bad_order_dies(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     (tmp_path / 'plugins').mkdir()
     (tmp_path / 'plugins' / 'a.toml').write_text(
         'name = "a"\nplugin = "a@m"\norder = "first"\nclients = []\n[marketplace]\nsource = "directory"\npath = "/m"\n'
@@ -284,7 +285,7 @@ def test_bad_order_dies(tmp_path: Path, monkeypatch) -> None:
         load_plugins({}, {})
 
 
-def test_real_catalog_loads_style_before_sidebar(calls, tmp_path: Path) -> None:
+def test_real_catalog_loads_style_before_sidebar(calls: list, tmp_path: Path) -> None:
     """mods/README.md: style must sit above other mods to frame their bands."""
     catalog = load_plugins({'AGENT_HOME': str(tmp_path)}, {})
     mods = {n: p for n, p in catalog.items() if n in ('style', 'sidebar')}

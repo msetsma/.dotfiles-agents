@@ -14,11 +14,11 @@ from agentsync.packages import package_id, sync_packages
 
 
 @pytest.fixture(autouse=True)
-def _live_run(monkeypatch) -> None:
+def _live_run(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(common.CONFIG, 'dry_run', False)
 
 
-def pkg(source: str, **filters) -> dict:
+def pkg(source: str, **filters: object) -> dict:
     return {'name': source, 'clients': ['pi'], 'source': source, 'filters': filters}
 
 

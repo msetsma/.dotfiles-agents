@@ -51,6 +51,7 @@ Servers excluded by this machine's ``[profile]`` (catalog/local.toml) are skippe
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import re
 import shlex
@@ -68,8 +69,10 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from agent_profile import is_selected, split_command
 from agentsync.catalog import load_raw
-from agentsync.common import build_context, expand, load_local
+from agentsync.common import attach_console, build_context, expand, load_local
 
+
+log = logging.getLogger(__name__)
 
 REPO = Path(__file__).resolve().parent.parent
 CATALOG = REPO / 'catalog'
@@ -527,10 +530,10 @@ def server_status(server: Server, check: Check) -> Status:
 def print_table(rows: Sequence[tuple[Server, Status]]) -> None:
     width = max((len(server.name) for server, _ in rows), default=6)
     mwidth = max((len(server.manager) for server, _ in rows), default=7)
-    print(f'{"SERVER".ljust(width)}  {"MANAGER".ljust(mwidth)}  STATUS')
-    print(f'{"-" * width}  {"-" * mwidth}  {"-" * 40}')
+    log.info('%s  %s  STATUS', 'SERVER'.ljust(width), 'MANAGER'.ljust(mwidth))
+    log.info('%s  %s  %s', '-' * width, '-' * mwidth, '-' * 40)
     for server, status in rows:
-        print(f'{server.name.ljust(width)}  {server.manager.ljust(mwidth)}  {status.text}')
+        log.info('%s  %s  %s', server.name.ljust(width), server.manager.ljust(mwidth), status.text)
 
 
 # --------------------------------------------------------------------------- #
@@ -567,17 +570,25 @@ def find_bash(windows: bool = os.name == 'nt') -> str | None:
     return git_bash_near_git() or windows_bash_on_path()
 
 
+def run_agent_sync(bash: str) -> int | OSError:
+    """bin/agent-sync's exit code under ``bash``, or the error that stopped it starting."""
+    try:
+        return subprocess.run([bash, str(REPO / 'bin' / 'agent-sync')], check=False).returncode
+    except OSError as e:
+        return e
+
+
 def resync() -> bool:
     """Run bin/agent-sync through bash: Windows cannot exec a bash script directly."""
     bash = find_bash()
     if bash is None:
-        print('  no usable bash found (install Git for Windows)', file=sys.stderr)
+        log.error('  no usable bash found (install Git for Windows)')
         return False
-    try:
-        return subprocess.run([bash, str(REPO / 'bin' / 'agent-sync')], check=False).returncode == 0
-    except OSError as e:
-        print(f'  could not run {bash}: {e}', file=sys.stderr)
+    result = run_agent_sync(bash)
+    if isinstance(result, OSError):
+        log.error('  could not run %s: %s', bash, result)
         return False
+    return result == 0
 
 
 # --------------------------------------------------------------------------- #
@@ -591,7 +602,7 @@ def run_build(server: Server) -> list[str]:
     if not server.build:
         return []
     for argv in server.build:
-        print(f'    build: {" ".join(argv)}')
+        log.info('    build: %s', ' '.join(argv))
         r = sh(argv, cwd=server.checkout)
         if r.returncode != 0:
             return [f'{server.name}: build `{" ".join(argv)}` failed: {why(r)}']
@@ -617,13 +628,13 @@ def step(failures: list[str]) -> Outcome:
 def apply_catalog_bump(bump: CatalogBump) -> Outcome:
     if not rewrite_pin(bump.server.catalog, bump.new):
         return Outcome()
-    print(f'  {bump.server.name}: catalog ref {bump.old} -> {bump.new}')
+    log.info('  %s: catalog ref %s -> %s', bump.server.name, bump.old, bump.new)
     return Outcome(1)
 
 
 def apply_project_bump(bump: ProjectBump) -> Outcome:
     proj = bump.server.checkout
-    print(f'  {bump.server.name}: {bump.old} -> {bump.new} (uv project {proj})')
+    log.info('  %s: %s -> %s (uv project %s)', bump.server.name, bump.old, bump.new, proj)
     py = Path(proj) / 'pyproject.toml'
     py.write_text(py.read_text().replace(f'@{bump.old}#', f'@{bump.new}#'))
     rewrite_pin(bump.server.catalog, bump.new)
@@ -632,42 +643,42 @@ def apply_project_bump(bump: ProjectBump) -> Outcome:
 
 
 def apply_uv_upgrade(upgrade: UvUpgrade) -> Outcome:
-    print(f'  uv tool upgrade {upgrade.tool}')
+    log.info('  uv tool upgrade %s', upgrade.tool)
     r = sh([*upgrade.uv, 'tool', 'upgrade', upgrade.tool])
     if r.returncode != 0:
         return step([f'uv tool upgrade {upgrade.tool}: {why(r)}'])
-    print('    ' + last_line(r.stdout or ''))
+    log.info('    %s', last_line(r.stdout or ''))
     return Outcome(1)
 
 
 def apply_clone(clone: Clone) -> Outcome:
     server = clone.server
-    print(f'  git clone {server.repo} -> {server.checkout}')
+    log.info('  git clone %s -> %s', server.repo, server.checkout)
     Path(server.checkout).parent.mkdir(parents=True, exist_ok=True)
     r = sh(['git', 'clone', '--quiet', f'git@github.com:{server.repo}.git', server.checkout])
     if r.returncode != 0:
         return step([f'{server.name}: git clone failed: {why(r)}'])
-    print('    cloned')
+    log.info('    cloned')
     return Outcome(1, tuple(run_build(server)))
 
 
 def apply_pull(pull: Pull) -> Outcome:
     server = pull.server
-    print(f'  git pull {server.checkout} ({pull.branch})')
+    log.info('  git pull %s (%s)', server.checkout, pull.branch)
     r = sh(['git', '-C', server.checkout, 'pull', '--ff-only'])
     if r.returncode != 0:
         return step([f'{server.name}: git pull failed: {why(r)}'])
-    print('    ' + last_line(r.stdout or ''))
+    log.info('    %s', last_line(r.stdout or ''))
     return Outcome(1, tuple(run_build(server)))
 
 
 def apply_rebuild(rebuild: Rebuild) -> Outcome:
-    print(f'  build {rebuild.server.name} ({rebuild.server.checkout})')
+    log.info('  build %s (%s)', rebuild.server.name, rebuild.server.checkout)
     return step(run_build(rebuild.server))
 
 
 def report_manual(manual: Manual) -> Outcome:
-    print(f'  {manual.server.name}: {manual.server.checkout} has no upstream/branch - update manually')
+    log.info('  %s: %s has no upstream/branch - update manually', manual.server.name, manual.server.checkout)
     return Outcome()
 
 
@@ -702,13 +713,13 @@ def apply_plan(plan: Plan) -> Outcome:
 
 def apply_updates(plan: Plan) -> list[str]:
     """Apply the plan, then re-sync if anything was applied; return one message per failed step."""
-    print('\napplying...')
+    log.info('\napplying...')
     out = apply_plan(plan)
     failures = list(out.failures)
     if not out.applied:
-        print('\nnothing applied; no re-sync needed')
+        log.info('\nnothing applied; no re-sync needed')
         return failures
-    print('\nre-syncing configs...')
+    log.info('\nre-syncing configs...')
     if not resync():
         failures.append('re-sync failed: bin/agent-sync exited nonzero')
     return failures
@@ -741,6 +752,7 @@ def main() -> int:
     ap.add_argument('--apply', action='store_true', help='apply updates (default: report)')
     ap.add_argument('--no-fetch', action='store_true', help='skip git remotes (fetch and tag lookups)')
     args = ap.parse_args()
+    attach_console(log)
 
     local = load_local()
     ctx = build_context(local)
@@ -753,15 +765,15 @@ def main() -> int:
     plan = plan_from(statuses)
 
     if not args.apply:
-        print()
-        print(report_footer(plan, fetched=check.fetch))
+        log.info('')
+        log.info(report_footer(plan, fetched=check.fetch))
         return 0
 
     failures = apply_updates(plan)
     if failures:
-        print(f'\n{len(failures)} step(s) failed:', file=sys.stderr)
+        log.error('\n%d step(s) failed:', len(failures))
         for failure in failures:
-            print(f'  {failure}', file=sys.stderr)
+            log.error('  %s', failure)
         return 1
     return 0
 

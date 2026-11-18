@@ -21,7 +21,7 @@ from agentsync.skills import sync_skills
 
 
 @pytest.fixture(autouse=True)
-def _live_run(monkeypatch) -> None:
+def _live_run(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(common.CONFIG, 'dry_run', False)
 
 
@@ -116,7 +116,7 @@ def test_mcp_override_replaces_clients_and_merges_env() -> None:
 @pytest.mark.parametrize(
     ('command', 'expected'), [('npx', ('npx', [])), (['cmd', '/c', 'npx'], ('cmd', ['/c', 'npx']))]
 )
-def test_split_command(command, expected) -> None:
+def test_split_command(command: str | list[str], expected: tuple[str, list[str]]) -> None:
     assert split_command(command) == expected
 
 
