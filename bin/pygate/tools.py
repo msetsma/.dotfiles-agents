@@ -1,4 +1,4 @@
-"""Locate and run the external checkers (vulture, ty)."""
+"""Locate and run the external programs the gate needs (git, vulture, ty)."""
 
 import logging
 import shutil
@@ -7,12 +7,13 @@ from collections.abc import Sequence
 from pathlib import Path
 
 
-__all__ = ['TOOL_TIMEOUT', 'run_tool', 'tool_argv']
+__all__ = ['TOOL_TIMEOUT', 'run_git', 'run_tool', 'tool_argv']
 
 log = logging.getLogger(__name__)
 
 # Per tool. Two tools plus ruff stay well inside the 90 s hook timeout.
 TOOL_TIMEOUT = 25
+GIT_TIMEOUT = 10
 
 
 def tool_argv(name: str) -> list[str] | None:
@@ -41,3 +42,18 @@ def run_tool(argv: Sequence[str], cwd: Path) -> str | None:
         log.warning('python_gate: %s failed to run: %s', argv[0], exc)
         return None
     return done.stdout
+
+
+def run_git(cwd: Path, *args: str) -> str | None:
+    """`git -C cwd <args>`: its stdout, line endings as git wrote them, on success; else None (a missing git also warns)."""
+    git = shutil.which('git')
+    if git is None:
+        log.warning('python_gate: git not found; checks that need it are skipped')
+        return None
+    try:
+        done = subprocess.run([git, '-C', str(cwd), *args], capture_output=True, timeout=GIT_TIMEOUT, check=False)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        log.warning('python_gate: git failed in %s: %s', cwd, exc)
+        return None
+    # Decoded by hand: text mode would turn a committed CRLF into LF.
+    return done.stdout.decode('utf-8', 'replace') if done.returncode == 0 else None

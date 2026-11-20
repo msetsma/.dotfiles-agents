@@ -226,11 +226,14 @@ def test_posttooluse_records_pending_on_failure(project: Path) -> None:
 
 
 @needs_ruff
-def test_posttooluse_records_nothing_when_fixable(project: Path) -> None:
+def test_posttooluse_records_a_clean_file_for_the_stop_check(project: Path) -> None:
+    # The edit phase skips vulture and ty; Stop runs them, then drops the clean file.
     session = 'sess-ok'
     path = write(project, 'fixable2.py', "print({'a':1})\n")
     result = run_stdin({'tool_input': {'file_path': str(path)}, 'session_id': session}, env=tmp_env(project))
     assert result.returncode == 0, result.stderr
+    assert pending_file(project, session).exists()
+    assert run_stop({'session_id': session}, env=tmp_env(project)).returncode == 0
     assert not pending_file(project, session).exists()
 
 
@@ -402,6 +405,16 @@ def test_waive_suppresses_residue(project: Path) -> None:
 
 
 @needs_ruff
+def test_waiver_matches_a_report_of_several_lines(project: Path) -> None:
+    # The edit share of the waiver (the full report minus ty) must hash the same
+    # bytes as the edit report (no CR left in a multi-line report on Windows).
+    path = write(project, 'two.py', "import os\nimport sys\n\nx: int = 'one'\nprint(x)\n")
+    assert run_path(str(path), env=tmp_env(project)).returncode == 2
+    assert run_path('--waive', str(path), env=tmp_env(project)).returncode == 0
+    assert run_path(str(path), env=tmp_env(project)).returncode == 0
+
+
+@needs_ruff
 def test_waiver_matches_across_path_spellings(project: Path) -> None:
     path = write(project, 'unused.py', 'import os\n')
     # Waive by absolute path, then address the same file relatively: the waiver
@@ -455,10 +468,10 @@ def test_fixing_clears_stale_waiver(project: Path) -> None:
 # no working python: the gate stays non-blocking but says it is skipped
 # --------------------------------------------------------------------------- #
 def broken_python_env(project: Path) -> dict[str, str]:
-    # Shadow python3 and python with stubs that fail, like the Windows Store stub.
+    # Shadow uv, python3 and python with stubs that fail, like the Windows Store stub.
     stubs = project / 'stub-bin'
     stubs.mkdir()
-    for name in ('python3', 'python'):
+    for name in ('uv', 'python3', 'python'):
         stub = stubs / name
         stub.write_text('#!/bin/sh\nexit 1\n', newline='\n')
         stub.chmod(0o755)

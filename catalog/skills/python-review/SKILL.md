@@ -10,7 +10,10 @@ config, then `bin/python_gate.py`), so do not re-check what it enforces: typed
 signatures, no `print`, no blind `except`, `raise ... from`, `X | None`,
 function size and argument counts, frozen dataclasses, files of 800 lines or
 fewer, dead code that only tests use, and ty type errors. A git pre-commit hook
-runs the same gate on staged files.
+runs the same gate on staged files. The gate reports only findings a change
+introduces (compared with the file at git HEAD), so pre-existing findings in
+untouched legacy code pass; when reviewing, do not ask for them to be fixed
+unless the task is that cleanup.
 
 This checklist covers what no tool can decide.
 

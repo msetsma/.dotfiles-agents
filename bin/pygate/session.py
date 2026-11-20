@@ -8,20 +8,16 @@ the session transcript.
 """
 
 import json
-import logging
-import shutil
-import subprocess
 from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
 
+from pygate.tools import run_git
+
 
 __all__ = ['changed_python_files', 'session_start']
 
-log = logging.getLogger(__name__)
-
 PYTHON_SUFFIXES = frozenset({'.py', '.pyi'})
-GIT_TIMEOUT = 10
 
 
 def _timestamps(lines: Iterator[str]) -> Iterator[float]:
@@ -47,27 +43,6 @@ def session_start(transcript: Path) -> float | None:
         return None
 
 
-def _git(cwd: Path, *args: str) -> str | None:
-    git = shutil.which('git')
-    if git is None:
-        log.warning('python_gate: git not found; session changes skipped')
-        return None
-    try:
-        done = subprocess.run(
-            [git, '-C', str(cwd), *args],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            timeout=GIT_TIMEOUT,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        log.warning('python_gate: git failed in %s: %s', cwd, exc)
-        return None
-    return done.stdout if done.returncode == 0 else None
-
-
 def _dirty_paths(porcelain: str) -> Iterator[str]:
     # `status --porcelain -z`: "XY path\0", plus "origpath\0" after a rename.
     entries = iter(porcelain.split('\0'))
@@ -81,8 +56,8 @@ def _dirty_paths(porcelain: str) -> Iterator[str]:
 
 def changed_python_files(cwd: Path, since: float) -> list[Path]:
     """Dirty Python files in cwd's git repository modified at or after `since`."""
-    top = _git(cwd, 'rev-parse', '--show-toplevel')
-    status = _git(cwd, 'status', '--porcelain', '-z', '--untracked-files=all')
+    top = run_git(cwd, 'rev-parse', '--show-toplevel')
+    status = run_git(cwd, 'status', '--porcelain', '-z', '--untracked-files=all')
     if top is None or status is None:
         return []
     root = Path(top.strip())

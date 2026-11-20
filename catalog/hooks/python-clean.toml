@@ -1,22 +1,27 @@
 # Runs after the agent writes or edits a Python file: ruff auto-fixes and
-# formats what it can, bin/python_gate.py adds the checks ruff cannot express
-# (file length, mutable dataclasses, dead code, ty type errors), then the
-# remaining findings are handed back to the model to fix. Suppressions (`# noqa`) are ignored on the final pass, so the only
-# accepted resolution is a real fix.
+# formats (unless that would rewrite legacy code), bin/python_gate.py adds the
+# file-local checks ruff cannot express (file length, mutable dataclasses,
+# suppression comments, swallowed errors), then the remaining findings are
+# handed back to the model to fix. Suppressions (`# noqa`) are ignored, so the
+# only accepted resolution is a real fix.
+#
+# Only findings the edit introduced are reported: the gate compares the file
+# with its version at git HEAD, so pre-existing findings in untouched legacy
+# code do not block. A file with no committed version must be fully clean.
 #
 # Ruff's config is resolved from the git project root (ruff.toml, .ruff.toml, or
 # a pyproject.toml with [tool.ruff]), falling back to the global ruff config.
 # `clean-python --waive <file>` records a user-approved off-topic skip, which
 # both this hook and the Stop hook then honour.
 #
-# Files that are still broken are recorded for the companion python-clean-stop
-# hook, which refuses to end the turn until they pass.
+# Every file this hook checks is recorded for the companion python-clean-stop
+# hook, which adds vulture and ty and refuses to end the turn until they pass.
 #
 # The logic lives in bin/clean-python, which is shared with the opencode plugin
 # of the same name (delivered via the `plugins` kind).
 
 name        = "python-clean"
-description = "Ruff check --fix + format agent-written Python, then report and enforce what could not be fixed."
+description = "Ruff check --fix + format agent-written Python, then report and enforce the findings the edit introduced."
 event       = "PostToolUse"
 matcher     = "Write|Edit|MultiEdit"
 clients     = ["claude-code"]

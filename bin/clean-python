@@ -1,19 +1,29 @@
 #!/usr/bin/env bash
 # clean-python - one gate for agent-written Python, shared by every client.
 #
-# Auto-fixes and formats what ruff can, then reports anything that is left so
-# the model has to fix it. Suppressions (`# noqa`) are deliberately ignored on
-# the final pass: the only accepted resolution is a real fix.
+# The checks live in bin/python_gate.py (modules in bin/pygate/): ruff with
+# suppressions (`# noqa`) ignored, plus what ruff cannot express (file length,
+# mutable dataclasses, dead code only tests use (vulture), type errors (ty)).
+# This script is the hook plumbing around it: it resolves the ruff binary and
+# config, and keeps the waiver, pending and settled state.
 #
-# After ruff, bin/python_gate.py runs the checks ruff cannot express: file
-# length, mutable dataclasses, dead code only tests use (vulture), and type
-# errors (ty). Its findings join ruff's in the same report.
+# Only code a change introduces is reported. The gate compares the file with
+# its committed version (git HEAD) and drops findings that were already there,
+# so a one-line edit to a legacy file does not demand fixing the whole file. A
+# file with no committed version (new, untracked, outside git) must be fully
+# clean. Auto-fix and format run only when they would not rewrite legacy code:
+# the committed version is absent, or already clean (fix) / formatted (format).
+#
+# Phases: an edit runs the file-local checks (ruff, length, dataclasses,
+# suppressions, swallowed errors); the Stop hook and the commit check also run
+# vulture and ty, whose findings count only on changed lines.
 #
 # Config: the gate resolves ruff's config explicitly from the *git project root*
 # (ruff.toml, .ruff.toml, or a pyproject.toml with a [tool.ruff] section). When
 # the project root has no such file the global ruff config is used; when that is
-# absent too, ruff's built-in defaults apply. Resolving it explicitly keeps a
-# stray config in a parent directory from silently changing the rules.
+# absent too, ruff's built-in defaults apply (--isolated). Resolving it
+# explicitly keeps a stray config in a parent directory from silently changing
+# the rules.
 #
 # Five ways in, so a single implementation serves every client:
 #   clean-python <path>          explicit file (used by the opencode plugin)
@@ -31,149 +41,188 @@
 # Exit 2: something auto-fix could not resolve -> report on stderr. For
 #         --stop-check, exit 2 also refuses the Stop hook, forcing another turn.
 #         For --staged, exit 1 when a staged file fails, which aborts the commit.
+# No Python >= 3.14 (via uv), a missing ruff or a gate crash skips the check
+# with a warning; it never blocks.
 #
 # The opencode plugin injects its own follow-up prompt when this exits 2, and
 # its python_clean_skip tool calls `--waive` once the user approves skipping an
 # off-topic file. Claude Code has no such tool, so PostToolUse records every
-# still-broken file in a per-session state file and the Stop hook re-checks them
-# before the turn may end. A waiver is keyed by the file's current findings, so
+# file it checks in a per-session state file and the Stop hook re-checks them
+# (with vulture and ty) before the turn may end. A waiver is keyed by the file's current findings, so
 # it sticks across turns but expires as soon as the code changes. A file is
 # dropped once it passes, is waived, or after MAX_BLOCKS refused stops, so a
 # problem the agent cannot fix cannot trap the session forever.
+#
+# Git Bash on Windows starts every subshell and program slowly, so path
+# handling below uses bash builtins and helpers return values in REPLY.
 set -uo pipefail
+unset CDPATH
 
 MAX_BLOCKS=3
 state_dir="${TMPDIR:-/tmp}/clean-python"
 gate_script="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/python_gate.py"
+is_windows=0
+[[ "${OSTYPE:-}" == msys* || "${OSTYPE:-}" == cygwin* ]] && is_windows=1
+
+# --------------------------------------------------------------------------- #
+# paths (builtins only; results in REPLY)
+# --------------------------------------------------------------------------- #
+slashes() {
+    # $1 with Windows backslashes turned into forward slashes.
+    REPLY="$1"
+    [[ $is_windows -eq 1 ]] && REPLY="${REPLY//\\//}"
+    return 0
+}
+
+dir_of() {
+    case "$1" in
+        */*) REPLY="${1%/*}" ;;
+        *) REPLY=. ;;
+    esac
+    [[ -n "$REPLY" ]] || REPLY=/
+}
+
+physical_dir() {
+    # Physical absolute path of directory $1, or $1 itself when it is missing.
+    local old="$PWD"
+    if builtin cd -P -- "$1" 2>/dev/null; then
+        REPLY="$PWD"
+        builtin cd -- "$old" || true
+    else
+        REPLY="$1"
+    fi
+}
+
+abs_path() {
+    local name
+    slashes "$1"
+    name="${REPLY##*/}"
+    dir_of "$REPLY"
+    physical_dir "$REPLY"
+    REPLY="${REPLY%/}/$name"
+}
+
+to_posix() {
+    # git on Windows prints C:/Users/...; Git Bash's own form is /c/Users/...
+    REPLY="$1"
+    if [[ $is_windows -eq 1 && "$1" =~ ^([A-Za-z]):(/.*)?$ ]]; then
+        local drive="${BASH_REMATCH[1]}"
+        REPLY="/${drive,,}${BASH_REMATCH[2]}"
+    fi
+}
+
+native_path() {
+    # Windows Python cannot read MSYS paths (/c/Users/...); convert them.
+    REPLY="$1"
+    [[ $is_windows -eq 1 ]] || return 0
+    if [[ "$1" =~ ^/([A-Za-z])(/.*)?$ ]]; then
+        local drive="${BASH_REMATCH[1]}"
+        REPLY="${drive^^}:${BASH_REMATCH[2]:-/}"
+    elif [[ ! "$1" =~ ^[A-Za-z]: ]] && command -v cygpath >/dev/null 2>&1; then
+        REPLY="$(cygpath -w "$1")"
+    fi
+}
 
 # --------------------------------------------------------------------------- #
 # ruff + config resolution
 # --------------------------------------------------------------------------- #
-ruff_for() {
-    # Print the ruff binary to use for $1: project venv first (bin/ on POSIX,
-    # Scripts/ on Windows), then $RUFF, then PATH.
-    local target="$1" root candidate
-    root="$(git -C "$(dirname "$target")" rev-parse --show-toplevel 2>/dev/null || true)"
-    if [[ -n "$root" ]]; then
-        for candidate in "$root/.venv/bin/ruff" "$root/.venv/Scripts/ruff.exe"; do
-            if [[ -x "$candidate" ]]; then
-                printf '%s' "$candidate"
-                return
-            fi
-        done
-    fi
-    if [[ -n "${RUFF:-}" && -x "$RUFF" ]]; then
-        printf '%s' "$RUFF"
-        return
-    fi
-    command -v ruff || true
-}
-
-project_root_for() {
-    # Git project root for $1, or the file's own directory outside a repo.
-    local target="$1" dir root
-    if dir="$(cd "$(dirname "$target")" 2>/dev/null && pwd)"; then :; else dir="$(dirname "$target")"; fi
-    root="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null || true)"
-    printf '%s' "${root:-$dir}"
-}
-
-project_config_for() {
-    # Print the project-level ruff config for $1 when the git root has one.
-    local target="$1" root candidate
-    root="$(project_root_for "$target")"
-    for candidate in "$root/ruff.toml" "$root/.ruff.toml"; do
-        if [[ -f "$candidate" ]]; then
-            printf '%s' "$candidate"
-            return 0
-        fi
-    done
-    candidate="$root/pyproject.toml"
-    if [[ -f "$candidate" ]] && grep -q '^\[tool\.ruff' "$candidate" 2>/dev/null; then
-        printf '%s' "$candidate"
-        return 0
-    fi
+has_tool_ruff() {
+    local line
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        [[ "$line" == '[tool.ruff'* ]] && return 0
+    done <"$1"
     return 1
 }
 
 global_config() {
     # Ruff's user-level config, the fallback when the project root has none:
     # ~/.config/ruff on macOS and Linux, %APPDATA%/ruff on Windows.
-    local cfg appdata="${APPDATA:-}"
-    if [[ -n "$appdata" ]] && command -v cygpath >/dev/null 2>&1; then
-        appdata="$(cygpath -u "$appdata")"
+    local cfg appdata=""
+    if [[ -n "${APPDATA:-}" ]]; then
+        slashes "$APPDATA"
+        to_posix "$REPLY"
+        appdata="$REPLY"
     fi
+    REPLY=""
     for cfg in "${XDG_CONFIG_HOME:-$HOME/.config}/ruff/ruff.toml" ${appdata:+"$appdata/ruff/ruff.toml"}; do
         if [[ -f "$cfg" ]]; then
-            printf '%s' "$cfg"
+            REPLY="$cfg"
             return 0
         fi
     done
-    return 1
 }
 
-config_for() {
-    # Single config path for $1: project root first, then the global config.
-    local cfg
-    cfg="$(project_config_for "$1" || true)"
-    [[ -n "$cfg" ]] || cfg="$(global_config || true)"
-    printf '%s' "$cfg"
-}
-
-package_dir_for() {
-    # Nearest directory at or above $1 holding a pyproject.toml, stopping at the
-    # git root; the file's own directory when there is none.
-    local target="$1" dir root
-    if dir="$(cd "$(dirname "$target")" 2>/dev/null && pwd)"; then :; else
-        printf '%s' "$(dirname "$target")"
-        return
+resolve() {
+    # For the absolute path $1 set t_root (git root, or the file's directory
+    # outside a repo), t_cfg (ruff config; empty = built-in defaults), t_pkg
+    # (nearest pyproject.toml directory up to the git root, else the file's
+    # directory) and ruff_bin (project venv, then $RUFF, then PATH; empty =
+    # none). One git call.
+    local dir here candidate
+    dir_of "$1"
+    physical_dir "$REPLY"
+    dir="$REPLY"
+    t_root="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null)"
+    if [[ -n "$t_root" ]]; then
+        to_posix "$t_root"
+        t_root="$REPLY"
+    else
+        t_root="$dir"
     fi
-    root="$(project_root_for "$target")"
-    local here="$dir"
+
+    ruff_bin=""
+    for candidate in "$t_root/.venv/bin/ruff" "$t_root/.venv/Scripts/ruff.exe"; do
+        if [[ -x "$candidate" ]]; then
+            ruff_bin="$candidate"
+            break
+        fi
+    done
+    if [[ -z "$ruff_bin" && -n "${RUFF:-}" && -x "$RUFF" ]]; then ruff_bin="$RUFF"; fi
+    if [[ -z "$ruff_bin" ]] && hash ruff 2>/dev/null; then ruff_bin="${BASH_CMDS[ruff]}"; fi
+
+    t_cfg=""
+    for candidate in "$t_root/ruff.toml" "$t_root/.ruff.toml"; do
+        if [[ -f "$candidate" ]]; then
+            t_cfg="$candidate"
+            break
+        fi
+    done
+    if [[ -z "$t_cfg" && -f "$t_root/pyproject.toml" ]] && has_tool_ruff "$t_root/pyproject.toml"; then
+        t_cfg="$t_root/pyproject.toml"
+    fi
+    if [[ -z "$t_cfg" ]]; then
+        global_config
+        t_cfg="$REPLY"
+    fi
+
+    t_pkg="$dir"
+    here="$dir"
     while :; do
         if [[ -f "$here/pyproject.toml" ]]; then
-            printf '%s' "$here"
-            return
+            t_pkg="$here"
+            break
         fi
-        [[ "$here" == "$root" || "$here" == / ]] && break
-        here="$(dirname "$here")"
+        [[ "$here" == "$t_root" || -e "$here/.git" || "$here" == / ]] && break
+        dir_of "$here"
+        here="$REPLY"
     done
-    printf '%s' "$dir"
 }
 
-ruff_run() {
-    # Run ruff for $1 with $ruff_bin from the file's package directory (see
-    # package_dir_for). A user-level config resolves `src` and infers
-    # target-version from the cwd, so this matches a plain `ruff check` run
-    # from the package, and the report stays cwd-independent. The remaining
-    # arguments are the ruff subcommand + flags. Config is pinned to the
-    # project root when present, else the global config, else --isolated
-    # (built-in defaults) so a stray config can never leak in.
-    local target="$1"
-    shift
-    local dir base abs cfg
-    dir="$(package_dir_for "$target")"
-    base="$(basename "$target")"
-    if abs="$(cd "$(dirname "$target")" 2>/dev/null && pwd)"; then base="${abs}/${base}"; base="${base#"$dir"/}"; fi
-    cfg="$(config_for "$target")"
-    if [[ -n "$cfg" ]]; then
-        (cd "$dir" && "$ruff_bin" "$@" --config "$cfg" "$base" 2>&1)
-    else
-        (cd "$dir" && "$ruff_bin" "$@" --isolated "$base" 2>&1)
-    fi
-}
-
+# --------------------------------------------------------------------------- #
+# the gate (bin/python_gate.py)
+# --------------------------------------------------------------------------- #
 gate_runner=()
 gate_runner_probed=0
 
 gate_python() {
     # Fill gate_runner with the interpreter for bin/python_gate.py, which needs
     # Python >= 3.14: uv's 3.14 first, then a python on PATH that is new enough.
-    # Probed once per run; leaves gate_runner empty when there is none.
+    # Found once per run; leaves gate_runner empty when there is none.
     [[ $gate_runner_probed -eq 1 ]] && return
     gate_runner_probed=1
     local candidate
-    if command -v uv >/dev/null 2>&1 && uv run --no-project --quiet --python 3.14 python -c '' >/dev/null 2>&1; then
-        gate_runner=(uv run --no-project --quiet --python 3.14 python)
+    if hash uv 2>/dev/null; then
+        gate_runner=("${BASH_CMDS[uv]}" run --no-project --quiet --python 3.14 python)
         return
     fi
     for candidate in python3 python; do
@@ -184,81 +233,64 @@ gate_python() {
     done
 }
 
-native_path() {
-    # Windows Python cannot read MSYS paths (/c/Users/...); convert when cygpath exists.
-    if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
-}
-
 run_gate() {
-    # Run bin/python_gate.py with the remaining arguments; empty runner -> 127.
+    # Run bin/python_gate.py with the given arguments; empty runner -> 127.
     gate_python
     [[ ${#gate_runner[@]} -gt 0 ]] || return 127
     PYTHONUTF8=1 "${gate_runner[@]}" "$gate_script" "$@"
 }
 
-gate_report() {
-    # Run bin/python_gate.py on $1 (package dir for ty, git root for vulture).
-    # Prints findings and returns 1 only when it exited 1 *and* reported
-    # something; anything else (no Python >= 3.14, a crash, an unreadable file)
-    # is a skipped check with a warning, never a block.
-    local out status
-    out="$(run_gate "$(native_path "$1")" "$(native_path "$(package_dir_for "$1")")" "$(native_path "$(project_root_for "$1")")")"
+check_report() {
+    # Run the gate on the resolved file $1 in phase $2 (edit|full); further
+    # arguments (--fix, --format-check) pass through. Set GATE_REPORT and
+    # return 1 only when the gate exited 1 *and* reported something; anything
+    # else (no Python >= 3.14, a crash, an unreadable file, a ruff failure) is
+    # a skipped check with a warning, never a block.
+    local file="$1" phase="$2" out status
+    shift 2
+    local args=()
+    native_path "$file"
+    args+=("$REPLY")
+    native_path "$t_pkg"
+    args+=("$REPLY")
+    native_path "$t_root"
+    args+=("$REPLY")
+    native_path "$ruff_bin"
+    args+=(--phase "$phase" --ruff "$REPLY")
+    if [[ -n "$t_cfg" ]]; then
+        native_path "$t_cfg"
+        args+=(--config "$REPLY")
+    fi
+    GATE_REPORT=""
+    out="$(run_gate "${args[@]}" "$@")"
     status=$?
     if [[ $status -eq 1 && -n "$out" ]]; then
-        printf '%s\n' "$out"
+        GATE_REPORT="$out"
         return 1
     fi
     if [[ $status -eq 127 ]]; then
-        echo "clean-python: no Python >= 3.14 (or uv) found; skipping the non-ruff checks" >&2
+        echo "clean-python: no Python >= 3.14 (or uv) found; skipping the gate" >&2
     elif [[ $status -ne 0 ]]; then
-        echo "clean-python: python_gate.py failed (exit $status) on $1; non-ruff checks skipped" >&2
+        echo "clean-python: python_gate.py failed (exit $status) on $file; checks skipped" >&2
     fi
     return 0
 }
 
-check_report() {
-    # Run ruff, then bin/python_gate.py, on $1 with $ruff_bin; set RUFF_REPORT
-    # and return non-zero when either finds something. Note: ruff prints "All
-    # checks passed!" on a clean run, so callers must test the exit status, not
-    # whether RUFF_REPORT is empty.
-    local ruff_out gate_out ruff_status gate_status
-    ruff_out="$(ruff_run "$1" check --ignore-noqa --output-format concise)"
-    ruff_status=$?
-    gate_out="$(gate_report "$1")"
-    gate_status=$?
-    if [[ $gate_status -eq 0 ]]; then
-        RUFF_REPORT="$ruff_out"
-    elif [[ $ruff_status -eq 0 ]]; then
-        RUFF_REPORT="$gate_out"
-    else
-        RUFF_REPORT="$ruff_out"$'\n'"$gate_out"
+py_eval() {
+    # Run the Python snippet $1 on stdin with the first interpreter that works:
+    # the gate's own, then python3, then python. Windows ships a python3 Store
+    # stub that only prints an install hint, so each must run to count. Warns
+    # and fails when none does; callers then exit 0, so a missing python skips
+    # the gate but never blocks the agent.
+    local input candidate
+    input="$(cat)"
+    gate_python
+    if [[ ${#gate_runner[@]} -gt 0 ]] && printf '%s' "$input" | PYTHONUTF8=1 "${gate_runner[@]}" -c "$1" 2>/dev/null; then
+        return 0
     fi
-    [[ $ruff_status -eq 0 && $gate_status -eq 0 ]]
-}
-
-fix_and_format() {
-    # Auto-fix + format $1, using $ruff_bin and its resolved config.
-    ruff_run "$1" check --fix --quiet >/dev/null 2>&1 || true
-    ruff_run "$1" format --quiet >/dev/null 2>&1 || true
-}
-
-python_bin() {
-    # First working interpreter: python3, then python. Windows ships a python3
-    # Store stub that only prints an install hint, so each must run to count.
-    local candidate
     for candidate in python3 python; do
-        if "$candidate" -c '' >/dev/null 2>&1; then
-            printf '%s' "$candidate"
-            return 0
-        fi
+        printf '%s' "$input" | PYTHONUTF8=1 "$candidate" -c "$1" 2>/dev/null && return 0
     done
-    return 1
-}
-
-require_python() {
-    # Print a working interpreter, or warn on stderr and fail. The callers exit
-    # 0 on failure: a missing python skips the gate but never blocks the agent.
-    python_bin && return 0
     echo "clean-python: no working python found; skipping the gate" >&2
     return 1
 }
@@ -270,6 +302,9 @@ is_python() {
     esac
 }
 
+# --------------------------------------------------------------------------- #
+# state: pending, settled, waivers
+# --------------------------------------------------------------------------- #
 state_file() {
     printf '%s/pending-%s' "$state_dir" "$(printf '%s' "$1" | tr -cd 'A-Za-z0-9._-')"
 }
@@ -295,15 +330,6 @@ digest() {
     fi
 }
 
-abs_path() {
-    local dir
-    if dir="$(cd "$(dirname "$1")" 2>/dev/null && pwd -P)"; then
-        printf '%s/%s' "$dir" "$(basename "$1")"
-    else
-        printf '%s' "$1"
-    fi
-}
-
 settled_file() {
     printf '%s/settled-%s' "$state_dir" "$(printf '%s' "$1" | tr -cd 'A-Za-z0-9._-')"
 }
@@ -325,49 +351,74 @@ is_settled() {
     [[ -f "$sf" ]] && grep -qxF "$(mtime_of "$2")"$'\t'"$2" "$sf"
 }
 
+any_waivers() {
+    compgen -G "$state_dir/waived-*" >/dev/null
+}
+
 waiver_file() {
-    # One waiver per absolute path; contents are the findings digest it covers.
-    printf '%s/waived-%s' "$state_dir" "$(digest "$(abs_path "$1")")"
+    # One waiver per absolute path; it holds the findings digests it covers.
+    abs_path "$1"
+    printf '%s/waived-%s' "$state_dir" "$(digest "$REPLY")"
+}
+
+edit_part() {
+    # The edit phase's share of a full report: everything but vulture and ty.
+    printf '%s\n' "$1" | grep -vE '^.+:[0-9]+:[0-9]+: GATE00[34] '
 }
 
 is_waived() {
     # $1 file, $2 its current findings. True when a waiver matches that digest.
-    local wf
+    local wf want line
+    any_waivers || return 1
     wf="$(waiver_file "$1")"
     [[ -f "$wf" ]] || return 1
-    [[ "$(cat "$wf" 2>/dev/null)" == "$(digest "$2")" ]]
+    want="$(digest "$2")"
+    while IFS= read -r line; do
+        [[ "$line" == "$want" ]] && return 0
+    done <"$wf"
+    return 1
+}
+
+clear_waiver() {
+    any_waivers || return 0
+    rm -f "$(waiver_file "$1")"
 }
 
 # --------------------------------------------------------------------------- #
 # Probe modes: print the ruff config / binary this gate resolves for a path
 # --------------------------------------------------------------------------- #
-if [[ "${1:-}" == "--config-for" ]]; then
-    config_for "${2:-}"
-    exit 0
-fi
-if [[ "${1:-}" == "--ruff-for" ]]; then
-    ruff_for "${2:-}"
+if [[ "${1:-}" == "--config-for" || "${1:-}" == "--ruff-for" ]]; then
+    abs_path "${2:-}"
+    resolve "$REPLY"
+    if [[ "$1" == "--config-for" ]]; then printf '%s' "$t_cfg"; else printf '%s' "$ruff_bin"; fi
     exit 0
 fi
 
 # --------------------------------------------------------------------------- #
-# Waive mode: record a user-approved skip for one file's current findings
+# Waive mode: record a user-approved skip for one file's current findings.
+# The waiver holds the digest of the full report (Stop hook) and of its edit
+# share (PostToolUse), so both hooks honour it.
 # --------------------------------------------------------------------------- #
 if [[ "${1:-}" == "--waive" ]]; then
-    target="${2:-}"
+    slashes "${2:-}"
+    target="$REPLY"
     [[ -n "$target" && -f "$target" ]] || exit 0
     is_python "$target" || exit 0
-    target="$(abs_path "$target")"
-    ruff_bin="$(ruff_for "$target")"
+    abs_path "$target"
+    target="$REPLY"
+    resolve "$target"
     [[ -n "$ruff_bin" ]] || exit 0
-    if check_report "$target"; then
-        echo "clean-python: $(basename "$target") is already clean; nothing to waive." >&2
+    if check_report "$target" full; then
+        echo "clean-python: ${target##*/} is already clean; nothing to waive." >&2
         exit 0
     fi
-    report="$RUFF_REPORT"
+    report="$GATE_REPORT"
     mkdir -p "$state_dir" || exit 0
-    digest "$report" >"$(waiver_file "$target")"
-    echo "clean-python: waived $(basename "$target") for its current findings." >&2
+    {
+        digest "$report"
+        digest "$(edit_part "$report")"
+    } >"$(waiver_file "$target")"
+    echo "clean-python: waived ${target##*/} for its current findings." >&2
     exit 0
 fi
 
@@ -378,28 +429,27 @@ fi
 # Waivers do not apply here; `git commit --no-verify` is the deliberate escape.
 # --------------------------------------------------------------------------- #
 if [[ "${1:-}" == "--staged" ]]; then
+    # git -C takes git's own C:/... form; MSYS argument conversion mangles a
+    # /c/... path with brackets or non-ASCII. Bash-side paths use the posix form.
     repo="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+    to_posix "$repo"
+    repo_posix="$REPLY"
     failed=0
     while IFS= read -r -d '' rel; do
-        target="$repo/$rel"
+        target="$repo_posix/$rel"
         is_python "$target" && [[ -f "$target" ]] || continue
-        ruff_bin="$(ruff_for "$target")"
+        resolve "$target"
         if [[ -z "$ruff_bin" ]]; then
             echo "clean-python: ruff not found; skipping $rel" >&2
             continue
         fi
-        if ! git -C "$repo" diff --quiet -- "$rel"; then
+        if ! git -C "$repo" diff --quiet -- ":(literal)$rel"; then
             echo "$rel: has unstaged changes; stage them (or stash them) so the check sees what you commit" >&2
             failed=1
             continue
         fi
-        problems=""
-        check_report "$target" || problems="$RUFF_REPORT"$'\n'
-        if ! ruff_run "$target" format --check --quiet >/dev/null; then
-            problems+="$rel: not formatted (run: ruff format $rel)"$'\n'
-        fi
-        if [[ -n "$problems" ]]; then
-            printf '%s' "$problems" >&2
+        if ! check_report "$target" full --format-check; then
+            printf '%s\n' "$GATE_REPORT" >&2
             failed=1
         fi
     done < <(git -C "$repo" diff --cached --name-only -z --diff-filter=ACMR)
@@ -416,8 +466,7 @@ fi
 if [[ "${1:-}" == "--stop-check" ]]; then
     payload="$(cat)"
     [[ -n "$payload" ]] || exit 0
-    python="$(require_python)" || exit 0
-    parsed="$(printf '%s' "$payload" | "$python" -c '
+    parsed="$(printf '%s' "$payload" | py_eval '
 import json, sys
 try:
     doc = json.load(sys.stdin)
@@ -425,10 +474,8 @@ except ValueError:
     doc = {}
 for key in ("session_id", "transcript_path", "cwd"):
     print(doc.get(key) or "")
-' 2>/dev/null)" || exit 0
-    session="$(printf '%s\n' "$parsed" | sed -n '1p')"
-    transcript="$(printf '%s\n' "$parsed" | sed -n '2p')"
-    cwd="$(printf '%s\n' "$parsed" | sed -n '3p')"
+')" || exit 0
+    { IFS= read -r session; IFS= read -r transcript; IFS= read -r cwd; } <<<"${parsed//$'\r'/}"
     [[ -n "$session" ]] || exit 0
 
     sf="$(state_file "$session")"
@@ -436,12 +483,16 @@ for key in ("session_id", "transcript_path", "cwd"):
     # Python file changed since the session started, unless it already passed
     # (or was given up on) at its current mtime.
     if [[ -n "$transcript" && -n "$cwd" ]]; then
+        native_path "$transcript"
+        native_transcript="$REPLY"
+        native_path "$cwd"
         while IFS= read -r changed; do
+            changed="${changed%$'\r'}"
             [[ -n "$changed" ]] || continue
-            command -v cygpath >/dev/null 2>&1 && changed="$(cygpath -u "$changed")"
-            changed="$(abs_path "$changed")"
+            abs_path "$changed"
+            changed="$REPLY"
             is_settled "$session" "$changed" || record_pending "$session" "$changed"
-        done < <(run_gate --session-changes "$(native_path "$transcript")" "$(native_path "$cwd")" 2>/dev/null)
+        done < <(run_gate --session-changes "$native_transcript" "$REPLY" 2>/dev/null)
     fi
     [[ -f "$sf" ]] || exit 0
 
@@ -449,16 +500,16 @@ for key in ("session_id", "transcript_path", "cwd"):
     findings=""
     while IFS=$'\t' read -r count path; do
         [[ -n "$path" && -f "$path" ]] || continue
-        path="$(abs_path "$path")"
-        ruff_bin="$(ruff_for "$path")"
+        abs_path "$path"
+        path="$REPLY"
+        resolve "$path"
         [[ -n "$ruff_bin" ]] || continue
-        report=""
-        if check_report "$path"; then
-            rm -f "$(waiver_file "$path")"
+        if check_report "$path" full; then
+            clear_waiver "$path"
             settle "$session" "$path"
             continue # clean -> drop, and clear any stale waiver
         fi
-        report="$RUFF_REPORT"
+        report="$GATE_REPORT"
         if is_waived "$path" "$report"; then
             settle "$session" "$path"
             continue # user approved skipping this off-topic file
@@ -499,53 +550,54 @@ if [[ -n "${1:-}" ]]; then
 else
     payload="$(cat)"
     [[ -n "$payload" ]] || exit 0
-    python="$(require_python)" || exit 0
-    parsed="$(printf '%s' "$payload" | "$python" -c '
+    parsed="$(printf '%s' "$payload" | py_eval '
 import json, sys
 try:
     doc = json.load(sys.stdin)
-except Exception:
+except ValueError:
     sys.exit(0)
 tool_input = doc.get("tool_input") or {}
 tool_response = doc.get("tool_response") or {}
 print(tool_input.get("file_path") or tool_response.get("filePath") or tool_response.get("file_path") or "")
 print(doc.get("session_id") or "")
-' 2>/dev/null)" || exit 0
-    target="$(printf '%s\n' "$parsed" | sed -n '1p')"
-    session="$(printf '%s\n' "$parsed" | sed -n '2p')"
+')" || exit 0
+    { IFS= read -r target; IFS= read -r session; } <<<"${parsed//$'\r'/}"
 fi
 
+slashes "$target"
+target="$REPLY"
 [[ -n "$target" ]] || exit 0
 is_python "$target" || exit 0
 [[ -f "$target" ]] || exit 0
-target="$(abs_path "$target")"
+abs_path "$target"
+target="$REPLY"
 
-ruff_bin="$(ruff_for "$target")"
+resolve "$target"
 if [[ -z "$ruff_bin" ]]; then
-    echo "clean-python: ruff not found; skipping $(basename "$target")" >&2
+    echo "clean-python: ruff not found; skipping ${target##*/}" >&2
     exit 0
 fi
 
 # --------------------------------------------------------------------------- #
-# fix what we can, then verify with suppressions ignored
+# fix what we can without rewriting legacy code, then report what is new
 # --------------------------------------------------------------------------- #
-fix_and_format "$target"
-
-if check_report "$target"; then
-    rm -f "$(waiver_file "$target")"
+# Every file written in a Claude Code session is recorded for its Stop hook,
+# clean or not: the edit phase skips vulture and ty, which Stop runs on it.
+if check_report "$target" edit --fix; then
+    clear_waiver "$target"
+    [[ -n "$session" ]] && record_pending "$session" "$target"
     exit 0
 fi
-report="$RUFF_REPORT"
+report="$GATE_REPORT"
 
 if is_waived "$target" "$report"; then
+    [[ -n "$session" ]] && record_pending "$session" "$target"
     exit 0
 fi
 
 # Claude Code PostToolUse carries a session id; remember the file so its Stop
 # hook can refuse to end the turn while this is unresolved.
-if [[ -n "$session" ]]; then
-    record_pending "$session" "$target"
-fi
+[[ -n "$session" ]] && record_pending "$session" "$target"
 
 {
     echo "clean-python: found issues auto-fix could not resolve in $target"

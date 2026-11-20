@@ -2,7 +2,9 @@
 //
 // Deployed by agent-sync (symlinked into ~/.config/opencode/plugins/). The same
 // gate runs as a Claude Code PostToolUse hook via bin/clean-python, so both
-// clients enforce identical rules.
+// clients enforce identical rules. An explicit-file run is the gate's edit
+// phase: ruff and the file-local checks, reporting only findings the edit
+// introduced; vulture and ty run at commit time (githooks/pre-commit).
 //
 // After a Python write the plugin does two things:
 //   1. Appends the gate's findings to the tool result, so the model sees them

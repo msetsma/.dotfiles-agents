@@ -15,6 +15,7 @@ __all__ = [
     'MUTABLE_MARKER',
     'check_dataclasses',
     'check_length',
+    'check_source',
     'check_suppressions',
     'check_swallowed_errors',
 ]
@@ -127,3 +128,13 @@ def check_swallowed_errors(path: Path, tree: ast.Module) -> list[Finding]:
         for c in _broad_suppress(tree)
     ]
     return handlers + suppressors
+
+
+def check_source(path: Path, source: str) -> list[Finding]:
+    """Every check above on `source` as the content of `path`."""
+    found = [*check_length(path, source), *check_suppressions(path, source)]
+    try:
+        tree = ast.parse(source, filename=str(path))
+    except SyntaxError:
+        return found  # ruff reports the syntax error itself
+    return [*found, *check_dataclasses(path, tree, source.splitlines()), *check_swallowed_errors(path, tree)]

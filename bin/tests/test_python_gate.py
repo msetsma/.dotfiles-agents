@@ -22,7 +22,6 @@ CLEAN_PYTHON = BIN / 'clean-python'
 BASH = shutil.which('bash')
 GIT = shutil.which('git')
 HAS_TOOLS = shutil.which('uvx') is not None or (shutil.which('vulture') and shutil.which('ty'))
-needs_tools = pytest.mark.skipif(not HAS_TOOLS, reason='needs uvx (or vulture and ty) on PATH')
 needs_gate = pytest.mark.skipif(
     BASH is None or GIT is None or shutil.which('ruff') is None or not HAS_TOOLS,
     reason='needs bash, git, ruff and uvx on PATH',
@@ -45,32 +44,38 @@ def run_gate(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def check_file(path: Path, root: Path, phase: str = 'full') -> subprocess.CompletedProcess[str]:
+    return run_gate(str(path), str(root), str(root), '--phase', phase, '--ruff', shutil.which('ruff') or 'ruff')
+
+
 # --------------------------------------------------------------------------- #
 # CLI
 # --------------------------------------------------------------------------- #
-@pytest.mark.parametrize('args', [(), ('a.py', 'pkg'), ('--bogus', 'a', 'b')])
+@pytest.mark.parametrize(
+    'args', [(), ('a.py', 'pkg'), ('--bogus', 'a', 'b'), ('a.py', 'pkg', 'root'), ('a', 'b', 'c', '--phase', 'x')]
+)
 def test_usage_error(args: tuple[str, ...]) -> None:
     assert run_gate(*args).returncode == 2
 
 
 def test_unreadable_file_exits_3(tmp_path: Path) -> None:
-    result = run_gate(str(tmp_path / 'missing.py'), str(tmp_path), str(tmp_path))
+    result = check_file(tmp_path / 'missing.py', tmp_path)
     assert result.returncode == 3
     assert result.stdout == ''
 
 
-@needs_tools
+@needs_gate
 def test_reports_findings_and_exits_1(tmp_path: Path) -> None:
     path = write(tmp_path, 'core.py', MUTABLE)
-    result = run_gate(str(path), str(tmp_path), str(tmp_path))
+    result = check_file(path, tmp_path)
     assert result.returncode == 1
     assert 'GATE002' in result.stdout
 
 
-@needs_tools
+@needs_gate
 def test_non_ascii_paths_are_reported(tmp_path: Path) -> None:
     path = write(tmp_path / 'données 日本', 'core.py', MUTABLE)
-    result = run_gate(str(path), str(tmp_path), str(tmp_path))
+    result = check_file(path, tmp_path)
     assert result.returncode == 1
     assert 'données 日本' in result.stdout
 
@@ -140,7 +145,7 @@ def test_gate_crash_is_a_skipped_check_not_a_block(repo: Path, tmp_path_factory:
         [BASH, str(fake_bin / 'clean-python'), str(path)], cwd=repo, capture_output=True, text=True, check=False
     )
     assert result.returncode == 0, result.stderr
-    assert 'non-ruff checks skipped' in result.stderr
+    assert 'checks skipped' in result.stderr
 
 
 @needs_gate
@@ -175,7 +180,7 @@ def test_staged_refuses_findings_and_unformatted_code(repo: Path) -> None:
     result = run_clean('--staged', cwd=repo)
     assert result.returncode == 1
     assert 'F401' in result.stderr or 'unused-import' in result.stderr
-    assert 'ugly.py: not formatted' in result.stderr
+    assert 'GATE007 not formatted; run: ruff format ugly.py' in result.stderr
     assert 'unstaged.py' not in result.stderr
     # Check only: the staged files are left as they were.
     assert (repo / 'bad.py').read_text(encoding='utf-8') == 'import os\n'

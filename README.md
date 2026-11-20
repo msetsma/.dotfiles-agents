@@ -208,8 +208,8 @@ and `catalog/local.toml`.
 
 | Hook | Clients | Event | What it does |
 |---|---|---|---|
-| `python-clean` | Claude Code | `PostToolUse` (`Write\|Edit\|MultiEdit`) | Runs `bin/clean-python` on agent-written Python: ruff `check --fix` + format, then the [Python gate](#python-gate) checks, then reports what could not be fixed |
-| `python-clean-stop` | Claude Code | `Stop` | Refuses to end the turn while Python written this session still fails the gate |
+| `python-clean` | Claude Code | `PostToolUse` (`Write\|Edit\|MultiEdit`) | Runs `bin/clean-python` on agent-written Python: ruff `check --fix` + format (unless that would rewrite legacy code), then the file-local [Python gate](#python-gate) checks, then reports the findings the edit introduced |
+| `python-clean-stop` | Claude Code | `Stop` | Refuses to end the turn while Python written this session still fails the full gate (with vulture and ty) |
 | `example-hook` | none (inert) | `SessionStart` | Template: no-op hook to copy |
 
 ### opencode plugins
@@ -252,7 +252,7 @@ code written by hand or by another tool gets the same check.
 
 1. **ruff** with the project's config (git-root `ruff.toml`, `.ruff.toml`, or
    `pyproject.toml` `[tool.ruff]`), else the global one (`~/.config/ruff` or
-   `%APPDATA%uff`, kept in the `.dotfiles` repo). It enforces typed
+   `%APPDATA%\ruff`, kept in the `.dotfiles` repo). It enforces typed
    signatures (`ANN`), no `print` (`T20`), no blind `except` (`E722`, `BLE`),
    `raise ... from` (`B904`), `X | None` (`UP045`), function size and argument
    counts (`C901`, `PLR0913`, `PLR0915`, `PLR0917`) and no commented-out code
@@ -268,17 +268,47 @@ code written by hand or by another tool gets the same check.
    | `GATE004` | Type errors from ty, run from the package directory so it finds the package `.venv` (unresolved imports ignored) |
    | `GATE005` | Type-check suppression comments (`# type: ignore`, `# ty: ignore`, `# pyright: ignore`) |
    | `GATE006` | A broad `except` (or `suppress(Exception)`) that does not re-raise |
+   | `GATE007` | Not formatted (commit time only) |
 
    vulture and ty come from PATH or `uvx`; the gate needs Python >= 3.14 (via
    uv). A missing tool, a missing Python or a crash in the gate skips these
    checks with a warning; it never blocks.
 
-At edit time the hook auto-fixes and formats first. Files changed through the
-shell never reach the edit hook, so the Stop hook also checks every dirty
-Python file in the session's repository modified since the session started.
-At commit time (`clean-python --staged`) nothing is rewritten, unformatted files
-fail, and a staged file with unstaged changes is refused, since the check reads
-the working tree. `git commit --no-verify` is the deliberate escape hatch.
+Only code a change introduces is reported, so editing a large legacy file (a
+cloned third-party repo, say) does not demand fixing the whole file. The
+baseline is the file at git HEAD:
+
+- ruff and the file-local checks run on both versions, and a finding counts
+  as new when the file has more of its fingerprint (code, message, text of the
+  flagged line) than HEAD had. Removing the last use of an import therefore
+  still reports the now-unused import. `GATE001` matches by code alone: a
+  legacy file already over 800 lines is not reported, crossing 800 is. A line
+  number inside a message (`from line 4`) and a metric's count
+  (`(57 > 50)`) are left out of the fingerprint, so moving legacy code or
+  growing a function that was already over a limit is not reported.
+- vulture and ty findings count only on lines changed since HEAD.
+- A file renamed with `git mv` takes its old path's committed version.
+- A file with no committed version (new, untracked, outside git) has no
+  baseline, so every finding in it is new.
+
+The checks run in two phases. After each edit the hook runs the file-local
+checks (ruff, `GATE001`, `GATE002`, `GATE005`, `GATE006`), which take a
+fraction of a second. The Stop hook and the commit check add `GATE003`
+(vulture) and `GATE004` (ty), which read the whole project.
+
+At edit time the hook auto-fixes and formats first, but only when that would
+not rewrite legacy code: `ruff check --fix` runs when HEAD's version has no
+ruff findings (or there is none), `ruff format` when HEAD's version is already
+formatted. A messy legacy file keeps its style, and only the new findings come
+back to fix by hand. A file that does not parse is left as it is and its syntax
+error is reported. Every file the edit hook checks is recorded for the Stop
+hook, so it gets vulture and ty too. Files changed through the shell never
+reach the edit hook, so the Stop hook also checks every dirty Python file in the session's
+repository modified since the session started. At commit time
+(`clean-python --staged`) nothing is rewritten, an unformatted file fails
+(`GATE007`, under the same legacy rule), and a staged file with unstaged changes
+is refused, since the check reads the working tree. `git commit --no-verify` is
+the deliberate escape hatch.
 
 Install the commit hook once per machine with `make githooks`, which sets the
 global `core.hooksPath` to `githooks/`. Every other hook there forwards to the
@@ -344,9 +374,7 @@ because they land in bash hook commands.
 On Windows: install uv (`irm https://astral.sh/uv/install.ps1 | iex`), enable
 Developer Mode (skill symlinks), and run `make` from Git Bash. Claude Code runs
 the `python-clean` hooks through Git Bash; ruff's global config lives in
-`%APPDATA%
-uff
-uff.toml` there, which `bin/clean-python` also reads.
+`%APPDATA%\ruff\ruff.toml` there, which `bin/clean-python` also reads.
 
 ## Keeping up to date
 
