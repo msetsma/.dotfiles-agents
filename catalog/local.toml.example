@@ -20,7 +20,7 @@ ADO_ORG = "your-ado-org"
 # [profile]
 # clients      = ["claude-code", "claude-desktop"]  # or "auto": see below
 # exclude_tags = ["work", "macos"]                   # catalog `tags = [...]`: work, macos, personal
-# exclude      = ["obscura"]                       # names, any kind
+# exclude      = ["playwright"]                       # names, any kind
 #
 # "auto" keeps a client when the parent directory of any of its configured
 # paths exists; claude-code always matches (~/.claude.json sits in home).

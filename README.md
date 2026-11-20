@@ -168,7 +168,7 @@ row here.
 `custom` means written by me, with the source in its own repo under
 github.com/msetsma, cloned into `vendor/`. `external` means a third-party
 server (npx, uv tool, app, git source). Bare command names (`uv`, `npx`,
-`obscura`, `imcp`, ...) resolve through `[commands]` in `catalog/paths.toml`
+`imcp`, ...) resolve through `[commands]` in `catalog/paths.toml`
 and `catalog/local.toml`.
 
 <details>
@@ -180,8 +180,7 @@ and `catalog/local.toml`.
 | [`notes`](https://github.com/msetsma/notes-mcp) | custom   | `uv run --directory ~/.dotfiles-agents/vendor/notes-mcp notes-mcp`      | opencode, Claude Code, Claude Desktop        |
 | [`teams-browser`](https://github.com/msetsma/teams-mcp) | custom   | `uv run --directory ~/.dotfiles-agents/vendor/teams-mcp --extra mcp teams-browser-mcp` | opencode, Claude Code, Claude Desktop        |
 | [`entra-mcp`](https://github.com/msetsma/entra-mcp) | custom   | `entra-mcp` (uv tool)                                                   | opencode, Claude Code, Claude Desktop, Codex |
-| `obscura`                                    | external | `obscura mcp --stealth` (prebuilt binary)                               | opencode, Claude Code, Claude Desktop        |
-| [`browser`](https://github.com/msetsma/obscura-facade) | custom   | `uv run --directory ~/.dotfiles-agents/vendor/obscura-facade obscura-facade --stealth --allow-private-network` | opencode, Claude Code, Claude Desktop |
+| [`browser`](https://github.com/msetsma/obscura-facade) | custom   | `uv run --directory ~/.dotfiles-agents/vendor/obscura-facade obscura-facade --stealth --allow-private-network --obscura-path ${OBSCURA}` (wraps the obscura binary, which is not registered itself) | opencode, Claude Code, Claude Desktop |
 | `apple-mail`                                 | external | `apple-mail-mcp` (uv tool)                                              | opencode, Claude Desktop                     |
 | `databricks`                                 | external | `uv run --quiet --project ~/.dotfiles-agents/mcp/databricks-mcp databricks-mcp` | opencode, Claude Code, Claude Desktop, Codex |
 | `azure`                                      | external | `npx @azure/mcp@latest server start`                                    | opencode, Claude Code, Claude Desktop        |
@@ -305,7 +304,7 @@ Windows) opts into a subset in its own untracked `catalog/local.toml`:
 [profile]
 clients      = ["claude-code", "claude-desktop"]   # or "auto"
 exclude_tags = ["work", "macos"]
-exclude      = ["obscura"]                         # by name, any kind
+exclude      = ["playwright"]                      # by name, any kind
 
 [commands]
 npx = ["cmd", "/c", "npx"]                         # list = command + arg prefix

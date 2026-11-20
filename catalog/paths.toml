@@ -8,10 +8,11 @@
 [commands]
 npx            = "/opt/homebrew/bin/npx"
 uv             = "/opt/homebrew/bin/uv"
-obscura        = "/Users/msetsma/.local/bin/obscura"
 apple-mail-mcp = "/Users/msetsma/.local/bin/apple-mail-mcp"
 entra-mcp      = "/Users/msetsma/.local/bin/entra-mcp"
 imcp           = "/Applications/iMCP.app/Contents/MacOS/imcp-server"
 
 [vars]
 AGENT_HOME = "~/.dotfiles-agents"
+# obscura binary the browser facade drives (not registered as its own server)
+OBSCURA    = "/Users/msetsma/.local/bin/obscura"
